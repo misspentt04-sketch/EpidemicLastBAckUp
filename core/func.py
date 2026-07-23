@@ -316,10 +316,12 @@ def get_victims_list(victims: List[dict]) -> list:
             to_date = datetime.fromtimestamp(string['victim_expire'])
             to_date_strf = datetime.strftime(to_date, '%d.%m.%Y')
             victims_list[1][0] += string['victim_bio_resource_earn']
+            earn = string['victim_bio_resource_earn']
+
             victims_list[0].append(
                 (
                     f'{num}. <a href="{deep_links["mention"]}{string["victim_id"]}">{string["lab_name"]}</a> | '
-                    f'+{intcomma(string["victim_bio_resource_earn"])} | до {to_date_strf}'
+                    f'+{intcomma(earn)} | до {to_date_strf}'
                 )
             )
             if num >= 50:
