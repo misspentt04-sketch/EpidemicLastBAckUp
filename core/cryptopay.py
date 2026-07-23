@@ -1,0 +1,34 @@
+from aiocryptopay import AioCryptoPay, Networks, utils
+
+from core.settings import settings
+
+crypto = AioCryptoPay(token=settings.crypto_bot.token, network=Networks.MAIN_NET)
+
+
+class CryptoPay:
+    async def getprice(cost: int, currency: str):
+        rates = await crypto.get_exchange_rates()
+        if currency == "USDT":
+            pass
+        elif currency == "TON":
+            exchange = float((utils.exchange.get_rate('TON', 'USD', rates)).rate)
+            cost = cost / exchange
+        elif currency == "NOT":
+            exchange = float((utils.exchange.get_rate('NOT', 'USD', rates)).rate)
+            cost = cost / exchange
+        elif currency == "BTC":
+            exchange = float((utils.exchange.get_rate('BTC', 'USD', rates)).rate)
+            cost = cost / exchange
+        elif currency == "ETH":
+            exchange = float((utils.exchange.get_rate('ETH', 'USD', rates)).rate)
+            cost = cost / exchange
+        return cost
+
+    async def create_invoice(cost: int, currency: str):
+        price = await CryptoPay.getprice(cost, currency)
+        invoice = await crypto.create_invoice(asset=currency, amount=price)
+        return invoice.bot_invoice_url, invoice.invoice_id
+
+    async def get_status(invoice_id: int):
+        invoices = await crypto.get_invoices(invoice_ids=invoice_id)
+        return invoices.status

@@ -1,0 +1,14 @@
+TOKEN=
+ADMIN_ID=777000
+ADMIN_CHAT_ID=-777000
+BOT_ID=777000
+BOT_USERNAME=my_bot
+ip=localhost
+db=epidemic
+user=epic
+password=change_me
+REDIS_IP=localhost
+CRYPTO_BOT_TOKEN=
+GENAI_API_KEY=
+CHAT_LOGS=-777000
+CHAT_ADMINS=-777000

@@ -1,0 +1,30 @@
+# Folders
+
+__pycache__/
+.idea/
+node_modules/
+dist/
+build/
+
+# Environments
+.env
+.venv
+input
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Bin
+buster/go_buster
+*.py[cod]
+*.pyo
+*.so
+*.dll
+*.dylib
+*.exe
+*.zip
+
+# Silero
+model.pt
