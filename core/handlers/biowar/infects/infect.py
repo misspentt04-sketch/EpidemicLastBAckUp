@@ -269,3 +269,90 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
 
 
+
+import time
+import re
+
+
+import time
+import re
+from aiogram import Bot
+
+async def extract_target_user_id(message, bot: Bot):
+    if message.reply_to_message:
+        r = message.reply_to_message
+        if r.from_user:
+            return r.from_user.id
+        if r.forward_from:
+            return r.forward_from.id
+            
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        return None
+        
+    arg = args[1].strip()
+    
+    # 1. Если это tg:// ссылка с user_id
+    if "user_id=" in arg:
+        m = re.search(r"user_id=(\d+)", arg)
+        if m:
+            return int(m.group(1))
+            
+    # 2. Если это цифрический ID
+    clean_arg = arg.lstrip("@")
+    if clean_arg.isdigit():
+        return int(clean_arg)
+        
+    # 3. Если это ссылка t.me/username или @username
+    if "t.me/" in arg:
+        clean_arg = arg.split("t.me/")[-1].split("/")[0].strip("@")
+    elif arg.startswith("@"):
+        clean_arg = arg[1:]
+        
+    # Пытаемся получить пользователя через Telegram API по юзернейму
+    if clean_arg and not clean_arg.isdigit():
+        try:
+            chat_member = await bot.get_chat(clean_arg)
+            return chat_member.id
+        except Exception:
+            pass
+            
+    return None
+
+async def cmd_check_victim(message: Message, bot: Bot, repo_biowar: RequestsRepoBiowar):
+    owner_id = message.from_user.id
+    target_id = await extract_target_user_id(message, bot)
+    if not target_id:
+        await message.reply("❌ Укажите жертву реплаем, перешлите сообщение, укажите @username или ID.")
+        return
+    
+    victims = await repo_biowar.get_victims(owner_id)
+    victim_data = None
+    if victims:
+        for v in victims:
+            if v.get('victim_id') == target_id:
+                victim_data = v
+                break
+                
+    if not victim_data:
+        await message.reply("❌ Игрок не является жертвой владельца.")
+        return
+        
+    bio_earn = victim_data.get('victim_bio_resource_earn', 0)
+    expire_time = victim_data.get('victim_expire', 0)
+    left_seconds = expire_time - int(time.time())
+    
+    if left_seconds <= 0:
+        time_str = "Срок истек"
+    else:
+        d, rem = divmod(left_seconds, 86400)
+        h, rem = divmod(rem, 3600)
+        m = rem // 60
+        parts = []
+        if d > 0: parts.append(f"{d}д")
+        if h > 0 or d > 0: parts.append(f"{h}ч")
+        parts.append(f"{m}м")
+        time_str = " ".join(parts)
+        
+    fbio = f"{bio_earn:,}".replace(",", " ")
+    await message.reply(f"🧬 Жертва приносит {fbio} био-ресурсов.\n⏳ Осталось: {time_str}.")

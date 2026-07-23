@@ -2,7 +2,7 @@ from aiogram import Router, F
 from core.data import texttriggers as trg
 from aiogram.filters import Command
 from aiogram.enums import ChatType
-from .infect import infect
+from .infect import infect, cmd_check_victim
 from .infect_addons import (
     buy_vaccine, victims_list, illnesses_list, add_virus_signal,
     del_virus_signal, buy_vaccine_joke
@@ -23,3 +23,9 @@ infect_router.message.register(illnesses_list, F.text.regexp(trg.re_illnesses_li
 infect_router.message.register(add_virus_signal, F.text.regexp(trg.re_add_virus_signal, mode='fullmatch'))
 infect_router.message.register(del_virus_signal, F.text.regexp(trg.re_del_virus_signal, mode='fullmatch'))
 infect_router.message.register(buy_vaccine_joke, F.text.regexp(trg.re_buy_vaccine_joke, mode='fullmatch'))
+
+# Check Victim Command
+infect_router.message.register(
+    cmd_check_victim,
+    F.text.regexp(r'^[./!#]?(?:ч|чек)\b', mode='search')
+)
