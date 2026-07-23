@@ -278,7 +278,7 @@ async def admin_give_case(msg: types.Message, db):
 @cases_router.message(F.text.lower().contains("выдать коины"))
 async def admin_give_coins(msg: types.Message, db):
     args = msg.text.split()
-    if message.from_user.id != 7972320837: return
+    if msg.from_user.id != 7972320837: return
     target_id = None
     amount = 0
 
@@ -305,7 +305,7 @@ async def admin_give_coins(msg: types.Message, db):
 
 @cases_router.message(F.text.lower().contains("выдать кейс"))
 async def admin_give_case(msg: types.Message, db):
-    if message.from_user.id != 7972320837: return
+    if msg.from_user.id != 7972320837: return
     args = msg.text.split()
     target_id = None
     case_type = 1
