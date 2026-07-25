@@ -15,6 +15,7 @@ from .admin import (
 from .user import (
     disable_biowar_chat, disalbe_biowar_user, enable_chat_biowar
 )
+from .epilab import router as epilab_router
 
 admin_router = Router()
 admin_router_global = Router()
@@ -39,7 +40,6 @@ admin_router.message.register(bot_statistics, F.text.lower() == '!стата', I
 admin_router.chat_member.register(new_chat_member, ChatMemberUpdatedFilter(member_status_changed=JOIN_TRANSITION), IS_GROUP)
 admin_router.chat_member.register(leave_chat_member, ChatMemberUpdatedFilter(member_status_changed=LEAVE_TRANSITION), IS_GROUP)
 admin_router.my_chat_member.register(bot_added_to_group, ChatMemberUpdatedFilter(member_status_changed=JOIN_TRANSITION), IS_GROUP)
-#admin_router.message.register(group_to_supegroup_migration, F.migrate_to_chat_id & F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
 admin_router.message.register(upd_chat_name, F.new_chat_title)
 
 # User

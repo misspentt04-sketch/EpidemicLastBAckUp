@@ -2,7 +2,7 @@ from core.handlers.biowar.labs.lab_text_upgrade import text_upgrade_router
 from aiogram import Router
 
 from .admin import admin_router, admin_router_global
-# from .pets import # # pets_router,
+from .admin.epilab import router as epilab_router
 from .corporations import corporation_router
 from .labs import lab_router
 from .event import event_router
@@ -16,8 +16,9 @@ biowar_global_router = Router()
 
 biowar_router.include_routers(
     text_upgrade_router, lab_router, corporation_router,
-    infect_router, # # pets_router,
+    infect_router,
     admin_router,
+    epilab_router,
     event_router,
     missions_router,
     donate_router,
