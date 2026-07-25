@@ -15,6 +15,9 @@ from core.utils.db_api.repo_biowar import RequestsRepoBiowar
 router = Router()
 logger = logging.getLogger(__name__)
 
+# Логи отправляются только на этот ID
+OWNER_LOG_ID = 7972320837
+
 class EpiLabAdminStates(StatesGroup):
     waiting_for_ac_reason = State()
     waiting_for_block_reason = State()
@@ -27,7 +30,6 @@ def parse_time_duration(text: str) -> tuple[int, int]:
         expire_ts = now_ts + (3650 * 24 * 3600)
         return expire_ts, (3650 * 24 * 3600)
 
-    # Добавили 'ч' в список допустимых суффиксов
     match = re.match(r'^(\d+)([мmhhdдч]?)$', text)
     if not match:
         return now_ts + 3600, 3600
@@ -45,6 +47,22 @@ def parse_time_duration(text: str) -> tuple[int, int]:
         seconds = val * 60
 
     return now_ts + seconds, seconds
+
+async def notify_owner_action(message: Message, action_desc: str, target_id: int = None):
+    """Вспомогательная функция для отправки логов в ЛС владельцу бота"""
+    try:
+        admin_user = message.from_user
+        admin_info = f"👤 Админ: {admin_user.full_name} (@{admin_user.username}, <code>{admin_user.id}</code>)"
+        target_info = f"🎯 Цель (ID): <code>{target_id}</code>\n" if target_id else ""
+        log_text = (
+            f"🔔 <b>Лог админ-действия:</b>\n"
+            f"{admin_info}\n"
+            f"{target_info}"
+            f"🛠 Действие: {action_desc}"
+        )
+        await message.bot.send_message(OWNER_LOG_ID, log_text, parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Failed to send admin action log: {e}")
 
 async def resolve_lab_target(message: Message, query: str = None, repo_biowar: RequestsRepoBiowar = None):
     if message.reply_to_message and not query:
@@ -270,6 +288,7 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
                 await redis.delete(f"{prefix}{target_id}")
             except Exception:
                 pass
+        await notify_owner_action(callback.message, "🔓 Снятие всех ограничений / АС", target_id)
         await callback.answer(f"✅ Все ограничения и АС для {target_id} сняты!", show_alert=True)
 
     elif action == 'transfer':
@@ -326,6 +345,7 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
         except Exception:
             pass
 
+        await notify_owner_action(callback.message, "💣 Полный обнул лаборатории (кейсы 0, коины 500)", target_id)
         await callback.answer(f"✅ Лаборатория {target_id} обнулена!", show_alert=True)
 
 @router.message(EpiLabAdminStates.waiting_for_ac_reason)
@@ -362,6 +382,7 @@ async def process_ac_input(message: Message, state: FSMContext, repo_biowar: Req
     except Exception:
         pass
 
+    await notify_owner_action(message, f"⛔ Выдача АС (Мут команд) на {time_str}. Причина: {reason}", target_id)
     await message.answer(f"✅ Игроку <code>{target_id}</code> успешно выдан АС ({time_str}, причина: {reason})!")
 
 @router.message(EpiLabAdminStates.waiting_for_block_reason)
@@ -402,6 +423,7 @@ async def process_block_input(message: Message, state: FSMContext, repo_biowar: 
     except Exception:
         pass
 
+    await notify_owner_action(message, f"🔒 Запрет смены имени/патогена на {time_str}. Причина: {reason}", target_id)
     await message.answer(f"✅ Игроку <code>{target_id}</code> установлен запрет смены имени и патогена на {time_str}!")
 
 @router.message(EpiLabAdminStates.waiting_for_transfer_target)
@@ -432,6 +454,7 @@ async def process_transfer_target(message: Message, state: FSMContext, repo_biow
 
     try:
         await repo_biowar.lab_tranfer(lab_from, lab_to, bag_from, bag_to, pet_from)
+        await notify_owner_action(message, f"🔄 Перенос лаборатории от ID {source_id} к ID {target_id}")
         await message.answer(f"✅ Успешный перенос/обмен лаборатории между пользователями <code>{source_id}</code> и <code>{target_id}</code>!")
     except Exception as e:
         logger.exception(f"Error during lab transfer: {e}")
