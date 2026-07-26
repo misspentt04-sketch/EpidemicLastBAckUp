@@ -222,6 +222,18 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     
     await redis.set(f'epidemic_pet_try_count_heal:{infecter["id"]}', 0)
 
+    # Запись в историю заражений для топа
+    try:
+        pool_hist = await db_pool.get_pool()
+        async with pool_hist.acquire() as conn_h:
+            async with conn_h.cursor() as cur_h:
+                await cur_h.execute(
+                    "INSERT INTO biowar_infection_history (attacker_id, victim_id, week_str, month_str, infect_date) VALUES (%s, %s, DATE_FORMAT(NOW(), '%x-%V'), DATE_FORMAT(NOW(), '%Y-%m'), NOW());",
+                    (infecter['id'], victimer['id'])
+                )
+    except Exception as e:
+        print("Error inserting infection history:", e)
+
     await repo_biowar.infect_setup(
         infecter['id'], victimer['id'], earn_exp, vic_exp,
         vic_expire_kd, inf_ready_pathogens_left,

@@ -342,6 +342,9 @@ class RequestsRepoBiowar:
         )
         params4 = (infecter_id, victim_id)
         
+        # Запись в историю заражений для топа
+        add_history = "INSERT INTO biowar_infection_history (attacker_id, victim_id, week_str, month_str, infect_date) VALUES (%s, %s, %s, %s, NOW());"
+        await self.cur.execute(add_history, (infecter_id, victim_id, week_s, month_s))
         await self.cur.execute(del_victims, params4)
         await self.cur.execute(add_victims, params1)
         await self.cur.execute(add_exp, params2)

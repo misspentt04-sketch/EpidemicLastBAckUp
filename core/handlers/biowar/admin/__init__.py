@@ -16,6 +16,7 @@ from .user import (
     disable_biowar_chat, disalbe_biowar_user, enable_chat_biowar
 )
 from .epilab import router as epilab_router
+from .infection_top import router as infection_top_router
 
 admin_router = Router()
 admin_router_global = Router()
@@ -46,3 +47,5 @@ admin_router.message.register(upd_chat_name, F.new_chat_title)
 admin_router_global.message.register(disable_biowar_chat, F.text.lower() == '!-чат биовойны')
 admin_router_global.message.register(disalbe_biowar_user, F.text.lower() == '!-биовойны')
 admin_router_global.message.register(enable_chat_biowar, F.text.lower() == '!+чат биовойны')
+
+admin_router.include_router(infection_top_router)
