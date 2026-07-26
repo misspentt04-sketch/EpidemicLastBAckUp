@@ -158,7 +158,7 @@ re_edit_leave_on = re.compile(re_pref + r'\+прощания|\-прощания'
 re_ship = re.compile(re_pref + r'эпилав$|эпипара$', re.IGNORECASE)
 
 # Help
-re_help = re.compile(re_pref + r'(help|помощь)', re.IGNORECASE)
+re_help = re.compile(r'^[!./]?(help|помощь)$', re.IGNORECASE)
 
 # User chat nickname
 set_nickname = re.compile(re_pref + r'(ник|мой ник)\s{1,3}[!._A-Za-zА-Яа-яё\d ]{1,63}', re.IGNORECASE)

@@ -6,5 +6,6 @@ from .admin import admin_router
 chat_manage_router = Router()
 
 chat_manage_router.include_routers(
-    admin_router
+    admin_router,
+    addions_router
 )

@@ -61,9 +61,11 @@ addions_router.message.register(include_hello_not, F.text.regexp(trg.re_edit_gre
 addions_router.message.register(include_leave_not, F.text.regexp(trg.re_edit_leave_on, mode='fullmatch') & (F.chat.type != 'private'))
 
 # help
-addions_router.message.register(help,  F.text.regexp(trg.re_help, mode='fullmatch'))
 
 # Rp
+# help
+addions_router.message.register(help, Command(commands=["help", "помощь"]))
+addions_router.message.register(help, F.text.regexp(trg.re_help))
 addions_router.message.register(rp_handler, IsRPFilter())
 
 # User chat nickname
