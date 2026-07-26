@@ -321,7 +321,24 @@ async def extract_target_user_id(message, bot: Bot):
 
 async def cmd_check_victim(message: Message, bot: Bot, repo_biowar: RequestsRepoBiowar):
     owner_id = message.from_user.id
-    target_id = await extract_target_user_id(message, bot)
+    target_id = None
+    
+    # Сначала проверяем, передан ли порядковый номер (например, .ч 20)
+    args = message.text.split(maxsplit=1)
+    if len(args) == 2 and args[1].strip().isdigit() and len(args[1].strip()) < 6:
+        try:
+            idx = int(args[1].strip()) - 1
+            victims_list_temp = await repo_biowar.get_victims(owner_id)
+            if victims_list_temp:
+                # Инвертируем список, если нумерация на экране идет с первого добавленного
+                victims_list_temp = list(reversed(victims_list_temp))
+                if 0 <= idx < len(victims_list_temp):
+                    target_id = victims_list_temp[idx].get('victim_id')
+        except Exception:
+            pass
+
+    if not target_id:
+        target_id = await extract_target_user_id(message, bot)
     if not target_id:
         await message.reply("❌ Укажите жертву реплаем, перешлите сообщение, укажите @username или ID.")
         return

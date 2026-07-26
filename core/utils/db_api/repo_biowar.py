@@ -293,6 +293,12 @@ class RequestsRepoBiowar:
         infect_date: int, pathogen_name: str, ss_detect: int,
         science_time: int, is_science_time: bool, pet_boost_exp: int | bool):
         
+        
+        import datetime as dt_mod
+        now_dt = dt_mod.datetime.now()
+        week_s = now_dt.strftime('%G-%V')
+        month_s = now_dt.strftime('%Y-%m')
+
         del_victims = 'DELETE FROM Victims WHERE victims_owner_id=%s AND victim_id=%s;'
         
         add_victims = (
