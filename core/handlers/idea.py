@@ -150,4 +150,5 @@ from aiogram.types import Message
 
 @idea_router.message(F.text.casefold() == "бот")
 async def answer_on_bot(msg: Message):
-    await msg.answer("На связи! 🟢")
+    import random
+    await msg.answer(random.choice(["Пошел нахуй!", "До связи! 🔴"]))
