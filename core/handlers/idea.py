@@ -1,3 +1,4 @@
+import time
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -149,6 +150,15 @@ from aiogram import F
 from aiogram.types import Message
 
 @idea_router.message(F.text.casefold() == "бот")
-async def answer_on_bot(msg: Message):
-    import random
-    await msg.answer(random.choice(["Пошел нахуй!", "До связи! 🔴"]))
+async def bot_ping_handler(msg: Message):
+    start_time = time.perf_counter()
+    ping_msg = await msg.answer("<b>Epidemic System</b>", parse_mode="HTML")
+    latency = round((time.perf_counter() - start_time) * 1000)
+    
+    text = (
+        "🧪 <b>Epidemic System</b>\n"
+        "├ <b>Статус:</b> Онлайн 🟢\n"
+        f"└ <b>Задержка:</b> {latency} ms ⚡️"
+    ).replace("\\n", "\n")
+    
+    await ping_msg.edit_text(text, parse_mode="HTML")
