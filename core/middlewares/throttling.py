@@ -11,14 +11,14 @@ class ThrottlingMiddleware(BaseMiddleware):
     def __init__(
         self,
         limit: int=2.0,
-        per_chat_limit: int = 60,
+        per_chat_limit: int = 100,
         time_window: int = 60,
         cmd_peer_second: int = 2,
         time_inteval_floodwait: int = 30
     )-> None:
-        self.rate_limit = TTLCache(maxsize=10_000, ttl=limit)
+        self.rate_limit = TTLCache(maxsize=1000_000, ttl=limit)
         # Лимит 20 сообщений в минуту на чат
-        self.chat_limits = TTLCache(maxsize=10_000, ttl=time_window)  # Хранит счетчики сообщений для чатов
+        self.chat_limits = TTLCache(maxsize=1000_000, ttl=time_window)  # Хранит счетчики сообщений для чатов
         self.per_chat_limit = per_chat_limit  # Лимит сообщений в минуту для чата
         self.time_window = time_window  # Время в секундах (60 для минуты)
         self.cmd_peer_second = cmd_peer_second
