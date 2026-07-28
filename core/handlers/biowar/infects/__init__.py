@@ -27,5 +27,5 @@ infect_router.message.register(buy_vaccine_joke, F.text.regexp(trg.re_buy_vaccin
 # Check Victim Command
 infect_router.message.register(
     cmd_check_victim,
-    F.text.regexp(r'^[./!#]?(?:ч|чек)\b', mode='search')
+    F.text.lower().startswith(('.ч', '!ч', '/ч', 'ч ', '.чек', '!чек', '/чек', 'чек ')) | (F.text.lower() == 'ч') | (F.text.lower() == 'чек')
 )

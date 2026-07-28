@@ -332,56 +332,135 @@ async def extract_target_user_id(message, bot: Bot):
     return None
 
 async def cmd_check_victim(message: Message, bot: Bot, repo_biowar: RequestsRepoBiowar):
-    owner_id = message.from_user.id
-    target_id = None
+    text_clean = message.text.strip()
+    parts = text_clean.split()
     
-    # Сначала проверяем, передан ли порядковый номер (например, .ч 20)
-    args = message.text.split(maxsplit=1)
-    if len(args) == 2 and args[1].strip().isdigit() and len(args[1].strip()) < 6:
-        try:
-            idx = int(args[1].strip()) - 1
-            victims_list_temp = await repo_biowar.get_victims(owner_id)
-            if victims_list_temp:
-                # Инвертируем список, если нумерация на экране идет с первого добавленного
-                victims_list_temp = list(reversed(victims_list_temp))
-                if 0 <= idx < len(victims_list_temp):
-                    target_id = victims_list_temp[idx].get('victim_id')
-        except Exception:
-            pass
+    arg = parts[1] if len(parts) >= 2 else None
+    
+    if arg and arg.isdigit() and not message.reply_to_message:
+        return
+
+    target_id = None
+    requested_idx = None
+    victim_data = None
+    owner_id = message.from_user.id
+    victims = await repo_biowar.get_victims(owner_id)
+
+    # 1. Выбор по номеру из топа (с реплаем на список)
+    if message.reply_to_message and arg and arg.isdigit():
+        requested_idx = int(arg)
+        r = message.reply_to_message
+        user_ids_in_order = []
+
+        entities = r.entities or r.caption_entities or []
+        for entity in entities:
+            if entity.type == "text_link" and entity.url:
+                if "user_id=" in entity.url:
+                    try:
+                        uid = int(entity.url.split("user_id=")[1].split("&")[0])
+                        if uid not in user_ids_in_order:
+                            user_ids_in_order.append(uid)
+                    except ValueError:
+                        pass
+
+        if not user_ids_in_order:
+            r_text = r.text or r.caption or ""
+            import re
+            found_links = re.findall(r"user_id=(\d+)", r_text)
+            for uid_str in found_links:
+                uid = int(uid_str)
+                if uid not in user_ids_in_order:
+                    user_ids_in_order.append(uid)
+
+        idx = requested_idx - 1
+        if 0 <= idx < len(user_ids_in_order):
+            target_id = user_ids_in_order[idx]
+        else:
+            await message.reply(f"❌ Игрок под номером {requested_idx} не найден в этом списке.")
+            return
+
+    # 2. Получение ID из аргумента (ссылка tg://, числа или id) или реплая
+    else:
+        r_id = None
+        import re
+
+        if arg:
+            found_ids = re.findall(r"\d{7,}", arg)
+            if found_ids:
+                r_id = int(found_ids[0])
+            elif arg.isdigit():
+                r_id = int(arg)
+
+        if not r_id and message.reply_to_message:
+            r = message.reply_to_message
+            if r.from_user:
+                r_id = r.from_user.id
+            elif r.forward_from:
+                r_id = r.forward_from.id
+            else:
+                r_text = r.text or r.caption or ""
+                found_ids = re.findall(r"\d{7,}", r_text)
+                if found_ids:
+                    r_id = int(found_ids[0])
+
+        target_id = r_id
 
     if not target_id:
-        target_id = await extract_target_user_id(message, bot)
-    if not target_id:
-        await message.reply("❌ Укажите жертву реплаем, перешлите сообщение, укажите @username или ID.")
         return
-    
-    victims = await repo_biowar.get_victims(owner_id)
-    victim_data = None
+
+    # Ищем данные жертвы в базе
     if victims:
+        keys_to_check = ["victim_id", "user_id", "id"]
         for v in victims:
-            if v.get('victim_id') == target_id:
-                victim_data = v
+            for key in keys_to_check:
+                v_id = v.get(key)
+                if v_id is not None and int(v_id) == target_id:
+                    victim_data = v
+                    break
+            if victim_data:
                 break
-                
+
     if not victim_data:
-        await message.reply("❌ Игрок не является жертвой владельца.")
-        return
-        
-    bio_earn = victim_data.get('victim_bio_resource_earn', 0)
-    expire_time = victim_data.get('victim_expire', 0)
+        try:
+            lab_info = await repo_biowar.get_lab(target_id)
+            if lab_info:
+                victim_data = {
+                    "victim_id": target_id,
+                    "victim_bio_resource_earn": 0,
+                    "victim_expire": 0,
+                    **lab_info
+                }
+        except Exception as e:
+            print(f"[DEBUG] Could not fetch lab directly: {e}")
+
+    if not victim_data:
+        victim_data = {
+            "victim_id": target_id,
+            "victim_bio_resource_earn": 0,
+            "victim_expire": 0
+        }
+
+    bio_earn = victim_data.get("victim_bio_resource_earn", 0)
+    expire_time = victim_data.get("victim_expire", 0)
     left_seconds = expire_time - int(time.time())
-    
+
     if left_seconds <= 0:
-        time_str = "Срок истек"
+        time_str = "Срок истек или не заражен"
     else:
         d, rem = divmod(left_seconds, 86400)
         h, rem = divmod(rem, 3600)
         m = rem // 60
-        parts = []
-        if d > 0: parts.append(f"{d}д")
-        if h > 0 or d > 0: parts.append(f"{h}ч")
-        parts.append(f"{m}м")
-        time_str = " ".join(parts)
-        
+        parts_time = []
+        if d > 0: parts_time.append(f"{d}д")
+        if h > 0 or d > 0: parts_time.append(f"{h}ч")
+        parts_time.append(f"{m}м")
+        time_str = " ".join(parts_time)
+
     fbio = f"{bio_earn:,}".replace(",", " ")
-    await message.reply(f"🧬 Жертва приносит {fbio} био-ресурсов.\n⏳ Осталось: {time_str}.")
+    
+    header_info = f"Жертва (#{requested_idx})" if requested_idx else "Жертва"
+    link_url = f"tg://openmessage?user_id={target_id}"
+    response_text = f"🧬 {header_info}: <a href='{link_url}'>ссылка на игрока</a>\n💰 Приносит: {fbio} био-ресурсов.\n⏳ Осталось: {time_str}."
+    
+    await message.reply(response_text, parse_mode="HTML")
+
