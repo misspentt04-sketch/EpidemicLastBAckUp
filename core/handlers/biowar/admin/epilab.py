@@ -17,7 +17,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 # Логи отправляются только на этот ID
-OWNER_LOG_ID = 7972320837
+OWNER_LOG_ID = -1003688648228
 
 class EpiLabAdminStates(StatesGroup):
     waiting_for_ac_reason = State()
