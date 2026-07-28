@@ -206,7 +206,7 @@ tricks_biowar = {
             %(immunity_ico)s Иммунитет объекта «{}⁬» оказался стойким к вашему патогену.
             Антитела смогли справиться с заражением.
             %(pathogens_ico)s Осталось патогенов: {}
-            {} Шкала пробития: {}%%
+            {} Шкала пробития: {}%
             """) % \
                 {'immunity_ico': LabIco.immunity.value, 'pathogens_ico': LabIco.pathogens.value},
         
