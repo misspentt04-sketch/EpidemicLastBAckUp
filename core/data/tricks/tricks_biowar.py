@@ -202,13 +202,7 @@ tricks_biowar = {
                 },
         
         
-        'victim_immunity_fail': tw.dedent("""
-            %(immunity_ico)s Иммунитет объекта «{}⁬» оказался стойким к вашему патогену.
-            Антитела смогли справиться с заражением.
-            %(pathogens_ico)s Осталось патогенов: {}
-            {} Шкала пробития: {}%
-            """) % \
-                {'immunity_ico': LabIco.immunity.value, 'pathogens_ico': LabIco.pathogens.value},
+        'victim_immunity_fail': f"{LabIco.immunity.value} Иммунитет объекта «{{0}}» оказался стойким к вашему патогену.\nАнтитела смогли справиться с заражением.\n{LabIco.pathogens.value} Осталось патогенов: {{1}}\n{{2}} Шкала пробития: {{3}}",
         
         'victim_ss_fail': tw.dedent("""
             %(explosion_ico)s Попытка заразить «{}⁬» провалилась...
