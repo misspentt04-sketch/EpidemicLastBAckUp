@@ -1,23 +1,29 @@
+import logging
 from aiogram import Router, F, Bot
 from aiogram.types import Message
-from aiogram.filters import Command, CommandStart, CommandObject
+from aiogram.filters import CommandStart, CommandObject
 from core.utils.db_api.repo_biowar import RequestsRepoBiowar
 
 router = Router()
+logger = logging.getLogger(__name__)
+
 LOG_CHAT_ID = -1003688648228
 REFERRAL_BONUS = 150
 
 @router.message(CommandStart())
-async def cmd_start_ref(message: Message, command: CommandObject, repo: RequestsRepoBiowar, bot: Bot):
+async def cmd_start_ref(message: Message, command: CommandObject, repo_biowar: RequestsRepoBiowar, bot: Bot):
     user_id = message.from_user.id
     full_name = message.from_user.full_name
     username = message.from_user.username
     args = command.args
 
-    user_exists = await repo.check_user_exists_in_db(user_id)
+    # 1. Проверяем существование пользователя ДО регистрации
+    user_exists = await repo_biowar.check_user_exists_in_db(user_id)
 
-    await repo.add_data_user(user_id, full_name, username)
+    # 2. Регистрируем / обновляем пользователя в базе
+    await repo_biowar.add_data_user(user_id, full_name, username)
 
+    # 3. Если пользователь новый и есть аргумент ref
     if not user_exists and args:
         ref_arg = args.strip()
         if ref_arg.startswith("ref"):
@@ -25,19 +31,44 @@ async def cmd_start_ref(message: Message, command: CommandObject, repo: Requests
                 referrer_id = int(ref_arg.replace("ref", ""))
                 if referrer_id != user_id:
                     try:
-                        await repo.add_referral(referrer_id, user_id)
-                        await repo.add_lab_bio_currency(referrer_id, REFERRAL_BONUS)
-                        await bot.send_message(
-                            LOG_CHAT_ID,
-                            f"👤 <b>Новый реферал!</b>\n"
-                            f"🆔 Пригласивший: <code>{referrer_id}</code>\n"
-                            f"🆕 Новый игрок: {full_name} (<code>{user_id}</code>)\n"
-                            f"🎁 Бонус: +{REFERRAL_BONUS} био-ресурсов."
-                        )
+                        # Записываем реферала
+                        added = await repo_biowar.add_referral(referrer_id, user_id)
+                        if added:
+                            # Начисляем бонус пригласившему
+                            try:
+                                await repo_biowar.add_lab_bio_currency(referrer_id, REFERRAL_BONUS)
+                            except Exception as bonus_err:
+                                logger.error(f"Failed to add bio currency to {referrer_id}: {bonus_err}")
+
+                            # Лог в чат логов
+                            await bot.send_message(
+                                LOG_CHAT_ID,
+                                f"👤 <b>Новый реферал!</b>\n"
+                                f"🆔 Пригласивший: <code>{referrer_id}</code>\n"
+                                f"🆕 Новый игрок: {full_name} (<code>{user_id}</code>)\n"
+                                f"🎁 Бонус: +{REFERRAL_BONUS} био-ресурсов."
+                            )
+
+                            # Уведомление пригласившему в ЛС
+                            try:
+                                await bot.send_message(
+                                    referrer_id,
+                                    f"🎉 По вашей ссылке зарегистрировался новый игрок {full_name}!\n"
+                                    f"🎁 Вам начислено <b>+{REFERRAL_BONUS}</b> био-ресурсов."
+                                )
+                            except Exception:
+                                pass
+
                     except Exception as e:
-                        print(f"Failed to process referral: {e}")
+                        logger.error(f"Failed to process referral for referrer_id={referrer_id}, user_id={user_id}: {e}")
             except ValueError:
                 pass
+
+    # Приветственное сообщение для игрока
+    await message.answer(
+        f"Добро пожаловать в <b>Epidemic</b>, {full_name}!\n\n"
+        f"Вы успешно зарегистрировались в игре. Введите /help или используйте меню для начала игры."
+    )
 
 @router.message(F.text.in_({"рефералы", "/ref", "Рефералы"}))
 async def cmd_referrals(message: Message, repo_biowar: RequestsRepoBiowar = None):

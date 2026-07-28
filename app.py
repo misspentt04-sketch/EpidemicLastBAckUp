@@ -30,7 +30,7 @@ from core.handlers import (
     biowar_global_router,
     suggestions_router
 )
-from core.handlers.startup import start
+from core.handlers.biowar.start_handler import start_router
 
 from core.settings import settings
 
@@ -79,9 +79,10 @@ async def main():
 
     
     #        # Start
-    dp.message.register(start, CommandStart(ignore_case=True), F.chat.type == ChatType.PRIVATE)
+    # dp.message.register disabled
 
     dp.include_routers(
+        start_router,
     idea_router,
         biowar_router,
         biowar_router2,

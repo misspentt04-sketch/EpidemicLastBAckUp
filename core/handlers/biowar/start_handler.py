@@ -1,0 +1,128 @@
+import logging
+from aiogram import Router, F, Bot
+from aiogram.filters import CommandStart, CommandObject
+from aiogram.filters.state import StateFilter
+from aiogram.enums.chat_type import ChatType
+from aiogram.types import Message, BufferedInputFile
+from aiogram.fsm.context import FSMContext
+from redis.asyncio import Redis
+from asyncmy.cursors import DictCursor
+
+from core.utils.db_api.repo_biowar import RequestsRepoBiowar
+from core.data.story.story import tricks_story
+from core.data.tricks.tricks_chat_manage import tricks_cm
+from core.keyboards.inline.tutorial_begin import start_action, help_kb
+
+logger = logging.getLogger(__name__)
+start_router = Router()
+
+LOG_CHAT_ID = -1003688648228
+REFERRAL_BONUS = 150
+
+@start_router.message(CommandStart(), StateFilter('*'))
+async def start_cmd(
+    msg: Message,
+    command: CommandObject,
+    db: DictCursor,
+    bot: Bot,
+    redis: Redis,
+    repo_biowar: RequestsRepoBiowar,
+    state: FSMContext
+):
+    if msg.chat.type != ChatType.PRIVATE:
+        return
+
+    await state.clear()
+
+    user_id = msg.from_user.id
+    full_name = msg.from_user.full_name
+    username = msg.from_user.username
+    args = command.args
+
+    logger.info(f"🔥 [START_CMD] Вызов /start! User={user_id}, Args={args}")
+
+    # Проверяем наличие туториала ДО создания новых записей
+    tutorial_data = await repo_biowar.get_tutorial(user_id)
+    is_new_user = tutorial_data is None
+
+    logger.info(f"🔥 [START_CMD] Новый игрок (нет записи в tutorial)? -> {is_new_user}")
+
+    # Добавляем базовые данные пользователя
+    await repo_biowar.add_data_user(user_id, full_name, username)
+
+    # Реферальная система срабатывает ТОЛЬКО если это реально новый игрок
+    if args and args.strip().startswith("ref"):
+        ref_arg = args.strip()
+        logger.info(f"🔥 [START_CMD] Передан реферальный аргумент: {ref_arg}")
+
+        if is_new_user:
+            try:
+                referrer_id = int(ref_arg.replace("ref", ""))
+                logger.info(f"🔥 [START_CMD] Referrer ID: {referrer_id}, New User ID: {user_id}")
+
+                if referrer_id != user_id:
+                    added = await repo_biowar.add_referral(referrer_id, user_id)
+                    logger.info(f"🔥 [START_CMD] Результат add_referral: {added}")
+
+                    # Начисляем бонус
+                    try:
+                        await repo_biowar.add_epicoins(referrer_id, REFERRAL_BONUS)
+                        logger.info(f"🔥 [START_CMD] Бонус +{REFERRAL_BONUS} начислен пользователю {referrer_id}")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка начисления бонуса: {e}")
+
+                    # Уведомление в лог-чат
+                    try:
+                        await bot.send_message(
+                            LOG_CHAT_ID,
+                            f"👤 <b>Новый реферал!</b>\n"
+                            f"🆔 Пригласивший: <code>{referrer_id}</code>\n"
+                            f"🆕 Новый игрок: {full_name} (<code>{user_id}</code>)\n"
+                            f"🎁 Бонус: +{REFERRAL_BONUS} био-ресурсов."
+                        )
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка отправки в лог-чат: {e}")
+
+                    # Уведомление рефереру в ЛС
+                    try:
+                        await bot.send_message(
+                            referrer_id,
+                            f"🎉 По вашей ссылке зарегистрировался новый игрок {full_name}!\n"
+                            f"🎁 Вам начислено <b>+{REFERRAL_BONUS}</b> био-ресурсов."
+                        )
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка отправки в ЛС рефереру: {e}")
+
+            except ValueError:
+                logger.warning(f"⚠️ Неверный формат реферального ID: {ref_arg}")
+        else:
+            logger.info(f"⚠️ Рефералка пропущена, так как пользователь {user_id} уже проходил регистрацию.")
+
+    await repo_biowar.add_data_tutorial(user_id)
+    picture = await redis.get('epidemic_tutorial_begin_img')
+    tutorial = await repo_biowar.get_tutorial(user_id)
+
+    if tutorial and tutorial.get('is_tutorial_complete') == 0:
+        if not picture:
+            with open('media/tutorial_begin.jpg', 'rb') as img:
+                result = await msg.answer_photo(
+                    BufferedInputFile(img.read(), filename='tutorial_begin.jpg'),
+                    caption=tricks_story['start_action'],
+                    reply_markup=start_action(),
+                    disable_web_page_preview=True
+                )
+                await redis.set('epidemic_tutorial_begin_img', result.photo[-1].file_id)
+        else:
+            await msg.answer_photo(
+                picture,
+                caption=tricks_story['start_action'],
+                reply_markup=start_action(),
+                disable_web_page_preview=True
+            )
+    else:
+        admin_list = tricks_cm['start']['menu_admin_list']
+        online = [val for key, val in admin_list.items() if await redis.get(f'epidemic_help_admin_status:{key}')]
+        offline = [val for key, val in admin_list.items() if not await redis.get(f'epidemic_help_admin_status:{key}')]
+
+        text = tricks_cm['start']['menu'].format('\n'.join(online), '\n'.join(offline))
+        await msg.answer(text, reply_markup=help_kb(), disable_web_page_preview=True)

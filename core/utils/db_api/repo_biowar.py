@@ -229,7 +229,14 @@ class RequestsRepoBiowar:
         return await self.cur.execute(query, params)
     
     async def add_lab_bio_currency(self, id: int, bio_resources: int):
-        return await self.cur.execute('UPDATE Lab SET bio_resource=bio_resource+%s WHERE lab_id=%s;', (bio_resources, id))
+        query = 'UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s;'
+        await self.cur.execute(query, (bio_resources, id))
+        await self.conn.commit()
+
+    async def add_epicoins(self, id: int, amount: int):
+        query = 'UPDATE Lab SET epicoins = epicoins + %s WHERE lab_id = %s;'
+        await self.cur.execute(query, (amount, id))
+        await self.conn.commit()
 
     ### Lab Addons ###
     
@@ -973,9 +980,9 @@ class RequestsRepoBiowar:
 
     ### Referrals ###
 
-    async def add_referral(self, referrer_id: int, invited_id: int):
-        query = "INSERT IGNORE INTO Referrals (referrer_id, invited_id) VALUES (%s, %s);"
-        await self.cur.execute(query, (referrer_id, invited_id))
+    async def add_referral(self, referrer_id: int, referred_id: int):
+        query = "INSERT IGNORE INTO Referrals (referrer_id, referred_id) VALUES (%s, %s);"
+        await self.cur.execute(query, (referrer_id, referred_id))
         return self.cur.rowcount > 0
 
     async def get_referral_count(self, referrer_id: int):
@@ -985,10 +992,10 @@ class RequestsRepoBiowar:
         return res["cnt"] if res else 0
 
     async def get_referral_list(self, referrer_id: int):
-        query = "SELECT invited_id FROM Referrals WHERE referrer_id = %s;"
+        query = "SELECT referred_id FROM Referrals WHERE referrer_id = %s;"
         await self.cur.execute(query, (referrer_id,))
         result = await self.cur.fetchall()
-        return [row["invited_id"] for row in result] if result else []
+        return [row["referred_id"] for row in result] if result else []
 
     async def check_user_exists_in_db(self, user_id: int):
         query = "SELECT id FROM Users WHERE id = %s;"

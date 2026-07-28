@@ -4,24 +4,18 @@ from redis.asyncio import Redis
 from aiocryptopay import AioCryptoPay
 from datetime import datetime
 
-from aiogram.methods.get_chat_administrators import GetChatAdministrators
 from aiogram import BaseMiddleware, Bot
 from aiogram.types import Update
 from aiogram import html
-from aiogram.filters.chat_member_updated import (
-    ChatMemberUpdatedFilter, JOIN_TRANSITION, LEAVE_TRANSITION
-)
 from aiogram.dispatcher.flags import get_flag
 
 from typing import Awaitable, Callable, Dict, Any
-
 from asyncio import Lock
 
 from core.utils.db_api.repo_biowar import RequestsRepoBiowar
 from core.utils.db_api.repo_chat_manage import RequestsRepoChatManage
 
 from core.func import clear_name_universal
-from core.data.tg_ban_words import words as tg_ban_words
 from core.settings import settings
 
 
@@ -42,17 +36,21 @@ class DBPoolMiddleware(BaseMiddleware):
     ) -> Any:
         db_status = get_flag(data, 'db_status')
 
-        if db_status:
+        if db_status or event.pre_checkout_query:
             return await handler(event, data)
-        if event.pre_checkout_query:
+
+        user = data.get('event_from_user')
+        chat = data.get('event_chat')
+
+        # Если событие не связано с конкретным пользователем, прокидываем дальше
+        if not user:
             return await handler(event, data)
 
         async with self.pool.acquire() as conn:
             async with conn.cursor(DictCursor) as cur:
                 repo_biowar = RequestsRepoBiowar(cur)
                 repo_chat_manage = RequestsRepoChatManage(cur)
-                user = data.get('event_from_user')
-                chat = data.get('event_chat')
+
                 clear_name = clear_name_universal(user.full_name, user.username, user.id)
 
                 await repo_biowar.add_data_user(
@@ -65,19 +63,21 @@ class DBPoolMiddleware(BaseMiddleware):
                     clear_name,
                     user.username
                 )
-                if not event.chat_member or event.chat_member and event.chat_member.new_chat_member.status != 'left':
-                    await repo_biowar.add_data_chat(
-                        chat.id,
-                        (chat.title if chat.type != 'private' else html.quote(chat.full_name)),
-                        user.id,
-                        chat.type == 'private'
-                    )
-                if chat.type != 'private':
-                    await repo_chat_manage.include_off_notifications(chat.id, 2)
-                    marriage = await repo_chat_manage.get_marry(chat.id, user.id)
 
-                    if marriage:
-                        await repo_chat_manage.add_sms_marriages(chat.id, marriage['husband_id'])
+                if chat:
+                    if not event.chat_member or (event.chat_member and event.chat_member.new_chat_member.status != 'left'):
+                        await repo_biowar.add_data_chat(
+                            chat.id,
+                            (chat.title if chat.type != 'private' else html.quote(chat.full_name or "")),
+                            user.id,
+                            chat.type == 'private'
+                        )
+                    if chat.type != 'private':
+                        await repo_chat_manage.include_off_notifications(chat.id, 2)
+                        marriage = await repo_chat_manage.get_marry(chat.id, user.id)
+
+                        if marriage:
+                            await repo_chat_manage.add_sms_marriages(chat.id, marriage['husband_id'])
 
                 if not user.is_bot:
                     lab_time_created = datetime.utcnow().timestamp()
