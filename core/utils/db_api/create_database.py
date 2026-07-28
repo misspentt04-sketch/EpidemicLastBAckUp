@@ -402,6 +402,8 @@ async def db_settings_up(pool: Pool):
         """
     )
 
+    referrals_table = ('CREATE TABLE IF NOT EXISTS Referrals(id INT NOT NULL AUTO_INCREMENT, referrer_id BIGINT(16) NOT NULL, invited_id BIGINT(16) NOT NULL, PRIMARY KEY (id), UNIQUE (invited_id), INDEX (referrer_id));')
+
     # Service
 
     service_table = (
@@ -451,6 +453,7 @@ async def db_settings_up(pool: Pool):
     admin_status_table,
 
         # Service
+    referrals_table,
     service_table,
 
     ]

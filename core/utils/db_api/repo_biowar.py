@@ -969,3 +969,28 @@ class RequestsRepoBiowar:
         return await self.select_one(
             "SELECT time_give_food FROM Service;"
         )
+
+
+    ### Referrals ###
+
+    async def add_referral(self, referrer_id: int, invited_id: int):
+        query = "INSERT IGNORE INTO Referrals (referrer_id, invited_id) VALUES (%s, %s);"
+        await self.cur.execute(query, (referrer_id, invited_id))
+        return self.cur.rowcount > 0
+
+    async def get_referral_count(self, referrer_id: int):
+        query = "SELECT COUNT(*) as cnt FROM Referrals WHERE referrer_id = %s;"
+        await self.cur.execute(query, (referrer_id,))
+        res = await self.cur.fetchone()
+        return res["cnt"] if res else 0
+
+    async def get_referral_list(self, referrer_id: int):
+        query = "SELECT invited_id FROM Referrals WHERE referrer_id = %s;"
+        await self.cur.execute(query, (referrer_id,))
+        result = await self.cur.fetchall()
+        return [row["invited_id"] for row in result] if result else []
+
+    async def check_user_exists_in_db(self, user_id: int):
+        query = "SELECT id FROM Users WHERE id = %s;"
+        await self.cur.execute(query, (user_id,))
+        return await self.cur.fetchone() is not None

@@ -60,7 +60,8 @@ async def get_lab(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoB
     refresh_pathogen_time = '\n'
     if lab_info["science_time"]:
         science_time = func.fever_expire_difference_check(lab_info["science_time"])
-        refresh_pathogen_time = f'<i>{LabIco.sand_clock.value} Новый патоген через {science_time}</i>\n\n'
+    if lab_info["science_time"]:
+            refresh_pathogen_time = f'<i>{LabIco.sand_clock.value} Новый патоген через {science_time}</i>\n\n'
     
     if corp_info:
         corp_text = f'В составе Корпорации — «<a href="tg://openmessage?user_id={corp_info["leader_id"]}">{corp_info["name"]}</a>»\n\n'

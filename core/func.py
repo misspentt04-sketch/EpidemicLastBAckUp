@@ -198,22 +198,17 @@ def victim_expire_difference_check(victim_time: int):
         return 'несколько секунд'
 
 def fever_expire_difference_check(fever_seconds: int):
-    now = datetime.utcnow()
-    fever_time = datetime.fromtimestamp(fever_seconds)
-    dif = fever_time - now
-    difs = int(dif.total_seconds())
-    hours, minutes, seconds = convert_seconds(difs)
+    import time
+    difs = int(fever_seconds - time.time())
     if difs > 0:
+        hours, minutes, seconds = convert_seconds(difs)
         if difs/60/60 >= 1:
-            text = f'{hours} часов {minutes} минут {seconds} секунд'
+            return f"{hours} часов {minutes} минут {seconds} секунд"
         elif difs/60 >= 1:
-            text = f'{minutes} минут {seconds} секунд'
+            return f"{minutes} минут {seconds} секунд"
         else:
-            text = f'{seconds} секунд'
-        return text
-    else:
-        return False
-
+            return f"{seconds} секунд"
+    return False
 def corp_code_generator(length: int = 6):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
     

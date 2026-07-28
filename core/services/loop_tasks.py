@@ -1,3 +1,4 @@
+import time
 from aiogram import Bot
 
 from asyncmy.pool import Pool
@@ -62,28 +63,31 @@ async def victim_fever_check(pool: Pool):
 
 async def pathogens_refresh_check(pool: Pool):
     sql = (
-        'SELECT lab_id, science, pathogens, ready_pathogens FROM Lab'
-        ' WHERE science_time IS NOT NULL AND science_time < %s;'
+        "SELECT lab_id, science, pathogens, ready_pathogens FROM Lab "
+        "WHERE science_time IS NOT NULL AND science_time <= %s;"
     )
-    sql1 = 'UPDATE Lab SET science_time=NULL WHERE lab_id = %s;'
-    sql2 = 'UPDATE Lab SET science_time=%s, ready_pathogens=ready_pathogens+%s WHERE lab_id = %s;'
-    
+    sql_clear = "UPDATE Lab SET science_time=NULL, ready_pathogens=ready_pathogens+1 WHERE lab_id = %s;"
+    sql_next = "UPDATE Lab SET science_time=%s, ready_pathogens=ready_pathogens+1 WHERE lab_id = %s;"
+
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
-                await asyncio.sleep(30)
-                timestmp = int(datetime.utcnow().timestamp())
-                await cur.execute(sql, timestmp)
+                await asyncio.sleep(15)
+                now_ts = int(time.time())
+                await cur.execute(sql, now_ts)
                 check = await cur.fetchall()
                 for string in check:
-                    id, science_lvl, pathogens, ready_pathogens = string.values()
-                    if pathogens == ready_pathogens:
-                        await cur.execute(sql1, string['lab_id'])
-                    fever_expire = int((datetime.utcnow() + timedelta(minutes=(61-science_lvl))).timestamp())
-                    science_time = None if ready_pathogens == pathogens else fever_expire
-                    add_pathogens = 0 if ready_pathogens == pathogens else 1
-                    await cur.execute(sql2, (science_time, add_pathogens, id))
+                    lab_id = string["lab_id"]
+                    science_lvl = string["science"]
+                    pathogens = string["pathogens"]
+                    ready_pathogens = string["ready_pathogens"]
 
+                    if ready_pathogens + 1 >= pathogens:
+                        await cur.execute(sql_clear, lab_id)
+                    else:
+                        seconds_to_wait = max((61 - science_lvl), 1) * 60
+                        next_expire = now_ts + seconds_to_wait
+                        await cur.execute(sql_next, (next_expire, lab_id))
 async def corporation_stats_refresh(pool: Pool):
     query = (
         'UPDATE Corporation c '

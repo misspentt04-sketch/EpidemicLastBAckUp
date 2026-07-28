@@ -1,3 +1,4 @@
+from core.handlers.biowar.referrals import router as referrals_router
 from core.handlers.biowar.labs.lab_text_upgrade import text_upgrade_router
 from aiogram import Router
 
@@ -15,6 +16,7 @@ biowar_router2 = Router()
 biowar_global_router = Router()
 
 biowar_router.include_routers(
+    referrals_router,
     text_upgrade_router, lab_router, corporation_router,
     infect_router,
     admin_router,
@@ -27,3 +29,4 @@ biowar_router.include_routers(
 
 biowar_router2.include_routers(infect2_router, )
 biowar_global_router.include_routers(admin_router_global)
+

@@ -115,7 +115,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     ss_detect = 1 if infecter['security_service'] < victimer['security_service'] else 0
     inf_infect = infecter['infect']
     vic_immunity = victimer['immunity']
-    science_time = int((datetime.utcnow() + timedelta(minutes=(61-infecter['science']))).timestamp())
+    science_time = int(time.time()) + (61 - infecter['science']) * 60
     
     inf_ready_pathogens_left = infecter['ready_pathogens'] - spent_pathogens
     
