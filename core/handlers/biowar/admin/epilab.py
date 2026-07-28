@@ -1,3 +1,4 @@
+from core.settings import settings
 import re
 import logging
 from aiogram import Router, F
@@ -114,6 +115,8 @@ async def resolve_lab_target(message: Message, query: str = None, repo_biowar: R
 
 @router.message(F.text.regexp(r'^!(?:эпилаб|epilab)(?:\s+(.*))?', flags=re.IGNORECASE))
 async def cmd_epi_lab(message: Message, state: FSMContext, repo_biowar: RequestsRepoBiowar):
+    if str(message.from_user.id) not in settings.bots.admin_id:
+        return
     await state.clear()
     match = re.match(r'^!(?:эпилаб|epilab)(?:\s+(.*))?', message.text, re.IGNORECASE)
     query = match.group(1) if match else None
