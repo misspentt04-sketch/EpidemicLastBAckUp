@@ -175,8 +175,11 @@ async def cmd_list_aces(message: Message, repo_biowar: RequestsRepoBiowar):
 
 @router.callback_query(F.data.startswith('epilab:'))
 async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
+    # Проверка прав администратора
+    if str(callback.from_user.id) not in settings.bots.admin_id and callback.from_user.id not in settings.bots.admin_id:
+        return await callback.answer("❌ У вас нет доступа к управлению этой панелью!", show_alert=True)
+
     parts = callback.data.split(':')
-    action = parts[1]
 
     if action == 'close':
         await state.clear()
