@@ -1,3 +1,5 @@
+from aiogram import Router, F, Bot
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from asyncmy.cursors import Cursor
 from redis.asyncio import Redis
 from aiogram.types import Message
@@ -24,12 +26,21 @@ import asyncio
 
 
 async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar, redis: Redis, lock: Lock):
-  async with lock:
+    async with lock:
+        id = msg.from_user.id
+        chat_id = msg.chat.id
+        attacker_id = msg.from_user.id
     id = msg.from_user.id
     chat_id = msg.chat.id
-    victimer_id = func.reply_or_tag_geeter(msg)
-    parts = msg.text.split()
-    spent_pathogens = int(parts[1]) if parts[:2][-1].isdigit() else 1
+    parts = msg.text.split() if msg.text else []
+    victimer_id = getattr(msg, "_override_target_id", None) or func.reply_or_tag_geeter(msg)
+    if not victimer_id and len(parts) > 1 and parts[1].isdigit():
+        victimer_id = int(parts[1])
+    
+    if getattr(msg, "_override_target_id", None):
+        spent_pathogens = 1
+    else:
+        spent_pathogens = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
     is_tag = func.check_if_tag(msg)
     sb_answer = True
     pet_boost_exp = False
@@ -58,7 +69,9 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         if victimer is None:
             return await msg.answer(tricks_biowar['text']['victim_not_found'])
     else: # Normal infect
-        infecter = await repo_biowar.get_info_user_lab(id)
+        # Используем msg.from_user.id вместо статического id, чтобы корректно определять нападающего при вызове с инлайн-кнопок
+        attacker_id = msg.from_user.id
+        infecter = await repo_biowar.get_info_user_lab(attacker_id)
         victimer = await repo_biowar.get_info_user_lab(victimer_id)
     
     
@@ -66,11 +79,11 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         return await msg.answer(tricks_biowar['infect']['impossible_to_infect_bot'])
     if victimer is None:
         return await msg.answer(tricks_biowar['text']['not_info_about_user'])
-    if spent_pathogens > 10:
-        return await msg.answer(tricks_biowar['infect']['pathogen_count_limit'].format(10))
+    # Лимит убран
+    # if spent_pathogens > 10: ...
     if spent_pathogens == 0:
         return await msg.answer(tricks_biowar['infect']['pathogen_count_zero'])
-    if victimer['id'] == id:
+    if victimer['id'] == attacker_id:
         return await msg.answer(tricks_biowar['infect']['self_infect'])
     
     fever = func.fever_expire_difference_check(infecter['fever']) if infecter['fever'] else None
@@ -462,5 +475,179 @@ async def cmd_check_victim(message: Message, bot: Bot, repo_biowar: RequestsRepo
     link_url = f"tg://openmessage?user_id={target_id}"
     response_text = f"🧬 {header_info}: <a href='{link_url}'>ссылка на игрока</a>\n💰 Приносит: {fbio} био-ресурсов.\n⏳ Осталось: {time_str}."
     
-    await message.reply(response_text, parse_mode="HTML")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="💥 Ебнуть", callback_data=f"hit_target:{target_id}")
+    ]])
+    await message.reply(response_text, parse_mode="HTML", reply_markup=kb)
 
+
+
+async def hit_target_callback(callback: CallbackQuery, bot: Bot, db, repo_biowar: RequestsRepoBiowar, redis: Redis, lock: Lock):
+    # Анти-спам замок в Redis
+    click_key = f"hit_cb_lock:{callback.from_user.id}:{callback.message.message_id}"
+    if await redis.get(click_key):
+        return await callback.answer('⏳ Подожди немного...', show_alert=False)
+    await redis.set(click_key, '1', ex=2)
+
+    data_parts = callback.data.split(':')
+    target_id = int(data_parts[1])
+    
+    owner_id = int(data_parts[2]) if len(data_parts) > 2 and data_parts[2].isdigit() else None
+
+    if not owner_id and callback.message.reply_to_message and callback.message.reply_to_message.from_user:
+        owner_id = callback.message.reply_to_message.from_user.id
+
+    # Проверка на админа через БД / repo
+    is_admin = False
+    try:
+        user_data = await repo_biowar.get_user(callback.from_user.id)
+        if user_data and (getattr(user_data, 'is_admin', False) or getattr(user_data, 'role', '') in ['admin', 'owner', 'creator']):
+            is_admin = True
+    except Exception:
+        pass
+
+    # Если в config прописан
+    try:
+        from core.config import settings
+        if callback.from_user.id in getattr(settings.bots, 'admin_ids', []) or callback.from_user.id == getattr(settings.bots, 'admin_id', None):
+            is_admin = True
+    except Exception:
+        pass
+
+    # Обычным игрокам запрещаем чужие кнопки, АДМИНАМ РАЗРЕШАЕМ ВСЁ!
+    if owner_id and callback.from_user.id != owner_id and not is_admin:
+        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
+
+    if callback.from_user.id == target_id:
+        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
+
+    fake_message = callback.message.model_copy(update={
+        'from_user': callback.from_user,
+        'text': f'заразить {target_id} 1',
+        'reply_to_message': None
+    })
+    
+    setattr(fake_message, '_override_target_id', target_id)
+
+    await callback.answer('🚀 Запуск атаки...', show_alert=False)
+    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
+
+    data_parts = callback.data.split(':')
+    target_id = int(data_parts[1])
+    
+    owner_id = int(data_parts[2]) if len(data_parts) > 2 and data_parts[2].isdigit() else None
+
+    if not owner_id and callback.message.reply_to_message and callback.message.reply_to_message.from_user:
+        owner_id = callback.message.reply_to_message.from_user.id
+
+    # Проверяем, является ли нажимающий администратором
+    from core.config import settings
+    admin_ids = getattr(settings.bots, 'admin_ids', [])
+    if not isinstance(admin_ids, (list, tuple, set)):
+        admin_ids = [admin_ids]
+    
+    is_admin = callback.from_user.id in admin_ids or callback.from_user.id in getattr(settings.bots, 'admin_id_list', [])
+
+    # Обычным пользователям запрещаем чужие кнопки, админам — разрешаем!
+    if owner_id and callback.from_user.id != owner_id and not is_admin:
+        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
+
+    if callback.from_user.id == target_id:
+        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
+
+    fake_message = callback.message.model_copy(update={
+        'from_user': callback.from_user,
+        'text': f'заразить {target_id} 1',
+        'reply_to_message': None
+    })
+    
+    setattr(fake_message, '_override_target_id', target_id)
+
+    await callback.answer('🚀 Запуск атаки...', show_alert=False)
+    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
+
+    data_parts = callback.data.split(':')
+    target_id = int(data_parts[1])
+    
+    # 1. Проверяем owner_id из callback_data
+    owner_id = int(data_parts[2]) if len(data_parts) > 2 and data_parts[2].isdigit() else None
+
+    # 2. Проверяем owner_id из reply_to_message
+    if not owner_id and callback.message.reply_to_message and callback.message.reply_to_message.from_user:
+        owner_id = callback.message.reply_to_message.from_user.id
+
+    # Блокировка чужих кликов
+    if owner_id and callback.from_user.id != owner_id:
+        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
+
+    # Запрет атаки самого себя
+    if callback.from_user.id == target_id:
+        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
+
+    fake_message = callback.message.model_copy(update={
+        'from_user': callback.from_user,
+        'text': f'заразить {target_id} 1',
+        'reply_to_message': None
+    })
+    
+    setattr(fake_message, '_override_target_id', target_id)
+
+    await callback.answer('🚀 Запуск атаки...', show_alert=False)
+    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
+
+    # 2. Если в callback_data нет owner_id, пытаемся узнать владельца через reply_to_message
+    if not owner_id and callback.message.reply_to_message and callback.message.reply_to_message.from_user:
+        owner_id = callback.message.reply_to_message.from_user.id
+
+    # 3. Блокируем чужие клики, если удалось определить владельца
+    if owner_id and callback.from_user.id != owner_id:
+        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
+
+    # 4. Запрет на атаку самого себя
+    if callback.from_user.id == target_id:
+        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
+
+    fake_message = callback.message.model_copy(update={
+        'from_user': callback.from_user,
+        'text': f'заразить {target_id} 1',
+        'reply_to_message': None
+    })
+    
+    setattr(fake_message, '_override_target_id', target_id)
+
+    await callback.answer('🚀 Запуск атаки...', show_alert=False)
+    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
+
+    # Проверка: если кнопку нажимает не тот, кто её вызвал
+    if owner_id and callback.from_user.id != owner_id:
+        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
+
+    if callback.from_user.id == target_id:
+        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
+
+    fake_message = callback.message.model_copy(update={
+        'from_user': callback.from_user,
+        'text': f'заразить {target_id} 1',
+        'reply_to_message': None
+    })
+    
+    setattr(fake_message, '_override_target_id', target_id)
+
+    await callback.answer('🚀 Запуск атаки...', show_alert=False)
+    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
+
+    fake_message = callback.message.model_copy(update={
+        'from_user': callback.from_user,
+        'text': f'заразить {target_id} 1',
+        'reply_to_message': None
+    })
+    
+    # Передаем явно ID целевого игрока
+    setattr(fake_message, '_override_target_id', target_id)
+
+    await callback.answer('🚀 Запуск атаки...', show_alert=False)
+    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
+
+    await callback.answer("🚀 Запуск заражения...", show_alert=False)
+    
+    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)

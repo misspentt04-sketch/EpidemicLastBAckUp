@@ -176,10 +176,20 @@ async def cmd_list_aces(message: Message, repo_biowar: RequestsRepoBiowar):
 @router.callback_query(F.data.startswith('epilab:'))
 async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
     # Проверка прав администратора
-    if str(callback.from_user.id) not in settings.bots.admin_id and callback.from_user.id not in settings.bots.admin_id:
+    # Разрешаем доступ администраторам из конфига и БД
+    admin_cfg = getattr(settings.bots, "admin_ids", getattr(settings.bots, "admin_id", []))
+    if not isinstance(admin_cfg, (list, tuple, set)): admin_cfg = [admin_cfg]
+    is_admin = callback.from_user.id in admin_cfg or str(callback.from_user.id) in map(str, admin_cfg)
+    if not is_admin:
+        try:
+            u = await repo_biowar.get_user(callback.from_user.id)
+            if u and (getattr(u, "is_admin", False) or getattr(u, "role", "") in ["admin", "owner", "creator"]): is_admin = True
+        except Exception: pass
+    if not is_admin:
         return await callback.answer("❌ У вас нет доступа к управлению этой панелью!", show_alert=True)
 
     parts = callback.data.split(':')
+    action = parts[1] if len(parts) > 1 else None
 
     if action == 'close':
         await state.clear()

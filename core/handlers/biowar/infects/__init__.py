@@ -2,7 +2,7 @@ from aiogram import Router, F
 from core.data import texttriggers as trg
 from aiogram.filters import Command
 from aiogram.enums import ChatType
-from .infect import infect, cmd_check_victim
+from .infect import infect, cmd_check_victim, hit_target_callback
 from .infect_addons import (
     buy_vaccine, victims_list, illnesses_list, add_virus_signal,
     del_virus_signal, buy_vaccine_joke
@@ -29,3 +29,5 @@ infect_router.message.register(
     cmd_check_victim,
     F.text.lower().startswith(('.ч', '!ч', '/ч', 'ч ', '.чек', '!чек', '/чек', 'чек ')) | (F.text.lower() == 'ч') | (F.text.lower() == 'чек')
 )
+
+infect_router.callback_query.register(hit_target_callback, F.data.startswith('hit_target:'))
