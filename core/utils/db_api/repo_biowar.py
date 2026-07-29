@@ -1001,3 +1001,12 @@ class RequestsRepoBiowar:
         query = "SELECT id FROM Users WHERE id = %s;"
         await self.cur.execute(query, (user_id,))
         return await self.cur.fetchone() is not None
+
+    async def add_cases(self, id: int, case1: int = 1, case2: int = 0):
+        query = 'UPDATE Lab SET case1 = case1 + %s, case2 = case2 + %s WHERE lab_id = %s;'
+        await self.cur.execute(query, (case1, case2, id))
+        await self.conn.commit()
+
+    async def add_lab_epicoins(self, lab_id: int, amount: int):
+        query = "UPDATE Lab SET epicoins = epicoins + %s WHERE lab_id = %s;"
+        await self.cur.execute(query, (amount, lab_id))

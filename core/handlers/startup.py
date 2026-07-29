@@ -58,12 +58,35 @@ async def start(msg: Message, command: CommandObject, db: Cursor, bot: Bot, redi
                         added = False
 
                     if added:
-                        # Начисление валюты
-                        try:
-                            await repo_biowar.add_lab_bio_currency(referrer_id, REFERRAL_BONUS)
-                            print(f"[REF_DEBUG] Бонус +{REFERRAL_BONUS} успешно начислен id={referrer_id}")
-                        except Exception as bonus_e:
-                            print(f"[REF_DEBUG] ОШИБКА add_lab_bio_currency: {bonus_e}")
+                        # Проверка лимита в 50 рефералов
+                        ref_cnt = await repo_biowar.get_referral_count(referrer_id)
+                        if ref_cnt <= 50:
+                            # 1. Начисление +150 Epicoins за каждого реферала до 50
+                            try:
+                                await repo_biowar.add_lab_epicoins(referrer_id, 150)
+                                print(f"[REF_DEBUG] +150 Epicoins id={referrer_id} ({ref_cnt}/50)")
+                            except Exception as bonus_e:
+                                print(f"[REF_DEBUG] ОШИБКА epicoins: {bonus_e}")
+
+                            # 2. Начисление кейсов по вехам
+                            case1_to_add = 0
+                            case2_to_add = 0
+
+                            if ref_cnt in [5, 10, 35, 40]:
+                                case1_to_add = 1
+                            elif ref_cnt == 15:
+                                case1_to_add = 2
+                            elif ref_cnt in [30, 50]:
+                                case2_to_add = 1
+
+                            if case1_to_add > 0 or case2_to_add > 0:
+                                try:
+                                    await repo_biowar.add_cases(referrer_id, case1=case1_to_add, case2=case2_to_add)
+                                    print(f"[REF_DEBUG] Выданы кейсы id={referrer_id}: case1={case1_to_add}, case2={case2_to_add}")
+                                except Exception as case_e:
+                                    print(f"[REF_DEBUG] ОШИБКА кейсов: {case_e}")
+                        else:
+                            print(f"[REF_DEBUG] Лимит 50 рефералов превышен ({ref_cnt}). Награды id={referrer_id} НЕ начислены.")
 
                         # Отправка в чат логов
                         try:
