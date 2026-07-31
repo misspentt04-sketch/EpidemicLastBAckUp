@@ -366,7 +366,10 @@ async def cmd_check_victim(message: Message, bot: Bot, repo_biowar: RequestsRepo
             if entity.type == "text_link" and entity.url:
                 if "user_id=" in entity.url:
                     try:
-                        uid = int(entity.url.split("user_id=")[1].split("&")[0])
+                        import re
+                        uids = re.findall(r"\d+", entity.url)
+                        if uids:
+                            uid = int(uids[0])
                         if uid not in user_ids_in_order:
                             user_ids_in_order.append(uid)
                     except ValueError:
