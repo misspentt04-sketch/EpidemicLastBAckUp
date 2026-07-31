@@ -237,13 +237,9 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
     # Запись в историю заражений для топа
     try:
-        pool_hist = await db_pool.get_pool()
-        async with pool_hist.acquire() as conn_h:
-            async with conn_h.cursor() as cur_h:
-                await cur_h.execute(
-                    "INSERT INTO biowar_infection_history (attacker_id, victim_id, week_str, month_str, infect_date) VALUES (%s, %s, DATE_FORMAT(NOW(), '%x-%V'), DATE_FORMAT(NOW(), '%Y-%m'), NOW());",
-                    (infecter['id'], victimer['id'])
-                )
+        query_hist = "INSERT INTO biowar_infection_history (attacker_id, victim_id, week_str, month_str, infect_date) VALUES (%s, %s, DATE_FORMAT(NOW(), '%x-%V'), DATE_FORMAT(NOW(), '%Y-%m'), NOW());"
+        await repo_biowar.cur.execute(query_hist, (infecter['id'], victimer['id']))
+        await repo_biowar.conn.commit()
     except Exception as e:
         print("Error inserting infection history:", e)
 

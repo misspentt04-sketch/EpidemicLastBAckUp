@@ -17,14 +17,11 @@ async def cmd_start_ref(message: Message, command: CommandObject, repo_biowar: R
     username = message.from_user.username
     args = command.args
 
-    # 1. Проверяем существование пользователя ДО регистрации
-    user_exists = await repo_biowar.check_user_exists_in_db(user_id)
-
-    # 2. Регистрируем / обновляем пользователя в базе
+    # Регистрируем / обновляем пользователя в базе
     await repo_biowar.add_data_user(user_id, full_name, username)
 
-    # 3. Если пользователь новый и есть аргумент ref
-    if not user_exists and args:
+    # Обработка реферального аргумента
+    if args:
         ref_arg = args.strip()
         if ref_arg.startswith("ref"):
             try:
@@ -34,27 +31,30 @@ async def cmd_start_ref(message: Message, command: CommandObject, repo_biowar: R
                         # Записываем реферала
                         added = await repo_biowar.add_referral(referrer_id, user_id)
                         if added:
-                            # Начисляем бонус пригласившему
+                            # Начисляем Эпи-коины пригласившему
                             try:
-                                await repo_biowar.add_lab_bio_currency(referrer_id, REFERRAL_BONUS)
+                                await repo_biowar.add_lab_epicoins(referrer_id, REFERRAL_BONUS)
                             except Exception as bonus_err:
-                                logger.error(f"Failed to add bio currency to {referrer_id}: {bonus_err}")
+                                logger.error(f"Failed to add epicoins to {referrer_id}: {bonus_err}")
 
                             # Лог в чат логов
-                            await bot.send_message(
-                                LOG_CHAT_ID,
-                                f"👤 <b>Новый реферал!</b>\n"
-                                f"🆔 Пригласивший: <code>{referrer_id}</code>\n"
-                                f"🆕 Новый игрок: {full_name} (<code>{user_id}</code>)\n"
-                                f"🎁 Бонус: +{REFERRAL_BONUS} био-ресурсов."
-                            )
+                            try:
+                                await bot.send_message(
+                                    LOG_CHAT_ID,
+                                    f"👤 <b>Новый реферал!</b>\n"
+                                    f"🆔 Пригласивший: <code>{referrer_id}</code>\n"
+                                    f"🆕 Новый игрок: {full_name} (<code>{user_id}</code>)\n"
+                                    f"🎁 Бонус: +{REFERRAL_BONUS} Эпи-коинов."
+                                )
+                            except Exception:
+                                pass
 
                             # Уведомление пригласившему в ЛС
                             try:
                                 await bot.send_message(
                                     referrer_id,
                                     f"🎉 По вашей ссылке зарегистрировался новый игрок {full_name}!\n"
-                                    f"🎁 Вам начислено <b>+{REFERRAL_BONUS}</b> био-ресурсов."
+                                    f"🎁 Вам начислено <b>+{REFERRAL_BONUS}</b> Эпи-коинов."
                                 )
                             except Exception:
                                 pass
@@ -90,7 +90,7 @@ async def cmd_referrals(message: Message, repo_biowar: RequestsRepoBiowar = None
 
     text = (
         f"🔗 <b>Реферальная система</b>\n\n"
-        f"Приглашайте друзей в игру и получайте награды! За каждого нового игрока вы получаете <b>{REFERRAL_BONUS} коинов</b>.\n\n"
+        f"Приглашайте друзей в игру и получайте награды! За каждого нового игрока вы получаете <b>{REFERRAL_BONUS} Эпи-коинов</b>.\n\n"
         f"👥 Приглашено новых игроков: <b>{ref_count}</b>\n"
         f"🔗 Ваша реферальная ссылка:\n<code>{ref_link}</code>\n\n"
         f"🎁 <b>Прогресс наград:</b>\n"

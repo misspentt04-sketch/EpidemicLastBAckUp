@@ -63,11 +63,19 @@ async def victim_fever_check(pool: Pool):
 
 async def pathogens_refresh_check(pool: Pool):
     sql = (
-        "SELECT lab_id, science, pathogens, ready_pathogens FROM Lab "
+        "SELECT lab_id, science, pathogens, ready_pathogens, science_time FROM Lab "
         "WHERE science_time IS NOT NULL AND science_time <= %s;"
     )
-    sql_clear = "UPDATE Lab SET science_time=NULL, ready_pathogens=ready_pathogens+1 WHERE lab_id = %s;"
-    sql_next = "UPDATE Lab SET science_time=%s, ready_pathogens=ready_pathogens+1 WHERE lab_id = %s;"
+    sql_clear = (
+        "UPDATE Lab SET science_time=NULL, "
+        "ready_pathogens=LEAST(ready_pathogens + 1, pathogens) "
+        "WHERE lab_id = %s;"
+    )
+    sql_next = (
+        "UPDATE Lab SET science_time=%s, "
+        "ready_pathogens=LEAST(ready_pathogens + 1, pathogens) "
+        "WHERE lab_id = %s;"
+    )
 
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
@@ -76,17 +84,20 @@ async def pathogens_refresh_check(pool: Pool):
                 now_ts = int(time.time())
                 await cur.execute(sql, now_ts)
                 check = await cur.fetchall()
+
                 for string in check:
                     lab_id = string["lab_id"]
                     science_lvl = string["science"]
                     pathogens = string["pathogens"]
                     ready_pathogens = string["ready_pathogens"]
+                    science_time = string["science_time"]
 
                     if ready_pathogens + 1 >= pathogens:
                         await cur.execute(sql_clear, lab_id)
                     else:
                         seconds_to_wait = max((61 - science_lvl), 1) * 60
-                        next_expire = now_ts + seconds_to_wait
+                        base_time = max(science_time, now_ts)
+                        next_expire = base_time + seconds_to_wait
                         await cur.execute(sql_next, (next_expire, lab_id))
 async def corporation_stats_refresh(pool: Pool):
     query = (
@@ -281,3 +292,10 @@ async def pet_happy_check(pool: Pool):
                     happy_result = func.adjust_value(happy, tricks_biowar['max']['pet_happy_for_hour_percent'], '-')
                     await cur.execute(sql1, (happy_result, user_id))
 
+
+
+async def sanitize_pathogens(pool: Pool):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE Lab SET ready_pathogens = pathogens WHERE ready_pathogens > pathogens;")
+            await cur.execute("UPDATE Lab SET science_time = NULL WHERE ready_pathogens >= pathogens AND science_time IS NOT NULL;")

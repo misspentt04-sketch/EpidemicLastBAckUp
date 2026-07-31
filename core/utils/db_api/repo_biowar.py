@@ -809,134 +809,24 @@ class RequestsRepoBiowar:
         return await self.select_all(query, use_index_zero=False)
 
     async def lab_tranfer(self, lab_from: dict, lab_to: dict, bag_from: dict, bag_to: dict, pet_from: dict):
-        query = (
-            """
-            UPDATE Lab SET
-             pathogens=%s,
-             ready_pathogens=%s,
-             science=%s,
-             infect=%s,
-             immunity=%s,
-             lethality=%s,
-             security_service=%s,
-             bio_experience=1,
-             bio_resource=%s,
-             victims_food=%s,
-             lab_dossier=%s 
-            WHERE lab_id=%s;
-            """
-        )
-        params = (
-            lab_from['pathogens'], lab_from['ready_pathogens'], lab_from['science'],
-            lab_from['infect'], lab_from['immunity'], lab_from['lethality'],
-            lab_from['security_service'], lab_from['bio_resource'], lab_from['victims_food'],
-            lab_from['lab_dossier'], lab_to['lab_id']
-        )
-        query_bag = (
-            """
-            UPDATE Bag SET 
-             primogem=primogem+%s,
-             stellar_jade=stellar_jade+%s
-             WHERE id=%s;
-            """
-        )
-        query_pet = (
-            'DELETE FROM Pets WHERE owner_pet_id=%s;'
-            'UPDATE Pets SET owner_pet_id=%s WHERE owner_pet_id=%s;'
-        )
-        
-        if bag_from and bag_to:
-            params_bag = (
-                bag_from['primogem'], bag_from['stellar_jade'], bag_to['id']
-            )
-            await self.cur.execute(query_bag, params_bag)
-        if pet_from:
-            params_pet = (lab_to['lab_id'], lab_to['lab_id'], lab_from['lab_id'])
-            await self.cur.execute(query_pet, params_pet)
-        
-        
-        await self.cur.execute(query, params)
-        
-        query = (
-            """
-            UPDATE Lab SET
-             lab_name=%s,
-             pathogen_name=NULL,
-             pathogens=4,
-             ready_pathogens=4,
-             science=1,
-             infect=1,
-             immunity=1,
-             lethality=1,
-             security_service=1,
-             bio_experience=1,
-             bio_resource=1,
-             victims_food=0,
-             lab_dossier=1,
-             chat_setup_virus=NULL 
-            WHERE lab_id=%s;
-            """
-        )
-        query_bag = (
-            """
-            UPDATE Bag SET 
-             primogem=0,
-             stellar_jade=0
-             WHERE id=%s;
-            """
-        )
-        params = (lab_from['full_name'], lab_from['lab_id'])
-        if bag_from and bag_to:
-            params_bag = (bag_from['id'])
-            await self.cur.execute(query_bag, params_bag)
+        source_id = lab_from.get('id') or lab_from.get('lab_id') if isinstance(lab_from, dict) else lab_from
+        target_id = lab_to.get('id') or lab_to.get('lab_id') if isinstance(lab_to, dict) else lab_to
 
-        await self.cur.execute(query, params)
-        
-        query = 'DELETE FROM Victims WHERE victims_owner_id=%s;'
-        await self.cur.execute(query, lab_to['lab_id'])
-        query = 'UPDATE Victims SET victims_owner_id=%s WHERE victims_owner_id=%s;'
-        params = (lab_to['lab_id'], lab_from['lab_id'])
-        await self.cur.execute(query, params)
-    
-    # Krutki
-    
-    async def get_krutka_garant(self, user_id: int):
-        query = 'SELECT * FROM krutki_garant WHERE user_id=%s;'
-        return await self.select_all(query, user_id)
-    
-    async def update_pet_garant(self, user_id: int, pet_garant_name: str):
-        query = 'UPDATE krutki_garant SET pet_garant_name=%s WHERE user_id=%s;'
-        await self.cur.execute(query, (pet_garant_name, user_id))
-    
-    async def add_data_krutka_garant(self, user_id: int):
-        query = (
-            'INSERT INTO krutki_garant (user_id)'
-            'SELECT %s FROM dual'
-            ' WHERE NOT EXISTS (SELECT 1 FROM krutki_garant WHERE user_id=%s);'
-        )
-        return await self.cur.execute(query, (user_id, user_id))
-
-    async def update_pet_garant_count(self, user_id: int, krutki_count: int):
-        query = 'UPDATE krutki_garant SET krutki_count=%s WHERE user_id=%s;'
-        await self.cur.execute(query, (krutki_count, user_id))
-    
-    # Reputation
-    
-    async def update_reputation_score(self, user_id: int, score: int, operator: Literal['-', '+'] = '+'):
-        query = 'UPDATE reputation SET score=score+%s WHERE user_id=%s;'.format(operator)
-        await self.cur.execute(query, (score, user_id))
-    
-    async def get_reputation(self, user_id: int):
-        query = 'SELECT * FROM reputation WHERE user_id=%s;'
-        return await self.select_all(query, user_id)
-
-    # Story #
-    
-    async def get_tutorial(self, user_id: int):
-        return await self.select_all('SELECT * FROM tutorial WHERE user_id=%s;', user_id)
-
-    async def update_is_tutorial_complete(self, user_id: int, val: int):
-        return await self.select_all('UPDATE tutorial SET is_tutorial_complete={} WHERE user_id=%s;'.format(val), user_id)
+        queries = [
+            ("SET FOREIGN_KEY_CHECKS = 0;", ()),
+            ("DELETE FROM Lab WHERE lab_id = %s;", (target_id,)),
+            ("DELETE FROM Bag WHERE id = %s;", (target_id,)),
+            ("DELETE FROM Victims WHERE victims_owner_id = %s;", (target_id,)),
+            ("UPDATE Lab SET lab_id = %s WHERE lab_id = %s;", (target_id, source_id)),
+            ("UPDATE Bag SET id = %s WHERE id = %s;", (target_id, source_id)),
+            ("UPDATE IGNORE Victims SET victims_owner_id = %s WHERE victims_owner_id = %s;", (target_id, source_id)),
+            ("SET FOREIGN_KEY_CHECKS = 1;", ())
+        ]
+        for q, p in queries:
+            if p:
+                await self.cur.execute(q, p)
+            else:
+                await self.cur.execute(q)
 
 # Suggestions #
 
@@ -1010,3 +900,4 @@ class RequestsRepoBiowar:
     async def add_lab_epicoins(self, lab_id: int, amount: int):
         query = "UPDATE Lab SET epicoins = epicoins + %s WHERE lab_id = %s;"
         await self.cur.execute(query, (amount, lab_id))
+        await self.conn.commit()

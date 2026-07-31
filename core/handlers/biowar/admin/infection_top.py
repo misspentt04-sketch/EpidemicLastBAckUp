@@ -29,12 +29,13 @@ async def get_top_text(period_type):
         async with conn.cursor() as cur:
             if period_type == "w":
                 title = "Топ заражений (за неделю)"
-                date_filter = "AND h.week_str = DATE_FORMAT(NOW(), '%x-%V')"
+                # Используем надежную фильтрацию по YEARWEEK (ISO 1 mode)
+                date_filter = "AND (YEARWEEK(h.infect_date, 1) = YEARWEEK(NOW(), 1) OR h.week_str = DATE_FORMAT(NOW(), '%G-%V'))"
                 reset_date = get_next_sunday_reset()
                 reset_info = f"🔄 <i>Сброс: {reset_date}</i>"
             elif period_type == "m":
                 title = "Топ заражений (за месяц)"
-                date_filter = "AND h.month_str = DATE_FORMAT(NOW(), '%Y-%m')"
+                date_filter = "AND (DATE_FORMAT(h.infect_date, '%Y-%m') = DATE_FORMAT(NOW(), '%Y-%m') OR h.month_str = DATE_FORMAT(NOW(), '%Y-%m'))"
                 reset_date = get_last_day_of_month_reset()
                 reset_info = f"🔄 <i>Сброс: {reset_date}</i>"
             else:

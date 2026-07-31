@@ -464,12 +464,12 @@ async def process_transfer_target(message: Message, state: FSMContext, repo_biow
     bag_to = await repo_biowar.get_bag(target_id) if hasattr(repo_biowar, 'get_bag') else {}
     pet_from = await repo_biowar.get_my_pet(source_id) if hasattr(repo_biowar, 'get_my_pet') else {}
 
-    if not lab_from or not lab_to:
+    if not lab_from:
         await message.answer("❌ Одна из лабораторий не найдена в базе данных.")
         return
 
     try:
-        await repo_biowar.lab_tranfer(lab_from, lab_to, bag_from, bag_to, pet_from)
+        await repo_biowar.lab_tranfer(lab_from, target_id, bag_from, bag_to, pet_from)
         await notify_owner_action(message, f"🔄 Перенос лаборатории от ID {source_id} к ID {target_id}")
         await message.answer(f"✅ Успешный перенос/обмен лаборатории между пользователями <code>{source_id}</code> и <code>{target_id}</code>!")
     except Exception as e:

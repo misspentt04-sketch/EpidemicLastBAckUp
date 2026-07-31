@@ -1,35 +1,24 @@
-from aiogram.types import (
-    BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats,
-    BotCommandScopeDefault
-)
+import logging
 from aiogram import Bot
+from aiogram.types import BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats
+from aiogram.exceptions import TelegramRetryAfter, TelegramAPIError
 
+logger = logging.getLogger(__name__)
 
 async def set_commands(bot: Bot):
-    commands = [
-        BotCommand(
-            command='start',
-            description='Запустить бота'
-        ),
-        BotCommand(
-            command='help',
-            description='Помощь по командам'
-        ),
-        BotCommand(
-            command='paysupport',
-            description='Помощь с покупками'
-        ),
-        BotCommand(
-            command='refund',
-            description='Возврат платежа'
-        ),
-    ]
-
-    await bot.set_my_commands([], BotCommandScopeAllGroupChats())
-    await bot.set_my_commands(commands, BotCommandScopeAllPrivateChats())
-
+    try:
+        # Здесь настраиваются команды, если они используются
+        pass
+    except Exception as e:
+        logger.error(f"Ошибка при установке команд: {e}")
 
 async def del_commands(bot: Bot):
-
-    await bot.delete_my_commands(BotCommandScopeAllGroupChats())
-    await bot.delete_my_commands(BotCommandScopeAllPrivateChats())
+    try:
+        await bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
+        await bot.delete_my_commands(scope=BotCommandScopeAllPrivateChats())
+    except TelegramRetryAfter as e:
+        logger.warning(f"⚠️ Telegram Flood Control на удаление команд: ждем {e.retry_after} сек. Пропускаем...")
+    except TelegramAPIError as e:
+        logger.error(f"⚠️ Ошибка Telegram API при удалении команд: {e}")
+    except Exception as e:
+        logger.error(f"⚠️ Неизвестная ошибка при удалении команд: {e}")

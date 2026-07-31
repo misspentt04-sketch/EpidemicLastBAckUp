@@ -138,68 +138,125 @@ async def cb_buy_case1(call: CallbackQuery, db):
 @cases_router.callback_query(F.data == "open_case_1")
 async def cb_open_case1(call: CallbackQuery, db):
     user_id = call.from_user.id
-    
-    await db.execute("SELECT case1 FROM Lab WHERE lab_id = %s;", (user_id,))
+
+    await db.execute("SELECT case1, science FROM Lab WHERE lab_id = %s;", (user_id,))
     lab = await db.fetchone()
-    
+
     if not lab:
         await call.answer("❌ У вас нет лаборатории!", show_alert=True)
         return
 
-    case1 = (lab.get("case1", 0) if isinstance(lab, dict) else lab[0]) or 0
+    if isinstance(lab, dict):
+        case1 = lab.get("case1", 0) or 0
+        science = lab.get("science", 0) or 0
+    else:
+        case1 = lab[0] or 0
+        science = lab[1] or 0
 
     if case1 < 1:
         await call.answer("❌ У вас нет Кейсов 1!", show_alert=True)
         return
 
-    lvl = random.choices([1, 2, 3, 4, 5], weights=[40, 30, 18, 8, 4])[0]
-    item_type = random.choices(
-        ['pathogens', 'infect', 'immunity', 'lethality'],
-        weights=[35, 15, 25, 25]
-    )[0]
+    if random.random() < 0.025:
+        await db.execute(
+            "UPDATE Lab SET case1 = case1 - 1, case2 = case2 + 1 WHERE lab_id = %s;",
+            (user_id,)
+        )
+        reward_text = "💎 1 Донат Кейс!"
+    else:
+        lvl = random.choices([1, 2, 3, 4, 5], weights=[40, 30, 18, 8, 4])[0]
 
-    # При выпадении патогена прокачиваем и pathogens, и ready_pathogens одновременно
-    if item_type == 'pathogens':
-        query = "UPDATE Lab SET case1 = case1 - 1, pathogens = pathogens + %s, ready_pathogens = ready_pathogens + %s WHERE lab_id = %s;"
-        reward_text = f"+{lvl} к уровню патогена и +{lvl} готовый патоген"
-        params = (lvl, lvl, user_id)
-    elif item_type == 'infect':
-        query = "UPDATE Lab SET case1 = case1 - 1, infect = infect + %s WHERE lab_id = %s;"
-        reward_text = f"+{lvl} зз"
-        params = (lvl, user_id)
-    elif item_type == 'immunity':
-        query = "UPDATE Lab SET case1 = case1 - 1, immunity = immunity + %s WHERE lab_id = %s;"
-        reward_text = f"+{lvl} иммуна"
-        params = (lvl, user_id)
-    elif item_type == 'lethality':
-        query = "UPDATE Lab SET case1 = case1 - 1, lethality = lethality + %s WHERE lab_id = %s;"
-        reward_text = f"+{lvl} летальности"
-        params = (lvl, user_id)
+        if science < 60:
+            items = ['pathogens', 'infect', 'immunity', 'lethality', 'science']
+            weights = [30, 20, 20, 20, 10]
+        else:
+            items = ['pathogens', 'infect', 'immunity', 'lethality']
+            weights = [40, 20, 20, 20]
 
-    await db.execute(query, params)
-    await call.message.answer(f"🎉 Вы открыли 1 кейс и получили: <b>{reward_text}</b>")
+        item_type = random.choices(items, weights=weights)[0]
+
+        if item_type == 'pathogens':
+            await db.execute(
+                "UPDATE Lab SET case1 = case1 - 1, pathogens = pathogens + %s, ready_pathogens = LEAST(ready_pathogens + %s, pathogens + %s) WHERE lab_id = %s;",
+                (lvl, lvl, lvl, user_id)
+            )
+            reward_text = f"+{lvl} к уровню патогена и +{lvl} готовый патоген"
+        elif item_type == 'infect':
+            await db.execute(
+                "UPDATE Lab SET case1 = case1 - 1, infect = infect + %s WHERE lab_id = %s;",
+                (lvl, user_id)
+            )
+            reward_text = f"+{lvl} зз"
+        elif item_type == 'immunity':
+            await db.execute(
+                "UPDATE Lab SET case1 = case1 - 1, immunity = immunity + %s WHERE lab_id = %s;",
+                (lvl, user_id)
+            )
+            reward_text = f"+{lvl} иммуна"
+        elif item_type == 'lethality':
+            await db.execute(
+                "UPDATE Lab SET case1 = case1 - 1, lethality = lethality + %s WHERE lab_id = %s;",
+                (lvl, user_id)
+            )
+            reward_text = f"+{lvl} летальности"
+        elif item_type == 'science':
+            actual_lvl = min(lvl, 3, 60 - science)
+            await db.execute(
+                "UPDATE Lab SET case1 = case1 - 1, science = science + %s WHERE lab_id = %s;",
+                (actual_lvl, user_id)
+            )
+            reward_text = f"+{actual_lvl} к разработке"
+
+    ch_sci = "9.75%" if science < 60 else "0%"
+    ch_pat = "29.25%" if science < 60 else "39.0%"
+    ch_oth = "19.5%" if science < 60 else "19.5%"
+
+    lines = [
+        f"📦 Вы открыли <b>1 обычный кейс</b> и получили: <b>{reward_text}</b>",
+        "<blockquote expandable>",
+        "📊 <b>Шансы на дроп:</b>",
+        f"├ 💎 <b>Донат-кейс:</b> <code>2.5%</code>",
+        f"├ 🧪 <b>Патогены:</b> <code>{ch_pat}</code>",
+        f"├ ☣️ <b>ЗЗ / 🛡 Иммун / ☠️ Летальность:</b> по <code>{ch_oth}</code>",
+        f"└ 🧬 <b>Разработка (макс +3):</b> <code>{ch_sci}</code>",
+        "</blockquote>"
+    ]
+    text = chr(10).join(lines)
+
+    await call.message.answer(text)
     await call.answer()
 
 @cases_router.callback_query(F.data == "open_case_2")
 async def cb_open_case2(call: CallbackQuery, db):
     user_id = call.from_user.id
-    
-    await db.execute("SELECT case2 FROM Lab WHERE lab_id = %s;", (user_id,))
+
+    await db.execute("SELECT case2, science FROM Lab WHERE lab_id = %s;", (user_id,))
     lab = await db.fetchone()
-    
+
     if not lab:
         await call.answer("❌ У вас нет лаборатории!", show_alert=True)
         return
 
-    case2 = (lab.get("case2", 0) if isinstance(lab, dict) else lab[0]) or 0
+    if isinstance(lab, dict):
+        case2 = lab.get("case2", 0) or 0
+        science = lab.get("science", 0) or 0
+    else:
+        case2 = lab[0] or 0
+        science = lab[1] or 0
 
     if case2 < 1:
         await call.answer("❌ У вас нет Донат кейсов!", show_alert=True)
         return
 
-    is_super = random.random() < 0.05
+    roll = random.random()
 
-    if is_super:
+    if roll < 0.025:
+        await db.execute(
+            "UPDATE Lab SET case2 = case2 + 1 WHERE lab_id = %s;",
+            (user_id,)
+        )
+        reward_text = "🎰 ДЖЕКПОТ! +2 Донат Кейса"
+    elif roll < 0.075:
         await db.execute(
             "UPDATE Lab SET case2 = case2 - 1, infect = infect + 5, immunity = immunity + 5 WHERE lab_id = %s;",
             (user_id,)
@@ -207,7 +264,12 @@ async def cb_open_case2(call: CallbackQuery, db):
         reward_text = "🌟 СУПЕРПРИЗ! +5 зз и +5 иммуна"
     else:
         lvl = random.choices([3, 4, 5, 6, 7], weights=[35, 30, 20, 10, 5])[0]
-        item_type = random.choice(['infect', 'immunity'])
+
+        items = ['infect', 'immunity']
+        if science <= 57:
+            items.append('science')
+
+        item_type = random.choice(items)
 
         if item_type == 'infect':
             await db.execute(
@@ -215,15 +277,41 @@ async def cb_open_case2(call: CallbackQuery, db):
                 (lvl, user_id)
             )
             reward_text = f"+{lvl} зз"
-        else:
+        elif item_type == 'immunity':
             await db.execute(
                 "UPDATE Lab SET case2 = case2 - 1, immunity = immunity + %s WHERE lab_id = %s;",
                 (lvl, user_id)
             )
             reward_text = f"+{lvl} иммуна"
+        elif item_type == 'science':
+            actual_lvl = min(lvl, 60 - science)
+            await db.execute(
+                "UPDATE Lab SET case2 = case2 - 1, science = science + %s WHERE lab_id = %s;",
+                (actual_lvl, user_id)
+            )
+            reward_text = f"+{actual_lvl} к разработке"
 
-    await call.message.answer(f"🎉 Вы открыли 1 донат кейс и получили: <b>{reward_text}</b>")
+    ch_normal = "30.8%" if science <= 57 else "46.2%"
+
+    lines = [
+        f"💎 Вы открыли <b>1 донат кейс</b> и получили: <b>{reward_text}</b>",
+        "<blockquote expandable>",
+        "📊 <b>Шансы на дроп:</b>",
+        "├ 🎰 <b>ДЖЕКПОТ (+2 ДК):</b> <code>2.5%</code>",
+        "├ 🌟 <b>СУПЕРПРИЗ (+5 ЗЗ и +5 Иммун):</b> <code>5.0%</code>",
+        f"├ ☣️ <b>ЗЗ:</b> <code>{ch_normal}</code>",
+        f"├ 🛡 <b>Иммунитет:</b> <code>{ch_normal}</code>"
+    ]
+    if science <= 57:
+        lines.append(f"├ 🧬 <b>Разработка:</b> <code>{ch_normal}</code>")
+
+    lines.append("└ 🎲 <b>Уровень прибавки:</b> +3 (35%), +4 (30%), +5 (20%), +6 (10%), +7 (5%)")
+    lines.append("</blockquote>")
+    text = chr(10).join(lines)
+
+    await call.message.answer(text)
     await call.answer()
+
 
 async def admin_give_coins(msg: types.Message, db):
     args = msg.text.split()

@@ -40,7 +40,7 @@ async def start(msg: Message, command: CommandObject, db: Cursor, bot: Bot, redi
         print(f"[REF_DEBUG] Ошибка add_data_user: {e}")
 
     # 3. Обработка реферала
-    if not user_exists and args:
+    if args:
         ref_arg = args.strip()
         print(f"[REF_DEBUG] Аргумент передан: {ref_arg}")
         if ref_arg.startswith("ref"):
@@ -95,7 +95,7 @@ async def start(msg: Message, command: CommandObject, db: Cursor, bot: Bot, redi
                                 f"👤 <b>Новый реферал!</b>\n"
                                 f"🆔 Пригласивший: <code>{referrer_id}</code>\n"
                                 f"🆕 Новый игрок: {full_name} (<code>{user_id}</code>)\n"
-                                f"🎁 Бонус: +{REFERRAL_BONUS} био-ресурсов."
+                                f"🎁 Бонус: +{REFERRAL_BONUS} Эпи-коинов."
                             )
                             print(f"[REF_DEBUG] Лог успешно отправлен в {LOG_CHAT_ID}")
                         except Exception as log_e:
@@ -106,7 +106,7 @@ async def start(msg: Message, command: CommandObject, db: Cursor, bot: Bot, redi
                             await bot.send_message(
                                 referrer_id,
                                 f"🎉 По вашей ссылке зарегистрировался новый игрок {full_name}!\n"
-                                f"🎁 Вам начислено <b>+{REFERRAL_BONUS}</b> био-ресурсов."
+                                f"🎁 Вам начислено <b>+{REFERRAL_BONUS}</b> Эпи-коинов."
                             )
                             print(f"[REF_DEBUG] Уведомление отправлено пригласившему id={referrer_id}")
                         except Exception as pm_e:

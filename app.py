@@ -82,7 +82,7 @@ async def main():
     # dp.message.register disabled
 
     dp.include_routers(
-        start_router,
+            start_router,
     idea_router,
         biowar_router,
         biowar_router2,
