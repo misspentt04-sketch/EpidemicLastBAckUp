@@ -1,0 +1,343 @@
+[33mcommit 21c462f8c2abd229856d9bf9074a3b1899910cf7[m
+Author: misspentt04-sketch <your_email@example.com>
+Date:   Tue Jul 28 13:27:09 2026 +0300
+
+    Update check victim logic
+
+[1mdiff --git a/core/handlers/biowar/infects/infect.py b/core/handlers/biowar/infects/infect.py[m
+[1mindex 40ec632..b596db4 100644[m
+[1m--- a/core/handlers/biowar/infects/infect.py[m
+[1m+++ b/core/handlers/biowar/infects/infect.py[m
+[36m@@ -332,56 +332,135 @@[m [masync def extract_target_user_id(message, bot: Bot):[m
+     return None[m
+ [m
+ async def cmd_check_victim(message: Message, bot: Bot, repo_biowar: RequestsRepoBiowar):[m
+[31m-    owner_id = message.from_user.id[m
+[31m-    target_id = None[m
+[32m+[m[32m    text_clean = message.text.strip()[m
+[32m+[m[32m    parts = text_clean.split()[m
+     [m
+[31m-    # Сначала проверяем, передан ли порядковый номер (например, .ч 20)[m
+[31m-    args = message.text.split(maxsplit=1)[m
+[31m-    if len(args) == 2 and args[1].strip().isdigit() and len(args[1].strip()) < 6:[m
+[31m-        try:[m
+[31m-            idx = int(args[1].strip()) - 1[m
+[31m-            victims_list_temp = await repo_biowar.get_victims(owner_id)[m
+[31m-            if victims_list_temp:[m
+[31m-                # Инвертируем список, если нумерация на экране идет с первого добавленного[m
+[31m-                victims_list_temp = list(reversed(victims_list_temp))[m
+[31m-                if 0 <= idx < len(victims_list_temp):[m
+[31m-                    target_id = victims_list_temp[idx].get('victim_id')[m
+[31m-        except Exception:[m
+[31m-            pass[m
+[32m+[m[32m    arg = parts[1] if len(parts) >= 2 else None[m
+[32m+[m[41m    [m
+[32m+[m[32m    if arg and arg.isdigit() and not message.reply_to_message:[m
+[32m+[m[32m        return[m
+[32m+[m
+[32m+[m[32m    target_id = None[m
+[32m+[m[32m    requested_idx = None[m
+[32m+[m[32m    victim_data = None[m
+[32m+[m[32m    owner_id = message.from_user.id[m
+[32m+[m[32m    victims = await repo_biowar.get_victims(owner_id)[m
+[32m+[m
+[32m+[m[32m    # 1. Выбор по номеру из топа (с реплаем на список)[m
+[32m+[m[32m    if message.reply_to_message and arg and arg.isdigit():[m
+[32m+[m[32m        requested_idx = int(arg)[m
+[32m+[m[32m        r = message.reply_to_message[m
+[32m+[m[32m        user_ids_in_order = [][m
+[32m+[m
+[32m+[m[32m        entities = r.entities or r.caption_entities or [][m
+[32m+[m[32m        for entity in entities:[m
+[32m+[m[32m            if entity.type == "text_link" and entity.url:[m
+[32m+[m[32m                if "user_id=" in entity.url:[m
+[32m+[m[32m                    try:[m
+[32m+[m[32m                        uid = int(entity.url.split("user_id=")[1].split("&")[0])[m
+[32m+[m[32m                        if uid not in user_ids_in_order:[m
+[32m+[m[32m                            user_ids_in_order.append(uid)[m
+[32m+[m[32m                    except ValueError:[m
+[32m+[m[32m                        pass[m
+[32m+[m
+[32m+[m[32m        if not user_ids_in_order:[m
+[32m+[m[32m            r_text = r.text or r.caption or ""[m
+[32m+[m[32m            import re[m
+[32m+[m[32m            found_links = re.findall(r"user_id=(\d+)", r_text)[m
+[32m+[m[32m            for uid_str in found_links:[m
+[32m+[m[32m                uid = int(uid_str)[m
+[32m+[m[32m                if uid not in user_ids_in_order:[m
+[32m+[m[32m                    user_ids_in_order.append(uid)[m
+[32m+[m
+[32m+[m[32m        idx = requested_idx - 1[m
+[32m+[m[32m        if 0 <= idx < len(user_ids_in_order):[m
+[32m+[m[32m            target_id = user_ids_in_order[idx][m
+[32m+[m[32m        else:[m
+[32m+[m[32m            await message.reply(f"❌ Игрок под номером {requested_idx} не найден в этом списке.")[m
+[32m+[m[32m            return[m
+[32m+[m
+[32m+[m[32m    # 2. Получение ID из аргумента (ссылка tg://, числа или id) или реплая[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        r_id = None[m
+[32m+[m[32m        import re[m
+[32m+[m
+[32m+[m[32m        if arg:[m
+[32m+[m[32m            found_ids = re.findall(r"\d{7,}", arg)[m
+[32m+[m[32m            if found_ids:[m
+[32m+[m[32m                r_id = int(found_ids[0])[m
+[32m+[m[32m            elif arg.isdigit():[m
+[32m+[m[32m                r_id = int(arg)[m
+[32m+[m
+[32m+[m[32m        if not r_id and message.reply_to_message:[m
+[32m+[m[32m            r = message.reply_to_message[m
+[32m+[m[32m            if r.from_user:[m
+[32m+[m[32m                r_id = r.from_user.id[m
+[32m+[m[32m            elif r.forward_from:[m
+[32m+[m[32m                r_id = r.forward_from.id[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                r_text = r.text or r.caption or ""[m
+[32m+[m[32m                found_ids = re.findall(r"\d{7,}", r_text)[m
+[32m+[m[32m                if found_ids:[m
+[32m+[m[32m                    r_id = int(found_ids[0])[m
+[32m+[m
+[32m+[m[32m        target_id = r_id[m
+ [m
+     if not target_id:[m
+[31m-        target_id = await extract_target_user_id(message, bot)[m
+[31m-    if not target_id:[m
+[31m-        await message.reply("❌ Укажите жертву реплаем, перешлите сообщение, укажите @username или ID.")[m
+         return[m
+[31m-    [m
+[31m-    victims = await repo_biowar.get_victims(owner_id)[m
+[31m-    victim_data = None[m
+[32m+[m
+[32m+[m[32m    # Ищем данные жертвы в базе[m
+     if victims:[m
+[32m+[m[32m        keys_to_check = ["victim_id", "user_id", "id"][m
+         for v in victims:[m
+[31m-            if v.get('victim_id') == target_id:[m
+[31m-                victim_data = v[m
+[32m+[m[32m            for key in keys_to_check:[m
+[32m+[m[32m                v_id = v.get(key)[m
+[32m+[m[32m                if v_id is not None and int(v_id) == target_id:[m
+[32m+[m[32m                    victim_data = v[m
+[32m+[m[32m                    break[m
+[32m+[m[32m            if victim_data:[m
+                 break[m
+[31m-                [m
+[32m+[m
+     if not victim_data:[m
+[31m-        await message.reply("❌ Игрок не является жертвой владельца.")[m
+[31m-        return[m
+[31m-        [m
+[31m-    bio_earn = victim_data.get('victim_bio_resource_earn', 0)[m
+[31m-    expire_time = victim_data.get('victim_expire', 0)[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            lab_info = await repo_biowar.get_lab(target_id)[m
+[32m+[m[32m            if lab_info:[m
+[32m+[m[32m                victim_data = {[m
+[32m+[m[32m                    "victim_id": target_id,[m
+[32m+[m[32m                    "victim_bio_resource_earn": 0,[m
+[32m+[m[32m                    "victim_expire": 0,[m
+[32m+[m[32m                    **lab_info[m
+[32m+[m[32m                }[m
+[32m+[m[32m        except Exception as e:[m
+[32m+[m[32m            print(f"[DEBUG] Could not fetch lab directly: {e}")[m
+[32m+[m
+[32m+[m[32m    if not victim_data:[m
+[32m+[m[32m        victim_data = {[m
+[32m+[m[32m            "victim_id": target_id,[m
+[32m+[m[32m            "victim_bio_resource_earn": 0,[m
+[32m+[m[32m            "victim_expire": 0[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m    bio_earn = victim_data.get("victim_bio_resource_earn", 0)[m
+[32m+[m[32m    expire_time = victim_data.get("victim_expire", 0)[m
+     left_seconds = expire_time - int(time.time())[m
+[31m-    [m
+[32m+[m
+     if left_seconds <= 0:[m
+[31m-        time_str = "Срок истек"[m
+[32m+[m[32m        time_str = "Срок истек или не заражен"[m
+     else:[m
+         d, rem = divmod(left_seconds, 86400)[m
+         h, rem = divmod(rem, 3600)[m
+         m = rem // 60[m
+[31m-        parts = [][m
+[31m-        if d > 0: parts.append(f"{d}д")[m
+[31m-        if h > 0 or d > 0: parts.append(f"{h}ч")[m
+[31m-        parts.append(f"{m}м")[m
+[31m-        time_str = " ".join(parts)[m
+[31m-        [m
+[32m+[m[32m        parts_time = [][m
+[32m+[m[32m        if d > 0: parts_time.append(f"{d}д")[m
+[32m+[m[32m        if h > 0 or d > 0: parts_time.append(f"{h}ч")[m
+[32m+[m[32m        parts_time.append(f"{m}м")[m
+[32m+[m[32m        time_str = " ".join(parts_time)[m
+[32m+[m
+     fbio = f"{bio_earn:,}".replace(",", " ")[m
+[31m-    await message.reply(f"🧬 Жертва приносит {fbio} био-ресурсов.\n⏳ Осталось: {time_str}.")[m
+[32m+[m[41m    [m
+[32m+[m[32m    header_info = f"Жертва (#{requested_idx})" if requested_idx else "Жертва"[m
+[32m+[m[32m    link_url = f"tg://openmessage?user_id={target_id}"[m
+[32m+[m[32m    response_text = f"🧬 {header_info}: <a href='{link_url}'>ссылка на игрока</a>\n💰 Приносит: {fbio} био-ресурсов.\n⏳ Осталось: {time_str}."[m
+[32m+[m[41m    [m
+[32m+[m[32m    await message.reply(response_text, parse_mode="HTML")[m
+[41m+[m
+
+[33mcommit e2f57fbfa8a76445710ea910b64c9e3825214760[m
+Author: root <root@vmi3436516.contaboserver.net>
+Date:   Sun Jul 26 15:13:41 2026 +0200
+
+    Update infection history handling and weekly reset logic
+
+[1mdiff --git a/core/handlers/biowar/infects/infect.py b/core/handlers/biowar/infects/infect.py[m
+[1mindex adda91d..40ec632 100644[m
+[1m--- a/core/handlers/biowar/infects/infect.py[m
+[1m+++ b/core/handlers/biowar/infects/infect.py[m
+[36m@@ -222,6 +222,18 @@[m [masync def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi[m
+     [m
+     await redis.set(f'epidemic_pet_try_count_heal:{infecter["id"]}', 0)[m
+ [m
+[32m+[m[32m    # Запись в историю заражений для топа[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        pool_hist = await db_pool.get_pool()[m
+[32m+[m[32m        async with pool_hist.acquire() as conn_h:[m
+[32m+[m[32m            async with conn_h.cursor() as cur_h:[m
+[32m+[m[32m                await cur_h.execute([m
+[32m+[m[32m                    "INSERT INTO biowar_infection_history (attacker_id, victim_id, week_str, month_str, infect_date) VALUES (%s, %s, DATE_FORMAT(NOW(), '%x-%V'), DATE_FORMAT(NOW(), '%Y-%m'), NOW());",[m
+[32m+[m[32m                    (infecter['id'], victimer['id'])[m
+[32m+[m[32m                )[m
+[32m+[m[32m    except Exception as e:[m
+[32m+[m[32m        print("Error inserting infection history:", e)[m
+[32m+[m
+     await repo_biowar.infect_setup([m
+         infecter['id'], victimer['id'], earn_exp, vic_exp,[m
+         vic_expire_kd, inf_ready_pathogens_left,[m
+
+[33mcommit 90790175eef844f44ef8f7382e10bc40217e51f0[m
+Author: root <root@vmi3436516.contaboserver.net>
+Date:   Sun Jul 26 14:35:52 2026 +0200
+
+    Fix check victim index order and fix infection history date parameters
+
+[1mdiff --git a/core/handlers/biowar/admin/infection_top.py b/core/handlers/biowar/admin/infection_top.py[m
+[1mnew file mode 100644[m
+[1mindex 0000000..9004b67[m
+[1m--- /dev/null[m
+[1m+++ b/core/handlers/biowar/admin/infection_top.py[m
+[36m@@ -0,0 +1,116 @@[m
+[32m+[m[32mfrom aiogram import Router, F[m
+[32m+[m[32mfrom aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton[m
+[32m+[m[32mfrom aiogram.utils.text_decorations import html_decoration as hd[m
+[32m+[m[32mfrom core.utils.db_api.settings_pool import db_pool[m
+[32m+[m[32mfrom datetime import datetime, timedelta[m
+[32m+[m
+[32m+[m[32mrouter = Router()[m
+[32m+[m
+[32m+[m[32mdef get_next_sunday_reset():[m
+[32m+[m[32m    now = datetime.now()[m
+[32m+[m[32m    days_until_sunday = (6 - now.weekday()) % 7[m
+[32m+[m[32m    if days_until_sunday == 0 and (now.hour > 23 or (now.hour == 23 and now.minute >= 59)):[m
+[32m+[m[32m        days_until_sunday = 7[m
+[32m+[m[32m    next_sunday = now + timedelta(days=days_until_sunday)[m
+[32m+[m[32m    return next_sunday.strftime("%d.%m.%Y в 23:59:59")[m
+[32m+[m
+[32m+[m[32mdef get_last_day_of_month_reset():[m
+[32m+[m[32m    now = datetime.now()[m
+[32m+[m[32m    if now.month == 12:[m
+[32m+[m[32m        next_month = datetime(now.year + 1, 1, 1)[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        next_month = datetime(now.year, now.month + 1, 1)[m
+[32m+[m[32m    last_day = next_month - timedelta(days=1)[m
+[32m+[m[32m    return last_day.strftime("%d.%m.%Y в 23:59:59")[m
+[32m+[m
+[32m+[m[32masync def get_top_text(period_type):[m
+[32m+[m[32m    pool = await db_pool.get_pool()[m
+[32m+[m[32m    async with pool.acquire() as conn:[m
+[32m+[m[32m        async with conn.cursor() as cur:[m
+[32m+[m[32m            if period_type == "w":[m
+[32m+[m[32m                title = "Топ заражений (за неделю)"[m
+[32m+[m[32m                date_filter = "AND h.week_str = DATE_FORMAT(NOW(), '%x-%V')"[m
+[32m+[m[32m                reset_date = get_next_sunday_reset()[m
+[32m+[m[32m                reset_info = f"🔄 <i>Сброс: {reset_date}</i>"[m
+[32m+[m[32m            elif period_type == "m":[m
+[32m+[m[32m                title = "Топ заражений (за месяц)"[m
+[32m+[m[32m                date_filter = "AND h.month_str = DATE_FORMAT(NOW(), '%Y-%m')"[m
+[32m+[m[32m                reset_date = get_last_day_of_month_reset()[m
+[32m+[m[32m                reset_info = f"🔄 <i>Сброс: {reset_date}</i>"[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                title = "Топ заражений (за всё время)"[m
+[32m+[m[32m                date_filter = ""[m
+[32m+[m[32m                reset_info = "⏳ <i>Статистика за всё время (не сбрасывается)</i>"[m
+[32m+[m
+[32m+[m[32m            query = f"""[m
+[32m+[m[32m                SELECT h.attacker_id, COUNT(h.id) as cnt[m
+[32m+[m[32m                FROM biowar_infection_history h[m
+[32m+[m[32m                WHERE h.attacker_id != 123456789 {date_filter}[m
+[32m+[m[32m                GROUP BY h.attacker_id[m
+[32m+[m[32m                ORDER BY cnt DESC[m
+[32m+[m[32m                LIMIT 10;[m
+[32m+[m[32m            """[m
+[32m+[m[32m            await cur.execute(query)[m
+[32m+[m[32m            rows = await cur.fetchall()[m
+[32m+[m
+[32m+[m[32m            text = f"🏆 <b>{title}</b>\n\n"[m
+[32m+[m[32m            if not rows:[m
+[32m+[m[32m                text += "Пока нет данных.\n\n"[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                for idx, row in enumerate(rows, start=1):[m
+[32m+[m[32m                    attacker_id = row.get('attacker_id') if isinstance(row, dict) else row[0][m
+[32m+[m[32m                    count = row.get('cnt', 0) if isinstance(row, dict) else row[1][m
+[32m+[m
+[32m+[m[32m                    name = None[m
+[32m+[m[32m                    try:[m
+[32m+[m[32m                        await cur.execute('SELECT lab_name FROM Lab WHERE lab_id = %s;', (attacker_id,))[m
+[32m+[m[32m                        lab_row = await cur.fetchone()[m
+[32m+[m[32m                        if lab_row:[m
+[32m+[m[32m                            name = lab_row.get('lab_name') if isinstance(lab_row, dict) else lab_row[0][m
+[32m+[m[32m                    except Exception:[m
+[32m+[m[32m                        pass[m
+[32m+[m
+[32m+[m[32m                    if not name:[m
+[32m+[m[32m                        try:[m
+[32m+[m[32m                            await cur.execute('SELECT username FROM Users WHERE id = %s;', (attacker_id,))[m
+[32m+[m[32m                            user_row = await cur.fetchone()[m
+[32m+[m[32m                            if user_row:[m
+[32m+[m[32m                                name = user_row.get('username') if isinstance(user_row, dict) else user_row[0][m
+[32m+[m[32m                        except Exception:[m
+[32m+[m[32m                            pass[m
+[32m+[m
+[32m+[m[32m                    if not name:[m
+[32m+[m[32m                        name = f"Лаборатория {attacker_id}"[m
+[32m+[m
+[32m+[m[32m                    escaped_name = hd.quote(str(name))[m
+[32m+[m[32m                    user_display = f"<a href=\"tg://openmessage?user_id={attacker_id}\">{escaped_name}</a>"[m
+[32m+[m
+[32m+[m[32m                    text += f"<b>{idx}.</b> {user_display} — <code>{count}</code> заражений\n"[m
+[32m+[m
+[32m+[m[32m            text += f"\n{reset_info}"[m
+[32m+[m[32m            return text[m
+[32m+[m
+[32m+[m[32mdef get_keyboard():[m
+[32m+[m[32m    return InlineKeyboardMarkup(inline_keyboard=[[m
+[32m+[m[32m        [[m
+[32m+[m[32m            InlineKeyboardButton(text="📅 Неделя", callback_data="top_w"),[m
+[32m+[m[32m            InlineKeyboardButton(text="📅 Месяц", callback_data="top_m"),[m
+[32m+[m[32m            InlineKeyboardButton(text="⏳ Всё время", callback_data="top_a")[m
+[32m+[m[32m        ][m
+[32m+[m[32m    ])[m
+[32m+[m
+[32m+[m[32m@router.message(F.text.regexp(r"(?i)^топ\s+зар$"))[m
+[32m+[m[32masync def cmd_top_zar(message: Message):[m
+[32m+[m[32m    text = await get_top_text("a")[m
+[32m+[m[32m    await message.answer(text, parse_mode="HTML", reply_markup=get_keyboard())[m
+[32m+[m
+[32m+[m[32m@router.callback_query(F.data.in_({"top_w", "top_m", "top_a"}))[m
+[32m+[m[32masync def top_callback(callback: CallbackQuery):[m
+[32m+[m[32m    p_type = callback.data.split("_")[1] # w, m, a[m
+[32m+[m[32m    text = await get_top_text(p_type)[m
+[32m+[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_keyboard())[m
+[32m+[m[32m    except Exception:[m
+[32m+[m[32m        pass[m
+[32m+[m[32m    await callback.answer()[m

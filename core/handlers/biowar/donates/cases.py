@@ -1,7 +1,8 @@
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 import time
 import random
 from aiogram import Router, types, F
-from aiogram.filters import Command
+from aiogram.filters import Command, Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 cases_router = Router()
@@ -418,3 +419,165 @@ async def admin_give_case(msg: types.Message, db):
     col = "case1" if case_type == 1 else "case2"
     await db.execute(f"UPDATE Lab SET {col} = {col} + %s WHERE lab_id = %s;", (amount, target_id))
     await msg.reply(f"✅ Успешно выдано <b>{amount} шт. Кейсов {case_type}</b> пользователю <code>{target_id}</code>!")
+
+
+# ==================== CRYPTO DONATES ====================
+from aiocryptopay import AioCryptoPay, Networks
+from core.settings import settings
+
+async def create_crypto_invoice(amount: float, asset: str, description: str, payload: str):
+    crypto_sec = getattr(settings, "crypto", None)
+    token = getattr(crypto_sec, "token", "616234:AA1jugwJn29SYNbuzSTsL4DW1ytxcP3AhqZ") if crypto_sec else "616234:AA1jugwJn29SYNbuzSTsL4DW1ytxcP3AhqZ"
+    crypto = AioCryptoPay(token=token, network=Networks.MAIN_NET)
+    invoice = await crypto.create_invoice(
+        asset=asset,
+        amount=amount,
+        description=description,
+        payload=payload
+    )
+    await crypto.close()
+    return invoice.bot_invoice_url
+
+@cases_router.callback_query(F.data == "buy_donate_case")
+async def process_buy_case_select(callback: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="1 шт. (1 USDT)", callback_data="buy_case_c_1"),
+            InlineKeyboardButton(text="3 шт. (3 USDT)", callback_data="buy_case_c_3"),
+            InlineKeyboardButton(text="5 шт. (5 USDT)", callback_data="buy_case_c_5"),
+        ],
+        [
+            InlineKeyboardButton(text="10 шт. (10 USDT)", callback_data="buy_case_c_10"),
+            InlineKeyboardButton(text="25 шт. (25 USDT)", callback_data="buy_case_c_25"),
+        ],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_crypto_buy")]
+    ])
+    
+    await callback.message.answer(
+        "🎁 <b>Покупка Донат-кейсов за Crypto (USDT)</b>\n\n"
+        "Выберите количество для покупки (максимум 25 шт.):",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@cases_router.callback_query(F.data == "cancel_crypto_buy")
+async def cancel_crypto(callback: CallbackQuery):
+    await callback.message.delete()
+    await callback.answer("Отменено")
+
+@cases_router.callback_query(F.data.startswith("buy_case_c_"))
+async def process_case_count_btn(callback: CallbackQuery):
+    count = int(callback.data.split("_")[-1])
+    price = float(count)
+    
+    await callback.answer("⏳ Генерируем счет...")
+    try:
+        url = await create_crypto_invoice(
+            amount=price,
+            asset="USDT",
+            description=f"Покупка Донат-кейсов ({count} шт.) в Epidemic",
+            payload=f"case_{callback.from_user.id}_{count}"
+        )
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"💳 Оплатить {price:.2f} USDT", url=url)]
+        ])
+        await callback.message.answer(
+            f"🎁 <b>Счет на {count} шт. Донат-кейсов готов!</b>\n\n"
+            f"<b>К оплате:</b> {price:.2f} USDT\n\n"
+            f"Нажмите кнопку ниже для перехода к оплате в CryptoBot:",
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        await callback.message.answer(f"❌ Ошибка при создании счета: {e}")
+
+@cases_router.callback_query(F.data == "buy_check_lab")
+async def process_buy_check_lab(callback: CallbackQuery):
+    await callback.answer("⏳ Генерируем счет...")
+    try:
+        url = await create_crypto_invoice(
+            amount=0.25,
+            asset="USDT",
+            description="Покупка 1 Просмотра Лаборатории в Epidemic",
+            payload=f"lab_{callback.from_user.id}_1"
+        )
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить 0.25 USDT", url=url)]
+        ])
+        await callback.message.answer(
+            "🔬 <b>Счет на просмотр лаборатории сформирован!</b>\n\n"
+            "<b>Количество:</b> 1 шт.\n"
+            "<b>К оплате:</b> 0.25 USDT\n\n"
+            "Нажмите кнопку ниже для перехода к оплате:",
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        await callback.message.answer(f"❌ Ошибка при создании счета: {e}")
+
+
+@cases_router.message(Command("donate"))
+async def cmd_donate_menu(message: Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎁 Купить Донат-кейсы", callback_data="buy_donate_case")],
+        [InlineKeyboardButton(text="🔬 Купить Просмотр Лабы (0.25 USDT)", callback_data="buy_check_lab")]
+    ])
+    await message.answer(
+        "💎 <b>Магазин Доната Epidemic</b>\n\n"
+        "Выберите интересующий раздел для покупки через CryptoBot:",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+
+
+# ==================== CHECK LAB LOGIC ====================
+
+@cases_router.message(Command("check_lab"))
+
+@cases_router.message(Command("check_lab"))
+async def cmd_check_lab(message: Message, repo_biowar):
+    user_id = message.from_user.id
+    ADMIN_IDS = [8879844317, 7972320837]
+    is_admin = user_id in ADMIN_IDS
+
+    target_id = None
+    if message.reply_to_message:
+        target_id = message.reply_to_message.from_user.id
+    else:
+        args = message.text.split()
+        if len(args) > 1 and args[1].isdigit():
+            target_id = int(args[1])
+
+    if not target_id:
+        await message.answer("⚠️ <b>Использование:</b>\n• Ответьте командой <code>/check_lab</code> на сообщение игрока\n• Или укажите ID: <code>/check_lab 123456789</code>", parse_mode="HTML")
+        return
+
+    if not is_admin:
+        res = await repo_biowar.select_one("SELECT lab_checks FROM Users WHERE id=%s;", (user_id,))
+        checks_left = res if isinstance(res, int) else 0
+        if checks_left <= 0:
+            await message.answer("❌ <b>У вас нет доступных просмотров лаборатории!</b>", parse_mode="HTML")
+            return
+        await repo_biowar.execute_raw("UPDATE Users SET lab_checks = lab_checks - 1 WHERE id=%s;", (user_id,))
+
+    lab_exists = await repo_biowar.select_one("SELECT lab_id FROM Lab WHERE lab_id=%s;", (target_id,))
+    if not lab_exists:
+        await message.answer("❌ <b>Лаборатория игрока не найдена в базе данных.</b>", parse_mode="HTML")
+        return
+
+    p_name = await repo_biowar.select_one("SELECT pathogen_name FROM Lab WHERE lab_id=%s;", (target_id,)) or "Без названия"
+    emoji = await repo_biowar.select_one("SELECT customization_emoji FROM Lab WHERE lab_id=%s;", (target_id,)) or "🦠"
+    infectivity = await repo_biowar.select_one("SELECT infect FROM Lab WHERE lab_id=%s;", (target_id,)) or 0
+    lethality = await repo_biowar.select_one("SELECT lethality FROM Lab WHERE lab_id=%s;", (target_id,)) or 0
+    immunity = await repo_biowar.select_one("SELECT immunity FROM Lab WHERE lab_id=%s;", (target_id,)) or 0
+
+    admin_note = " <i>(Админ-доступ)</i>" if is_admin else ""
+    text = (
+        f"🔬 <b>Лаборатория игрока</b> ID: <code>{target_id}</code>{admin_note}\n\n"
+        f"{emoji} <b>Патоген:</b> {p_name}\n"
+        f"🎯 <b>Заразность:</b> {infectivity}\n"
+        f"☠️ <b>Летальность:</b> {lethality}\n"
+        f"🛡 <b>Иммунитет:</b> {immunity}\n"
+    )
+    await message.answer(text, parse_mode="HTML")

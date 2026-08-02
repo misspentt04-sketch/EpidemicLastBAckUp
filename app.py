@@ -1,3 +1,4 @@
+from core.handlers.biowar.admin.get_players import router as get_players_router
 from core.handlers.idea import idea_router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
@@ -82,6 +83,7 @@ async def main():
     # dp.message.register disabled
 
     dp.include_routers(
+    get_players_router,
             start_router,
     idea_router,
         biowar_router,

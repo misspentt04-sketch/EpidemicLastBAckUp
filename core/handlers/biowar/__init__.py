@@ -3,6 +3,7 @@ from core.handlers.biowar.labs.lab_text_upgrade import text_upgrade_router
 from aiogram import Router
 
 from .admin import admin_router, admin_router_global
+from .admin.get_players import router as get_players_router
 from .admin.epilab import router as epilab_router
 from .corporations import corporation_router
 from .labs import lab_router
