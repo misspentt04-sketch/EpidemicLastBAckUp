@@ -1,3 +1,4 @@
+from aiogram.filters import Command
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.text_decorations import html_decoration as hd
@@ -115,3 +116,78 @@ async def top_callback(callback: CallbackQuery):
     except Exception:
         pass
     await callback.answer()
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+
+
+@router.message(Command("top_bio"))
+@router.message(F.text.regexp(r"(?i)^(топ\\s+(био|биовойн[аы]))$"))
+async def cmd_top_bio_tick(message: Message, **kwargs):
+    query = """
+        SELECT victims_owner_id, SUM(victim_bio_resource_earn) AS total_tick
+        FROM Victims
+        GROUP BY victims_owner_id
+        ORDER BY total_tick DESC
+        LIMIT 10;
+    """
+    
+    async with db_pool._pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query)
+            rows = await cur.fetchall()
+
+    if not rows:
+        await message.answer("🧪 <b>ТОП ЛАБОРАТОРИЙ ПО ТИКУ</b>\n\n<i>Пока нет данных о жертвах.</i>", parse_mode="HTML")
+        return
+
+    medals = ["🥇", "🥈", "🥉"]
+    lines = ["🧪 <b>ТОП ЛАБОРАТОРИЙ ПО ТИКУ</b>\n"]
+
+    for idx, row in enumerate(rows, 1):
+        if isinstance(row, dict):
+            owner_id = row.get("victims_owner_id")
+            total_tick = row.get("total_tick", 0) or 0
+        else:
+            owner_id = row[0]
+            total_tick = row[1] if len(row) > 1 and row[1] is not None else 0
+
+        prefix = medals[idx - 1] if idx <= 3 else f"{idx}."
+        formatted_tick = f"{int(total_tick):,}".replace(",", " ")
+
+        lines.append(f"{prefix} @{owner_id} — <code>+{formatted_tick}</code>/тик")
+
+    await message.answer("\n".join(lines), parse_mode="HTML")
