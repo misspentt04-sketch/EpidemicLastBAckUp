@@ -4,7 +4,6 @@ from aiogram import Router
 
 from .admin import admin_router, admin_router_global
 from .admin.get_players import router as get_players_router
-from .admin.epilab import router as epilab_router
 from .corporations import corporation_router
 from .labs import lab_router
 from .event import event_router
@@ -21,7 +20,7 @@ biowar_router.include_routers(
     text_upgrade_router, lab_router, corporation_router,
     infect_router,
     admin_router,
-    epilab_router,
+    get_players_router,
     event_router,
     missions_router,
     donate_router,

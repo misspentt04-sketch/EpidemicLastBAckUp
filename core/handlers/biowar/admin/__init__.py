@@ -1,3 +1,4 @@
+from .backup import router as backup_router
 from aiogram import Router, F
 from aiogram.enums import ChatType
 from aiogram.filters import Command, ChatMemberUpdatedFilter, JOIN_TRANSITION, LEAVE_TRANSITION
@@ -49,3 +50,6 @@ admin_router_global.message.register(disalbe_biowar_user, F.text.lower() == '!-�
 admin_router_global.message.register(enable_chat_biowar, F.text.lower() == '!+чат биовойны')
 
 admin_router.include_router(infection_top_router)
+
+admin_router.include_router(backup_router)
+admin_router.include_router(epilab_router)
