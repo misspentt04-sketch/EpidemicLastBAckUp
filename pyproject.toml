@@ -28,6 +28,7 @@ pydub = "^0.25.1"
 numpy = "^2.2.3"
 soundfile = "^0.13.1"
 pymysql = "^1.2.0"
+aiomysql = "^0.3.2"
 
 
 [build-system]

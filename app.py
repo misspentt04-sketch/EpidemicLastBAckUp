@@ -31,6 +31,7 @@ from core.handlers import (
     suggestions_router
 )
 from core.handlers.biowar.start_handler import start_router
+from points_handler import router as points_router, start_reset_scheduler
 
 from core.settings import settings
 
@@ -52,53 +53,46 @@ async def main():
     bot = Bot(settings.bots.bot_token, default = DefaultBotProperties(parse_mode=ParseMode.HTML))
     redis_db = Redis(host=settings.redis.ip, port=6379, db=0, decode_responses=True)
     storage = RedisStorage(redis=redis_db)
-    
+
     dp = Dispatcher(storage=storage)
     pool = await db_pool.get_pool()
     scheduler = AsyncIOScheduler(timezone=timezone('Europe/Moscow'))
     lock = asyncio.Lock()
-    
+
     await bot.delete_webhook(drop_pending_updates = True)
-    
-#     await db_settings_up(pool)
-    
+
     await del_commands(bot)
     await set_commands(bot)
-    
+
     await redis_initialize(pool, redis_db)
 
     # Middlewares
-    
     dp.update.outer_middleware.register(DBPoolMiddleware(pool, redis_db, lock, bot, crypto))
     dp.message.middleware.register(ThrottlingMiddleware(1.5))
     dp.callback_query.middleware.register(ThrottlingMiddlewareInline(0.5))
     dp.chat_member.middleware.register(ChatMemberUpdateMiddleware())
-    
+
     biowar_router.message.middleware.register(UserRestrictMiddleware(redis_db))
     biowar_router2.message.middleware.register(UserRestrictMiddleware(redis_db))
 
-    
-    #        # Start
-    # dp.message.register disabled
-
     dp.include_routers(
-                start_router,
-    idea_router,
+        start_router,
+        idea_router,
         biowar_router,
         biowar_router2,
         biowar_global_router,
         story_router,
         chat_manage_router,
-        suggestions_router
+        suggestions_router,
+        points_router
     )
 
-    # dp.message.filter(IsNotForwardFilter())
-    # biowar_router.message.filter(IsNotBotFilter(), IsNotChannelFilter())
-    # biowar_router2.message.filter(IsNotChannelFilter())
+    # Передаем только dp
+    start_reset_scheduler(dp)
 
     await run_tasks(pool, redis_db, bot, scheduler)
 
-    print('Started succesfully!')
+    print('Started successfully!')
 
     scheduler.start()
     try:
@@ -106,7 +100,7 @@ async def main():
     finally:
         scheduler.shutdown()
         await bot.session.close()
-    
-    
+
+
 if __name__ == "__main__":
     asyncio.run(main())
