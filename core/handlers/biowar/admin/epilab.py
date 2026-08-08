@@ -1,5 +1,6 @@
 from core.settings import settings
 import re
+import time
 import logging
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -25,15 +26,19 @@ class EpiLabAdminStates(StatesGroup):
     waiting_for_transfer_target = State()
 
 def parse_time_duration(text: str) -> tuple[int, int]:
+    """
+    Возвращает (expire_timestamp, duration_in_seconds)
+    """
     text = text.strip().lower()
-    now_ts = int(datetime.utcnow().timestamp())
+    now_ts = int(time.time())
+    
     if text in ['навсегда', 'forever', '0', 'perm', 'на вечно', 'всегда']:
-        expire_ts = now_ts + (3650 * 24 * 3600)
-        return expire_ts, (3650 * 24 * 3600)
+        seconds = 3650 * 24 * 3600  # ~10 лет
+        return now_ts + seconds, seconds
 
-    match = re.match(r'^(\d+)([мmhhdдч]?)$', text)
+    match = re.match(r'^(\d+)\s*([мmhhdдч]?)$', text)
     if not match:
-        return now_ts + 3600, 3600
+        return now_ts + 3600, 3600  # По умолчанию 1 час (3600 сек)
 
     val, unit = match.groups()
     val = int(val)
@@ -88,7 +93,7 @@ async def resolve_lab_target(message: Message, query: str = None, repo_biowar: R
         target_user_id = int(query)
     else:
         clean_query = query.lstrip('@')
-        
+
         if hasattr(repo_biowar, 'get_id_by_username'):
             try:
                 res = await repo_biowar.get_id_by_username(clean_query)
@@ -145,38 +150,40 @@ async def cmd_list_aces(message: Message, repo_biowar: RequestsRepoBiowar):
     game_mutes = await repo_biowar.get_gamemute_list() if hasattr(repo_biowar, 'get_gamemute_list') else []
     bio_mutes = await repo_biowar.get_biomute_list() if hasattr(repo_biowar, 'get_biomute_list') else []
 
+    now_ts = int(time.time())
     text_lines = ["<b>📋 Список активных ограничений (АС и запретов):</b>\n"]
 
-    if game_mutes:
+    active_game_mutes = [m for m in game_mutes if not m.get('expire') or m.get('expire') > now_ts]
+    active_bio_mutes = [m for m in bio_mutes if not m.get('expire') or m.get('expire') > now_ts]
+
+    if active_game_mutes:
         text_lines.append("<b>⛔ АС (Муты команд):</b>")
-        for m in game_mutes:
+        for m in active_game_mutes:
             uid = m.get('user_id') or m.get('id')
             admin_id = m.get('admin_id', '?')
             reason = m.get('reason', 'не указана')
             expire = m.get('expire', 0)
-            expire_str = datetime.utcfromtimestamp(expire).strftime('%Y-%m-%d %H:%M') if expire else 'навсегда'
+            expire_str = datetime.fromtimestamp(expire).strftime('%Y-%m-%d %H:%M') if expire else 'навсегда'
             text_lines.append(f"• Игрок: <code>{uid}</code> | Админ: <code>{admin_id}</code>\n  Причина: {reason} | До: {expire_str}")
         text_lines.append("")
 
-    if bio_mutes:
+    if active_bio_mutes:
         text_lines.append("<b>🔒 Запреты смены имени/патогена:</b>")
-        for m in bio_mutes:
+        for m in active_bio_mutes:
             uid = m.get('user_id') or m.get('id')
             admin_id = m.get('admin_id', '?')
             reason = m.get('reason', 'не указана')
             expire = m.get('expire', 0)
-            expire_str = datetime.utcfromtimestamp(expire).strftime('%Y-%m-%d %H:%M') if expire else 'навсегда'
+            expire_str = datetime.fromtimestamp(expire).strftime('%Y-%m-%d %H:%M') if expire else 'навсегда'
             text_lines.append(f"• Игрок: <code>{uid}</code> | Админ: <code>{admin_id}</code>\n  Причина: {reason} | До: {expire_str}")
 
-    if not game_mutes and not bio_mutes:
+    if not active_game_mutes and not active_bio_mutes:
         text_lines.append("<i>Активных ограничений в базе данных не найдено.</i>")
 
     await message.answer("\n".join(text_lines), disable_web_page_preview=True)
 
 @router.callback_query(F.data.startswith('epilab:'))
 async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
-    # Проверка прав администратора
-    # Разрешаем доступ администраторам из конфига и БД
     admin_cfg = getattr(settings.bots, "admin_ids", getattr(settings.bots, "admin_id", []))
     if not isinstance(admin_cfg, (list, tuple, set)): admin_cfg = [admin_cfg]
     is_admin = callback.from_user.id in admin_cfg or str(callback.from_user.id) in map(str, admin_cfg)
@@ -205,10 +212,10 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
     if action == 'view':
         lab_info = await repo_biowar.get_info_user_lab(target_id)
         corp_info = await repo_biowar.get_corporation(target_id)
-        
+
         if not lab_info:
             return await callback.answer("Лаборатория не найдена!", show_alert=True)
-            
+
         infected = await repo_biowar.get_my_infected(lab_info['id'])
         illnesses = await repo_biowar.get_my_illnesses(lab_info['id'])
 
@@ -216,30 +223,30 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
         name_entity = func.entity_create_full_name(lab_info['id'], lab_info['full_name'])
         pathogen_name = lab_info["pathogen_name"] if lab_info["pathogen_name"] else 'засекречено'
         lab_name = lab_info['lab_name'] if lab_info['lab_name'] else full_name
-        
+
         fever = func.fever_expire_difference_check(lab_info['fever']) if lab_info['fever'] else None
         if fever:
             fever = f"⏳ Лихорадка активна до: {fever}\n"
-        
+
         fever_time = int(lab_info['lethality'] / 3)
         fever_time = (1 if fever_time == 0 else (60 if fever_time >= 180 else fever_time))
-        
+
         refresh_pathogen_time = '\n'
         if lab_info["science_time"]:
             science_time = func.fever_expire_difference_check(lab_info["science_time"])
             refresh_pathogen_time = f'<i>{LabIco.sand_clock.value} Новый патоген через {science_time}</i>\n\n'
-        
+
         if corp_info:
             corp_text = f'В составе Корпорации — «<a href="tg://openmessage?user_id={corp_info["leader_id"]}">{corp_info["name"]}</a>»\n\n'
         else:
             corp_text = '\n'
-        
+
         custom_emoji = lab_info['customization_emoji'] if lab_info['customization_emoji'] else ''
-        
+
         time_food = await repo_biowar.get_time_food()
         time_food_diff = datetime.utcfromtimestamp(time_food) - datetime.utcnow()
         get_food_text = func.convert_seconds_to_human(time_food_diff.total_seconds())
-        
+
         lab_text = (
             f'<b>📩 Досье лаборатории {lab_name}:</b>\n'
             f'Руководитель — {name_entity} {custom_emoji}\n'
@@ -263,11 +270,11 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
             f'{LabIco.infected.value} Заражённых: {infected}\n'
             f'{LabIco.illnesses.value} Своих болезней: {illnesses}\n'
         )
-        
+
         back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⬅️ Назад к управлению", callback_data=f"epilab:main:{target_id}")]
         ])
-        
+
         await callback.message.edit_text(lab_text, disable_web_page_preview=True, reply_markup=back_keyboard)
         await callback.answer()
 
@@ -324,10 +331,10 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
             await repo_biowar.update_lab_skill_val(target_id, 'ready_pathogens', 0)
             await repo_biowar.update_lab_skill_val(target_id, 'bio_experience', 1000)
             await repo_biowar.update_lab_skill_val(target_id, 'bio_resource', 15000)
-            
+
             await repo_biowar.pathogen_name_change(None, target_id)
             await repo_biowar.lab_name_change(None, target_id)
-            
+
             db_obj = getattr(repo_biowar, 'pool', None)
             if not db_obj:
                 for val in repo_biowar.__dict__.values():
@@ -339,14 +346,14 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
                 async with db_obj.acquire() as conn:
                     async with conn.cursor() as cursor:
                         await cursor.execute(
-                            "UPDATE biowar_labs SET fever = NULL, science_time = NULL, cases = 0, coins = 500, case_1 = 0, case_2 = 0 WHERE id = %s", 
+                            "UPDATE biowar_labs SET fever = NULL, science_time = NULL, cases = 0, coins = 500, case_1 = 0, case_2 = 0 WHERE id = %s",
                             (target_id,)
                         )
                         await cursor.execute("DELETE FROM biowar_infected WHERE lab_id = %s OR target_id = %s", (target_id, target_id))
                         await conn.commit()
             elif hasattr(repo_biowar, 'execute'):
                 await repo_biowar.execute(
-                    "UPDATE biowar_labs SET fever = NULL, science_time = NULL, cases = 0, coins = 500, case_1 = 0, case_2 = 0 WHERE id = %s", 
+                    "UPDATE biowar_labs SET fever = NULL, science_time = NULL, cases = 0, coins = 500, case_1 = 0, case_2 = 0 WHERE id = %s",
                     (target_id,)
                 )
                 await repo_biowar.execute("DELETE FROM biowar_infected WHERE lab_id = %s OR target_id = %s", (target_id, target_id))
@@ -361,7 +368,7 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
         except Exception:
             pass
 
-        await notify_owner_action(callback.message, "💣 Полный обнул лаборатории (кейсы 0, коины 500)", target_id)
+        await notify_owner_action(message, "💣 Полный обнул лаборатории (кейсы 0, коины 500)", target_id)
         await callback.answer(f"✅ Лаборатория {target_id} обнулена!", show_alert=True)
 
 @router.message(EpiLabAdminStates.waiting_for_ac_reason)
@@ -373,7 +380,7 @@ async def process_ac_input(message: Message, state: FSMContext, repo_biowar: Req
     text = message.text.strip()
     parts = text.split()
 
-    if len(parts) > 1 and re.match(r'^\d+[мmhhdдч]?$|^навсегда$|^forever$', parts[-1].lower()):
+    if len(parts) > 1 and re.match(r'^\d+\s*[мmhhdдч]?$|^навсегда$|^forever$', parts[-1].lower()):
         time_str = parts[-1]
         reason = " ".join(parts[:-1])
     else:
@@ -381,7 +388,7 @@ async def process_ac_input(message: Message, state: FSMContext, repo_biowar: Req
         reason = text
 
     expire_time, duration_seconds = parse_time_duration(time_str)
-    
+
     await repo_biowar.game_mute(target_id, expire_time, message.from_user.id, reason)
 
     for prefix in ["epidemic_gamemute:", "gamemute:"]:
@@ -410,7 +417,7 @@ async def process_block_input(message: Message, state: FSMContext, repo_biowar: 
     text = message.text.strip()
     parts = text.split()
 
-    if len(parts) > 1 and re.match(r'^\d+[мmhhdдч]?$|^навсегда$|^forever$', parts[-1].lower()):
+    if len(parts) > 1 and re.match(r'^\d+\s*[мmhhdдч]?$|^навсегда$|^forever$', parts[-1].lower()):
         time_str = parts[-1]
         reason = " ".join(parts[:-1])
     else:
@@ -418,12 +425,18 @@ async def process_block_input(message: Message, state: FSMContext, repo_biowar: 
         reason = text
 
     expire_time, duration_seconds = parse_time_duration(time_str)
-    
-    lab_info = await repo_biowar.get_info_user_lab(target_id)
+
+    # Принудительно сбрасываем названия лаборатории и патогена на дефолт (None)
+    try:
+        await repo_biowar.pathogen_name_change(None, target_id)
+        await repo_biowar.lab_name_change(None, target_id)
+    except Exception as e:
+        logger.error(f"Failed to reset lab/pathogen names on block for {target_id}: {e}")
+
     corp_info = await repo_biowar.get_corporation(target_id)
-    lab_name = lab_info.get('lab_name') if lab_info else None
-    
-    await repo_biowar.bio_mute(target_id, lab_name, corp_info, expire_time, message.from_user.id, reason)
+
+    # Сохраняем блокировку
+    await repo_biowar.bio_mute(target_id, None, corp_info, expire_time, message.from_user.id, reason)
 
     for prefix in ["epidemic_biomute:", "biomute:"]:
         try:
@@ -432,15 +445,20 @@ async def process_block_input(message: Message, state: FSMContext, repo_biowar: 
             pass
 
     try:
+        await redis.delete(f"epidemic_lab:{target_id}")
+    except Exception:
+        pass
+
+    try:
         await message.bot.send_message(
             target_id,
-            f"🔒 Вам запрещено менять имя лаборатории и патогена на {time_str} по причине: {reason}"
+            f"🔒 Вам запрещено менять имя лаборатории и патогена на {time_str} по причине: {reason}.\nНазвания сброшены на стандартные."
         )
     except Exception:
         pass
 
-    await notify_owner_action(message, f"🔒 Запрет смены имени/патогена на {time_str}. Причина: {reason}", target_id)
-    await message.answer(f"✅ Игроку <code>{target_id}</code> установлен запрет смены имени и патогена на {time_str}!")
+    await notify_owner_action(message, f"🔒 Запрет смены имени/патогена на {time_str} (имена сброшены). Причина: {reason}", target_id)
+    await message.answer(f"✅ Игроку <code>{target_id}</code> установлен запрет смены имени и патогена на {time_str}, названия сброшены на стандартные!")
 
 @router.message(EpiLabAdminStates.waiting_for_transfer_target)
 async def process_transfer_target(message: Message, state: FSMContext, repo_biowar: RequestsRepoBiowar):
