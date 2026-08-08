@@ -328,9 +328,8 @@ class RequestsRepoBiowar:
         )
         
         lost_exp = (
-            'UPDATE Lab SET bio_experience=%s, fever=%s WHERE lab_id=%s;'
+            'UPDATE Lab SET bio_experience=%s, fever=%s, fever_pathogen_name=%s WHERE lab_id=%s;'
             'UPDATE CorporationMembers SET bio_experience=%s WHERE member_id=%s;'
-            'UPDATE Lab SET fever_pathogen_name=%s WHERE lab_id=%s;'
         )
         
         params1 = (
@@ -344,8 +343,7 @@ class RequestsRepoBiowar:
             earn_exp, inf_pathogen, infecter_id, earn_exp, infecter_id
         )
         params3 = (
-            vic_exp, fever_seconds, victim_id, vic_exp, victim_id, pathogen_name,
-            victim_id
+            vic_exp, fever_seconds, pathogen_name, victim_id, vic_exp, victim_id
         )
         params4 = (infecter_id, victim_id)
         
@@ -749,26 +747,55 @@ class RequestsRepoBiowar:
     # Admin
 
     async def bio_mute(self, user_id: int, lab_name: str, corp: dict, time_expire: int, admin_id: int, reason: str):
+
+
         query = (
+
+
             'INSERT INTO BioMute (user_id, time_expire, admin, reason) VALUES (%s, %s, %s, %s)'
+
+
             ' ON DUPLICATE KEY UPDATE'
+
+
             ' time_expire=%s,'
+
+
             ' admin=%s,'
+
+
             ' reason=%s;'
+
+
         )
-        
+
+
+
         query_del_game_names = """
+
+
         UPDATE Lab SET pathogen_name=NULL WHERE lab_id=%s;
-        UPDATE Lab SET lab_name=%s WHERE lab_id=%s;
+
+
+        UPDATE Lab SET lab_name=NULL WHERE lab_id=%s;
+
+
         """
-        query_del_corp_name = 'UPDATE Corporation SET name=%s WHERE leader_id=%s;'
+
+
 
         params = (user_id, time_expire, admin_id, reason, time_expire, admin_id, reason)
-        params1 = (user_id, lab_name, user_id)
+
+
+        params1 = (user_id, user_id)
+
+
         await self.cur.execute(query, params)
+
+
         await self.cur.execute(query_del_game_names, params1)
-        if corp:
-            await self.cur.execute(query_del_corp_name, (lab_name, user_id))
+
+
 
     async def bio_mute_cancel(self, user_id: int):
         query = 'DELETE FROM BioMute WHERE user_id=%s;'
@@ -801,11 +828,11 @@ class RequestsRepoBiowar:
         return await self.select_all(query, user_id)
     
     async def get_biomute_list(self):
-        query = 'SELECT * FROM BioMute AS bm INNER JOIN Users AS u ON bm.user_id = u.id;'
+        query = 'SELECT bm.*, u.full_name, u.username FROM BioMute AS bm LEFT JOIN Users AS u ON bm.user_id = u.id;'
         return await self.select_all(query, use_index_zero=False)
 
     async def get_gamemute_list(self):
-        query = 'SELECT * FROM GameMute AS gm INNER JOIN Users AS u ON gm.user_id = u.id;'
+        query = 'SELECT gm.*, u.full_name, u.username FROM GameMute AS gm LEFT JOIN Users AS u ON gm.user_id = u.id;'
         return await self.select_all(query, use_index_zero=False)
 
     async def lab_tranfer(self, lab_from: dict, lab_to: dict, bag_from: dict, bag_to: dict, pet_from: dict):

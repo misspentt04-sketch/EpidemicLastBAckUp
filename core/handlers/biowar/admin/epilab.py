@@ -160,9 +160,9 @@ async def cmd_list_aces(message: Message, repo_biowar: RequestsRepoBiowar):
         text_lines.append("<b>⛔ АС (Муты команд):</b>")
         for m in active_game_mutes:
             uid = m.get('user_id') or m.get('id')
-            admin_id = m.get('admin_id', '?')
+            admin_id = m.get('admin_id') or m.get('admin') or '?'
             reason = m.get('reason', 'не указана')
-            expire = m.get('expire', 0)
+            expire = m.get('expire') or m.get('time_expire') or 0
             expire_str = datetime.fromtimestamp(expire).strftime('%Y-%m-%d %H:%M') if expire else 'навсегда'
             text_lines.append(f"• Игрок: <code>{uid}</code> | Админ: <code>{admin_id}</code>\n  Причина: {reason} | До: {expire_str}")
         text_lines.append("")
@@ -171,9 +171,9 @@ async def cmd_list_aces(message: Message, repo_biowar: RequestsRepoBiowar):
         text_lines.append("<b>🔒 Запреты смены имени/патогена:</b>")
         for m in active_bio_mutes:
             uid = m.get('user_id') or m.get('id')
-            admin_id = m.get('admin_id', '?')
+            admin_id = m.get('admin_id') or m.get('admin') or '?'
             reason = m.get('reason', 'не указана')
-            expire = m.get('expire', 0)
+            expire = m.get('expire') or m.get('time_expire') or 0
             expire_str = datetime.fromtimestamp(expire).strftime('%Y-%m-%d %H:%M') if expire else 'навсегда'
             text_lines.append(f"• Игрок: <code>{uid}</code> | Админ: <code>{admin_id}</code>\n  Причина: {reason} | До: {expire_str}")
 
@@ -311,7 +311,7 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
                 await redis.delete(f"{prefix}{target_id}")
             except Exception:
                 pass
-        await notify_owner_action(callback.message, "🔓 Снятие всех ограничений / АС", target_id)
+        await notify_owner_action(callback.from_user, "🔓 Снятие всех ограничений / АС", target_id)
         await callback.answer(f"✅ Все ограничения и АС для {target_id} сняты!", show_alert=True)
 
     elif action == 'transfer':
@@ -436,7 +436,7 @@ async def process_block_input(message: Message, state: FSMContext, repo_biowar: 
     corp_info = await repo_biowar.get_corporation(target_id)
 
     # Сохраняем блокировку
-    await repo_biowar.bio_mute(target_id, None, corp_info, expire_time, message.from_user.id, reason)
+    await repo_biowar.bio_mute(target_id, "", corp_info, expire_time, message.from_user.id, reason)
 
     for prefix in ["epidemic_biomute:", "biomute:"]:
         try:

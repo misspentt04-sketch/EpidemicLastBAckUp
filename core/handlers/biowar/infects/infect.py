@@ -10,7 +10,7 @@ from aiogram.utils.markdown import hlink
 from asyncio import Lock
 
 from humanize import intcomma
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from core.utils.db_api.repo_biowar import RequestsRepoBiowar
 from core.data.texttriggers import deep_links
@@ -57,19 +57,19 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
             higher_exp = 999999999999999
         if re.findall(r'заразить (рандом|р)(|\s\d{1,2})', msg.text.lower()):
             is_random = True
-        infecter = await repo_biowar.get_info_user_lab(id)
+        attacker_id = msg.from_user.id
+        infecter = await repo_biowar.get_info_user_lab(attacker_id)
         if is_random:
-            victimer = await repo_biowar.get_random_victim(id)
+            victimer = await repo_biowar.get_random_victim(attacker_id)
         else:
             if lower_exp is None:
                 lower_exp = 0 if infecter['bio_experience'] / 2 < 0 else infecter['bio_experience'] / 1.5
             if higher_exp is None:
                 higher_exp = 10 * 5 if infecter['bio_experience'] < 10 else infecter['bio_experience'] * 5
-            victimer = await repo_biowar.get_victim_by_infect_range(id, lower_exp, higher_exp)
+            victimer = await repo_biowar.get_victim_by_infect_range(attacker_id, lower_exp, higher_exp)
         if victimer is None:
             return await msg.answer(tricks_biowar['text']['victim_not_found'])
     else: # Normal infect
-        # Используем msg.from_user.id вместо статического id, чтобы корректно определять нападающего при вызове с инлайн-кнопок
         attacker_id = msg.from_user.id
         infecter = await repo_biowar.get_info_user_lab(attacker_id)
         victimer = await repo_biowar.get_info_user_lab(victimer_id)
@@ -193,9 +193,9 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     fever_time = (1 if fever_time == 0 else fever_time)
     fever_time_ = fever_time
     if victimer['fever']:
-        fev_minutes = (datetime.fromtimestamp(victimer['fever']) - datetime.utcnow()).total_seconds() / 60
+        fev_minutes = (datetime.fromtimestamp(victimer['fever'], tz=timezone.utc) - datetime.now(timezone.utc)).total_seconds() / 60
         fever_time = round(inf_fev_time if fever_time + fev_minutes > inf_fev_time else fever_time + fev_minutes)
-    fever_expire = int((datetime.utcnow() + timedelta(minutes=fever_time)).timestamp())
+    fever_expire = int((datetime.now(timezone.utc) + timedelta(minutes=fever_time)).timestamp())
     
     lose_exp = int(round(victimer['bio_experience'] * tricks_biowar['max']['elements']['infect_claim_percent'], 0))
     earn_exp = int(round(

@@ -75,7 +75,8 @@ async def new_chat_member(
         )
         text = tricks_cm['chat_update']['join_chat'].format(entity)
 
-        await event.answer(text, disable_web_page_preview=True)
+        if text:
+            await event.answer(text, disable_web_page_preview=True)
 
 
 async def leave_chat_member(
@@ -102,7 +103,8 @@ async def leave_chat_member(
         )
         text = tricks_cm['chat_update']['leave_chat'].format(entity)
 
-        await event.answer(text, disable_web_page_preview=True)
+        if text:
+            await event.answer(text, disable_web_page_preview=True)
 
 async def upd_chat_name(
         msg: Message,

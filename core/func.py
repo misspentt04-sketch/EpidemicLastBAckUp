@@ -197,9 +197,16 @@ def victim_expire_difference_check(victim_time: int):
     else:
         return 'несколько секунд'
 
-def fever_expire_difference_check(fever_seconds: int):
+def fever_expire_difference_check(fever_seconds):
     import time
-    difs = int(fever_seconds - time.time())
+    if not fever_seconds:
+        return False
+    try:
+        fever_ts = float(fever_seconds)
+    except (ValueError, TypeError):
+        return False
+    import datetime
+    difs = int(fever_ts - datetime.datetime.now(datetime.timezone.utc).timestamp())
     if difs > 0:
         hours, minutes, seconds = convert_seconds(difs)
         if difs/60/60 >= 1:
