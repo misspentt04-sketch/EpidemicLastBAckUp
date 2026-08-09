@@ -1,6 +1,6 @@
 async def calculate_vaccine_bio_price(user_id: int, lab_info: dict, fev_seconds: float, repo_biowar) -> tuple[int, str]:
     lethality = await get_effective_lethality(user_id, lab_info, repo_biowar)
-    fever_price = int((fev_seconds * lethality) / 20)
+    fever_price = int((fev_seconds * lethality) / 30)
     fever_price = 1 if fever_price <= 0 else fever_price
 
     pet = await repo_biowar.get_my_pet(user_id)
@@ -116,7 +116,7 @@ async def buy_vaccine(msg: Message, bot: Bot, db: Cursor, redis: Redis, repo_bio
         pet = await repo_biowar.get_my_pet(user_id)
         pet_effect = ""
         lethality = await get_effective_lethality(user_id, lab_info, repo_biowar)
-        fever_price = int((fev_seconds * lethality) / 20)
+        fever_price = int((fev_seconds * lethality) / 30)
         fever_price = 1 if fever_price <= 0 else fever_price
 
         if pet and pet.get("current_pet", "").lower() == "мимин":
@@ -212,7 +212,7 @@ async def cb_buy_vaccine_bio(call: CallbackQuery, db: Cursor, redis: Redis, repo
     pet_effect = ""
 
     lethality = await get_effective_lethality(user_id, lab_info, repo_biowar)
-    fever_price = int((fev_seconds * lethality) / 20)
+    fever_price = int((fev_seconds * lethality) / 30)
     fever_price = 1 if fever_price <= 0 else fever_price
 
     if pet and pet.get("current_pet", "").lower() == "мимин":
