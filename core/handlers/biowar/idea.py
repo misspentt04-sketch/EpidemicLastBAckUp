@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 router = Router()
 logger = logging.getLogger(__name__)
 
-OWNER_IDEA_ID = 7972320837
+OWNER_IDEA_ID = -1003688648228
 
 class IdeaStates(StatesGroup):
     waiting_for_idea = State()

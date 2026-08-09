@@ -7,7 +7,7 @@ from redis.asyncio import Redis
 
 idea_router = Router()
 
-ADMIN_ID = 7972320837 
+ADMIN_ID = -1003688648228 
 COOLDOWN_SECONDS = 300  # 5 минут
 
 class IdeaStates(StatesGroup):
@@ -90,7 +90,11 @@ async def send_idea_to_admin(msg: Message, state: FSMContext, bot: Bot, redis: R
     if msg.text or msg.caption:
         user_text = msg.text or msg.caption
         full_text = info_header + f"<b>Сообщение:</b>\n{user_text}"
-        await bot.send_message(ADMIN_ID, full_text, parse_mode="HTML", reply_markup=admin_kb)
+        sent_msg = await bot.send_message(ADMIN_ID, full_text, parse_mode="HTML", reply_markup=admin_kb)
+        try:
+            await bot.pin_chat_message(chat_id=ADMIN_ID, message_id=sent_msg.message_id)
+        except Exception as e:
+            print(f"Не удалось закрепить сообщение: {e}")
     else:
         await bot.send_message(ADMIN_ID, info_header, parse_mode="HTML")
         await bot.copy_message(chat_id=ADMIN_ID, from_chat_id=msg.chat.id, message_id=msg.message_id, reply_markup=admin_kb)
