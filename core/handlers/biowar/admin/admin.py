@@ -102,7 +102,7 @@ async def pathogen_mute_cancel(msg: types.Message, bot: Bot, repo_biowar: Reques
     text = f'Игроку {mention} был снят мут на наименования'
     mute_text = (
         f'Вам был снят мут на наименования\n\n'
-        'Пожалуйста прочтите <a href="https://telegra.ph/CHego-luchshe-ne-stoit-delat-05-31">Правила игры</a> чтобы подать апеляцию пишите админам <a href="https://t.me/epidemic_biowar">здесь</a>'
+        'Пожалуйста прочтите <a href="https://teletype.in/@epidemic_gamebot/guide_epidemic">Правила игры</a> чтобы подать апеляцию пишите админам <a href="https://t.me/https://t.me/biowars_chat">здесь</a>'
     )
     
     text_to_moder_chat = (

@@ -57,7 +57,7 @@ tricks_biowar = {
             'security_service': 2.1
         },
         'multiply': {
-            'infect_fever_time': 5
+            'infect_fever_time': 10
         },
     },
 

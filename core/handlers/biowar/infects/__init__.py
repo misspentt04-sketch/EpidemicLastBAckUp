@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from aiogram.enums import ChatType
 from .infect import infect, cmd_check_victim, hit_target_callback
 from .infect_addons import (
-    buy_vaccine, victims_list, illnesses_list, add_virus_signal,
+    buy_vaccine, cb_buy_vaccine_bio, cb_buy_vaccine_epi, victims_list, illnesses_list, add_virus_signal,
     del_virus_signal, buy_vaccine_joke
 )
 
@@ -31,3 +31,5 @@ infect_router.message.register(
 )
 
 infect_router.callback_query.register(hit_target_callback, F.data.startswith('hit_target:'))
+infect_router.callback_query.register(cb_buy_vaccine_bio, F.data.startswith('buy_vac_bio:'))
+infect_router.callback_query.register(cb_buy_vaccine_epi, F.data.startswith('buy_vac_epi:'))

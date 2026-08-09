@@ -192,9 +192,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     fever_time = int(infecter['lethality'] / 3)
     fever_time = (1 if fever_time == 0 else fever_time)
     fever_time_ = fever_time
-    if victimer['fever']:
-        fev_minutes = (datetime.fromtimestamp(victimer['fever'], tz=timezone.utc) - datetime.now(timezone.utc)).total_seconds() / 60
-        fever_time = round(inf_fev_time if fever_time + fev_minutes > inf_fev_time else fever_time + fev_minutes)
+    # Горячка перезаписывается заново, а не суммируется
     fever_expire = int((datetime.now(timezone.utc) + timedelta(minutes=fever_time)).timestamp())
     
     lose_exp = int(round(victimer['bio_experience'] * tricks_biowar['max']['elements']['infect_claim_percent'], 0))

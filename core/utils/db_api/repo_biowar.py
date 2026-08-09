@@ -391,10 +391,17 @@ class RequestsRepoBiowar:
     
     # Update
     
-    async def buy_vaccine(self, bio_resource: str, victim_id: int):
+    async def buy_vaccine(self, bio_resource: int, victim_id: int):
         query = 'UPDATE Lab SET fever=NULL, bio_resource=bio_resource-%s WHERE lab_id=%s;'
         params = (bio_resource, victim_id)
         await self.cur.execute(query, params)
+
+    async def buy_vaccine_epicoins(self, epicoins: int, victim_id: int):
+        query = 'UPDATE Lab SET fever=NULL, epicoins=epicoins-%s WHERE lab_id=%s AND epicoins>=%s;'
+        params = (epicoins, victim_id, epicoins)
+        await self.cur.execute(query, params)
+        if hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
     
     async def update_virus_chat_setup(self, user_id: int, chat_id: int):
         query = 'UPDATE Lab SET chat_setup_virus=%s WHERE lab_id=%s;'

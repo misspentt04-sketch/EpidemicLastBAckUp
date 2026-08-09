@@ -17,31 +17,24 @@ def get_db_connection():
     )
 
 def _is_admin_sync(user_id: int) -> bool:
+    # Список Telegram ID главных администраторов бота
+    ADMIN_IDS = [7972320837]
+
+    if user_id in ADMIN_IDS:
+        return True
+
     try:
         if hasattr(settings, 'bot'):
             bot_cfg = settings.bot
             if getattr(bot_cfg, 'admin_id', None) == user_id:
                 return True
-            
+
             for attr in ['admin_ids', 'admins', 'owners']:
                 ids_list = getattr(bot_cfg, attr, None)
                 if ids_list and user_id in ids_list:
                     return True
     except Exception:
         pass
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        with conn.cursor() as c:
-            c.execute("SELECT 1 FROM Admins WHERE admin_id = %s LIMIT 1", (user_id,))
-            if c.fetchone():
-                return True
-    except Exception:
-        pass
-    finally:
-        if conn:
-            conn.close()
 
     return False
 
