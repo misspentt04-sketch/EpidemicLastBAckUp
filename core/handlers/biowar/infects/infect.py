@@ -158,13 +158,55 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     
     difference = inf_infect - vic_immunity
 
+    # Новая сетка шансов с капом 0.1%
     if difference >= 0:
-        infect_chance = 100
+        base_chance = 100.0
     else:
-        table = {-1:50,-2:35,-3:25,-4:18,-5:12,-6:9,-7:7,-8:5.5,-9:4.3,-10:3.5,-11:2.8,-12:2.2,-13:1.7,-14:1.3,-15:1.0,-16:0.9,-17:0.8,-18:0.7}
-        infect_chance = table.get(difference,0.6)
+        table = {
+            -1: 50.0, -2: 35.0, -3: 25.0, -4: 18.0, -5: 12.0,
+            -6: 8.0,  -7: 5.0,  -8: 3.0,  -9: 2.0,  -10: 1.0,
+            -11: 0.8, -12: 0.6, -13: 0.4, -14: 0.3, -15: 0.25,
+            -16: 0.22, -17: 0.20, -18: 0.18, -19: 0.16, -20: 0.15,
+            -21: 0.14, -22: 0.13, -23: 0.12, -24: 0.11, -25: 0.108,
+            -26: 0.106, -27: 0.104, -28: 0.102, -29: 0.101
+        }
+        base_chance = table.get(difference, 0.10)
 
-    if random.random()*100 > infect_chance:
+    # Ограничиваем количество патогенов в серии от 1 до 10
+    try:
+        spent_pathogens = int(spent_pathogens)
+    except Exception:
+        spent_pathogens = 1
+    
+    max_pathogens = min(10, max(1, spent_pathogens))
+    available_pathogens = infecter.get("pathogens", 1)
+    spent_pathogens = min(max_pathogens, available_pathogens)
+
+    # Redis-бонус за прошлые нехиты
+    redis_key = f"infect_accum_bonus:{infecter['id']}:{victimer['id']}"
+    raw_accum = await redis.get(redis_key)
+    accum_bonus = float(raw_accum) if raw_accum else 0.0
+
+    step_add = 0.05 if difference <= -30 else base_chance / 2.0
+    actual_spent = 0
+    is_success = False
+
+    for attempt in range(1, spent_pathogens + 1):
+        actual_spent = attempt
+        current_chance = min(100.0, base_chance + accum_bonus)
+        
+        if random.random() * 100 <= current_chance:
+            is_success = True
+            await redis.delete(redis_key)  # Сброс бонуса при успехе
+            break
+        else:
+            accum_bonus += step_add
+            await redis.set(redis_key, accum_bonus, ex=60)
+
+    spent_pathogens = actual_spent
+    infect_chance = min(100.0, base_chance + accum_bonus)
+
+    if not is_success:
         await repo_biowar.subtract_pathogens(infecter['id'], spent_pathogens)
 
         if not infecter['science_time']:
