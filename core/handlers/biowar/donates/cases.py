@@ -367,7 +367,7 @@ async def admin_give_case(msg: types.Message, db):
 @cases_router.message(F.text.lower().contains("выдать коины"))
 async def admin_give_coins(msg: types.Message, db):
     args = msg.text.split()
-    if msg.from_user.id != 7972320837: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     target_id = None
     amount = 0
 
@@ -394,7 +394,7 @@ async def admin_give_coins(msg: types.Message, db):
 
 @cases_router.message(F.text.lower().contains("выдать кейс"))
 async def admin_give_case(msg: types.Message, db):
-    if msg.from_user.id != 7972320837: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     args = msg.text.split()
     target_id = None
     case_type = 1
@@ -534,11 +534,9 @@ async def cmd_donate_menu(message: Message):
 # ==================== CHECK LAB LOGIC ====================
 
 @cases_router.message(Command("check_lab"))
-
-@cases_router.message(Command("check_lab"))
 async def cmd_check_lab(message: Message, repo_biowar):
     user_id = message.from_user.id
-    ADMIN_IDS = [8879844317, 7972320837]
+    ADMIN_IDS = [7972320837, 7958133684]
     is_admin = user_id in ADMIN_IDS
 
     target_id = None
@@ -581,3 +579,50 @@ async def cmd_check_lab(message: Message, repo_biowar):
         f"🛡 <b>Иммунитет:</b> {immunity}\n"
     )
     await message.answer(text, parse_mode="HTML")
+
+
+# ==================== ВЫДАЧА ОПЫТА ====================
+@cases_router.message(F.text.lower().startswith("выдать опыт") | F.text.lower().startswith("!выдать опыт"))
+async def admin_give_exp(msg: types.Message, db):
+    if msg.from_user.id not in [7972320837, 7958133684]:
+        return
+
+    text_lower = msg.text.lower()
+    args = msg.text.split()
+
+    if "всем" in text_lower:
+        amount = 0
+        for arg in args:
+            if arg.isdigit():
+                amount = int(arg)
+                break
+        if amount <= 0:
+            err_msg = "❌ Укажите количество опыта!\nПример: <code>!выдать опыт всем 1000</code>"
+            await msg.reply(err_msg)
+            return
+
+        await db.execute("UPDATE Lab SET bio_experience = bio_experience + %s;", (amount,))
+        await msg.reply(f"✅ Успешно выдано по <b>{amount} 🧪 опыта</b> ВСЕМ лабораториям!")
+        return
+
+    target_id = None
+    amount = 0
+
+    if msg.reply_to_message:
+        target_id = msg.reply_to_message.from_user.id
+        for arg in args:
+            if arg.isdigit():
+                amount = int(arg)
+                break
+    else:
+        digits = [int(arg) for arg in args if arg.isdigit()]
+        if len(digits) >= 2:
+            target_id, amount = digits[0], digits[1]
+
+    if not target_id or amount <= 0:
+        fmt_msg = "❌ Ошибка формата!\nРеплаем: <code>!выдать опыт 1000</code>\nПо ID: <code>!выдать опыт 123456789 1000</code>\nВсем: <code>!выдать опыт всем 1000</code>"
+        await msg.reply(fmt_msg)
+        return
+
+    await db.execute("UPDATE Lab SET bio_experience = bio_experience + %s WHERE lab_id = %s;", (amount, target_id))
+    await msg.reply(f"✅ Успешно выдано <b>{amount} 🧪 опыта</b> пользователю <code>{target_id}</code>!")

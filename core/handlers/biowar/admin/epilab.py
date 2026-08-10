@@ -346,14 +346,14 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
                 async with db_obj.acquire() as conn:
                     async with conn.cursor() as cursor:
                         await cursor.execute(
-                            "UPDATE biowar_labs SET fever = NULL, science_time = NULL, cases = 0, coins = 500, case_1 = 0, case_2 = 0 WHERE id = %s",
+                            "UPDATE biowar_labs SET fever = NULL, science_time = UNIX_TIMESTAMP(), cases = 0, coins = 500, case_1 = 0, case_2 = 0 WHERE id = %s",
                             (target_id,)
                         )
                         await cursor.execute("DELETE FROM biowar_infected WHERE lab_id = %s OR target_id = %s", (target_id, target_id))
                         await conn.commit()
             elif hasattr(repo_biowar, 'execute'):
                 await repo_biowar.execute(
-                    "UPDATE biowar_labs SET fever = NULL, science_time = NULL, cases = 0, coins = 500, case_1 = 0, case_2 = 0 WHERE id = %s",
+                    "UPDATE biowar_labs SET fever = NULL, science_time = UNIX_TIMESTAMP(), cases = 0, coins = 500, case_1 = 0, case_2 = 0 WHERE id = %s",
                     (target_id,)
                 )
                 await repo_biowar.execute("DELETE FROM biowar_infected WHERE lab_id = %s OR target_id = %s", (target_id, target_id))

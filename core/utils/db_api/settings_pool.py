@@ -7,7 +7,8 @@ from core.services.loop_tasks import (
     victim_expire_check, victim_expire_kd_check, victim_fever_check,
     pathogens_refresh_check, corporation_stats_refresh, gave_victims_food,
     refresh_pets_vuln_indicator, game_mute_check, pet_the_pet_time_check,
-    pet_happy_check
+    pet_happy_check,
+    weekly_exp_grant
 )
 from core.services.top_reports import send_weekly_top_report, send_monthly_top_report
 
@@ -39,6 +40,7 @@ db_pool = DatabasePool()
 
 async def loop_tasks(pool, redis, bot):
     tasks = [
+        weekly_exp_grant(pool),
         victim_expire_check(pool),
         victim_expire_kd_check(pool),
         victim_fever_check(pool),
