@@ -358,7 +358,7 @@ class RequestsRepoBiowar:
             await self.update_lab_skill_val(infecter_id, 'science_time', science_time)
     
     async def subtract_pathogens(self, user_id: int, pathogens: int):
-        query = 'UPDATE Lab SET ready_pathogens=ready_pathogens-%s WHERE lab_id=%s;'
+        query = 'UPDATE Lab SET ready_pathogens=GREATEST(0, ready_pathogens-%s) WHERE lab_id=%s;'
         await self.cur.execute(query, (pathogens, user_id))
     
     async def update_pet_boost_exp(self, user_id: int, pet_boost_exp: int):

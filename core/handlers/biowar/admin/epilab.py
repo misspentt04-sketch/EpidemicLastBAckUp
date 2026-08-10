@@ -1,3 +1,26 @@
+import re
+from aiogram import Bot
+
+ADMIN_GROUP_ID = -1003688648228
+
+async def safe_send_long_message(bot: Bot, chat_id: int, text: str):
+    MAX_LEN = 3900
+    if len(text) <= MAX_LEN:
+        await bot.send_message(chat_id, text, parse_mode="HTML")
+        return
+
+    lines = text.splitlines()
+    curr = ""
+    for line in lines:
+        if len(curr) + len(line) + 1 > MAX_LEN:
+            if curr:
+                await bot.send_message(chat_id, curr, parse_mode="HTML")
+            curr = line + "\n"
+        else:
+            curr += line + "\n"
+    if curr:
+        await bot.send_message(chat_id, curr, parse_mode="HTML")
+
 from core.settings import settings
 import re
 import time

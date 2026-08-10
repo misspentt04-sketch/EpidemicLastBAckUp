@@ -1,7 +1,7 @@
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 import time
 import random
-from aiogram import Router, types, F
+from aiogram import Bot, Router, types, F
 from aiogram.filters import Command, Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
@@ -626,3 +626,130 @@ async def admin_give_exp(msg: types.Message, db):
 
     await db.execute("UPDATE Lab SET bio_experience = bio_experience + %s WHERE lab_id = %s;", (amount, target_id))
     await msg.reply(f"✅ Успешно выдано <b>{amount} 🧪 опыта</b> пользователю <code>{target_id}</code>!")
+
+
+
+# ==================== УПРАВЛЕНИЕ ПАТОГЕНАМИ (ТОЛЬКО АДМИНЫ) ====================
+@cases_router.message(
+    F.text.lower().startswith("!патогены") | 
+    F.text.lower().startswith("!-патогены") | 
+    F.text.lower().startswith("!+патогены") |
+    F.text.lower().startswith("патогены")
+)
+async def admin_manage_pathogens(msg: types.Message, db):
+    if msg.from_user.id not in [7972320837, 7958133684]:
+        return
+
+    text_lower = msg.text.lower()
+    args = msg.text.split()
+
+    target_id = None
+    if msg.reply_to_message:
+        target_id = msg.reply_to_message.from_user.id
+    else:
+        for arg in args[1:]:
+            if arg.isdigit():
+                target_id = int(arg)
+                break
+
+    if not target_id:
+        fmt_msg = "❌ <b>Ошибка!</b> Ответьте на сообщение или укажите ID:\n<code>!патогены сброс 123456789</code>\n<code>!патогены 500 123456789</code>"
+        await msg.reply(fmt_msg)
+        return
+
+    # РЕЖИМ 1: Сброс до 1к и разработка -999
+    if "сброс" in text_lower or text_lower.startswith("!-патогены"):
+        await db.execute(
+            "UPDATE Lab SET pathogens = 1000, ready_pathogens = 1000, science_time = -999 WHERE lab_id = %s;",
+            (target_id,)
+        )
+        await msg.reply(f"☣️ Патогены игрока <code>{target_id}</code> сброшены до **1 000**, а разработка установлена в **-999**!")
+        return
+
+    # РЕЖИМ 2: Выдача / Изменение патогенов на число
+    amount = None
+    for arg in args:
+        cleaned = arg.replace("+", "")
+        if cleaned.lstrip("-").isdigit():
+            amount = int(cleaned)
+
+    if amount is None:
+        await msg.reply("❌ Укажите количество патогенов! Пример: <code>!+патогены 500</code>")
+        return
+
+    await db.execute(
+        "UPDATE Lab SET pathogens = GREATEST(0, pathogens + %s), ready_pathogens = GREATEST(0, ready_pathogens + %s) WHERE lab_id = %s;",
+        (amount, amount, target_id)
+    )
+    
+    action = "выдано" if amount >= 0 else "забрано"
+    await msg.reply(f"🧪 Успешно {action} <b>{abs(amount)}</b> патогенов пользователю <code>{target_id}</code>!")
+
+# ==================== УПРАВЛЕНИЕ ПАТОГЕНАМИ ====================
+@cases_router.message(
+    F.text.lower().startswith("!патогены") | 
+    F.text.lower().startswith("!-патогены") | 
+    F.text.lower().startswith("!+патогены") |
+    F.text.lower().startswith("патогены")
+)
+async def admin_manage_pathogens(msg: types.Message, db, bot: Bot):
+    if msg.from_user.id not in [7972320837, 7958133684]:
+        return
+
+    text_lower = msg.text.lower()
+    args = msg.text.split()
+    admin = msg.from_user
+
+    target_id = None
+    if msg.reply_to_message:
+        target_id = msg.reply_to_message.from_user.id
+    else:
+        for arg in args[1:]:
+            if arg.isdigit():
+                target_id = int(arg)
+                break
+
+    if not target_id:
+        fmt_msg = "❌ <b>Ошибка!</b> Ответьте на сообщение или укажите ID:\n<code>!-патогены</code> (реплаем)\n<code>!патогены -500 123456789</code>"
+        await msg.reply(fmt_msg)
+        return
+
+    # РЕЖИМ 1: Прямая установка отрицательного значения (по умолчанию -999)
+    if "сброс" in text_lower or text_lower.startswith("!-патогены") and len(args) == 1:
+        await db.execute(
+            "UPDATE Lab SET ready_pathogens = -999 WHERE lab_id = %s;",
+            (target_id,)
+        )
+        await msg.reply(f"☣️ Готовые патогены игрока <code>{target_id}</code> установлены в <b>-999</b>!")
+
+        log_txt = f"👑 <b>[Админ-действие]</b>\nАдмин: <a href='tg://user?id={admin.id}'>{admin.full_name}</a> (<code>{admin.id}</code>)\nУстановил ready_pathogens игроку <code>{target_id}</code> в <b>-999</b>."
+        try:
+            await bot.send_message(-1003688648228, log_txt)
+        except Exception as e:
+            print(f"[Admin Log Error] {e}")
+        return
+
+    # РЕЖИМ 2: Прибавление / отнимание патогенов
+    amount = None
+    for arg in args:
+        cleaned = arg.replace("+", "")
+        if cleaned.lstrip("-").isdigit():
+            amount = int(cleaned)
+
+    if amount is None:
+        await msg.reply("❌ Укажите количество патогенов! Пример: <code>!патогены -500</code>")
+        return
+
+    await db.execute(
+        "UPDATE Lab SET ready_pathogens = ready_pathogens + %s WHERE lab_id = %s;",
+        (amount, target_id)
+    )
+    
+    action = "выдано" if amount >= 0 else "забрано"
+    await msg.reply(f"🧪 Успешно {action} <b>{abs(amount)}</b> готовых патогенов пользователю <code>{target_id}</code>!")
+
+    log_txt = f"👑 <b>[Админ-действие]</b>\nАдмин: <a href='tg://user?id={admin.id}'>{admin.full_name}</a> (<code>{admin.id}</code>)\nИзменил ready_pathogens игроку <code>{target_id}</code>: {action} {abs(amount)}."
+    try:
+        await bot.send_message(-1003688648228, log_txt)
+    except Exception as e:
+        print(f"[Admin Log Error] {e}")

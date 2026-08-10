@@ -1,3 +1,4 @@
+from core.middlewares.antispam import AntiSpamMiddleware
 from core.handlers.idea import idea_router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
@@ -54,7 +55,8 @@ async def main():
     redis_db = Redis(host=settings.redis.ip, port=6379, db=0, decode_responses=True)
     storage = RedisStorage(redis=redis_db)
 
-    dp = Dispatcher(storage=storage)
+    dp = Dispatcher()
+    dp.message.outer_middleware(AntiSpamMiddleware())
     pool = await db_pool.get_pool()
     scheduler = AsyncIOScheduler(timezone=timezone('Europe/Moscow'))
     lock = asyncio.Lock()
