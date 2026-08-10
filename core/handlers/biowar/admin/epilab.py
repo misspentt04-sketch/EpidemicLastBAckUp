@@ -177,7 +177,7 @@ async def cmd_list_aces(message: Message, repo_biowar: RequestsRepoBiowar):
     text_lines = ["<b>📋 Список активных ограничений (АС и запретов):</b>\n"]
 
     active_game_mutes = [m for m in game_mutes if not m.get('expire') or m.get('expire') > now_ts]
-    active_bio_mutes = [m for m in bio_mutes if not m.get('expire') or m.get('expire') > now_ts]
+    active_bio_mutes = [m for m in (bio_mutes or []) if not m.get('expire') or m.get('expire') > now_ts]
 
     if active_game_mutes:
         text_lines.append("<b>⛔ АС (Муты команд):</b>")
@@ -516,3 +516,83 @@ async def process_transfer_target(message: Message, state: FSMContext, repo_biow
     except Exception as e:
         logger.exception(f"Error during lab transfer: {e}")
         await message.answer(f"❌ Ошибка при переносе лаборатории: {e}")
+
+@router.message(F.text.regexp(r"^!(?:асы|aci)(?:\s+.*)?$", flags=re.IGNORECASE))
+async def list_active_ac_mutes(message: Message, repo_biowar):
+    admin_cfg = getattr(settings.bots, "admin_ids", getattr(settings.bots, "admin_id", []))
+    if not isinstance(admin_cfg, (list, tuple, set)):
+        admin_cfg = [admin_cfg]
+    
+    is_admin = message.from_user.id in admin_cfg or str(message.from_user.id) in map(str, admin_cfg)
+    if not is_admin:
+        try:
+            u = await repo_biowar.get_user(message.from_user.id)
+            if u and (getattr(u, "is_admin", False) or getattr(u, "role", "") in ["admin", "owner", "creator"]):
+                is_admin = True
+        except Exception:
+            pass
+
+    if not is_admin:
+        return await message.answer("❌ Команда доступна только администраторам.")
+
+    import time
+    import html
+
+    mutes = []
+    current_time = int(time.time())
+
+    try:
+        if hasattr(repo_biowar, "pool") and repo_biowar.pool:
+            async with repo_biowar.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        "SELECT user_id, time_expire, admin, reason FROM BioMute WHERE time_expire > %s ORDER BY time_expire DESC",
+                        (current_time,)
+                    )
+                    mutes = await cursor.fetchall()
+        elif hasattr(repo_biowar, "execute"):
+            mutes = await repo_biowar.execute(
+                "SELECT user_id, time_expire, admin, reason FROM BioMute WHERE time_expire > %s ORDER BY time_expire DESC",
+                (current_time,)
+            )
+    except Exception as e:
+        return await message.answer(f"❌ Ошибка при запросе к БД: {e}")
+
+    if not mutes:
+        return await message.answer("📋 <b>Список активных АС (мут команд) пуст.</b>")
+
+    lines_res = []
+    for idx, row in enumerate(mutes, start=1):
+        if isinstance(row, dict):
+            u_id, expire, admin_id, reason = row["user_id"], row["time_expire"], row["admin"], row["reason"]
+        else:
+            u_id, expire, admin_id, reason = row[0], row[1], row[2], row[3]
+
+        try:
+            lab_info = await repo_biowar.get_info_user_lab(u_id)
+            u_name = lab_info["full_name"] if lab_info and lab_info.get("full_name") else f"Игрок {u_id}"
+        except Exception:
+            u_name = f"Игрок {u_id}"
+
+        safe_name = html.escape(str(u_name))
+        user_link = f'<a href="tg://openmessage?user_id={u_id}">{safe_name}</a>'
+        admin_link = f'<a href="tg://openmessage?user_id={admin_id}">{admin_id}</a>' if admin_id else "Система"
+
+        rem_seconds = max(0, expire - current_time)
+        m, s = divmod(rem_seconds, 60)
+        h, m = divmod(m, 60)
+        d, h = divmod(h, 24)
+        p = []
+        if d: p.append(f"{d}д")
+        if h: p.append(f"{h}ч")
+        if m: p.append(f"{m}м")
+        if s or not p: p.append(f"{s}с")
+        time_str = " ".join(p)
+
+        lines_res.append(f"{idx}. {user_link} [<code>{u_id}</code>]\n"
+                         f"   ├ <b>Причина:</b> {html.escape(str(reason))}\n"
+                         f"   ├ <b>Выдал:</b> {admin_link}\n"
+                         f"   └ <b>Осталось:</b> {time_str}")
+
+    text = f"⛔ <b>АКТИВНЫЕ ОГРАНИЧЕНИЯ АС (Всего: {len(mutes)}):</b>\n\n" + "\n\n".join(lines_res)
+    await safe_send_long_message(message.bot, message.chat.id, text)
