@@ -138,33 +138,31 @@ async def corporation_stats_refresh(pool: Pool):
 
 
 async def gave_victims_food(pool: Pool):
-    sql2 = "UPDATE Service SET time_give_food=%s;"
-    sql3 = (
+    sql_update_lab = (
         "UPDATE Lab l JOIN ("
         " SELECT victims_owner_id, SUM(victim_bio_resource_earn) AS bio_resource FROM Victims"
-        " GROUP BY victims_owner_id)"
-        "v ON l.lab_id = v.victims_owner_id "
-        "SET l.bio_resource = l.bio_resource+v.bio_resource;"
+        " GROUP BY victims_owner_id"
+        ") v ON l.lab_id = v.victims_owner_id "
+        "SET l.bio_resource = l.bio_resource + v.bio_resource;"
     )
+    sql_del_victims = "DELETE FROM Victims WHERE victim_expire < %s;"
+    sql_update_service = "UPDATE Service SET time_give_food=%s;"
 
-    async with pool.acquire() as conn:
-        async with conn.cursor(DictCursor) as cur:
-            while True:
-                now = datetime.now(moscow_tz)
-                if now.hour < 12:
-                    next_dt = now.replace(hour=12, minute=0, second=0, microsecond=0)
-                else:
-                    next_dt = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-                
-                sleep_seconds = (next_dt - now).total_seconds()
-                if sleep_seconds > 0:
-                    await asyncio.sleep(sleep_seconds)
-                
-                await cur.execute(sql3)
-                await cur.execute(sql2, int(next_dt.timestamp()))
-                await asyncio.sleep(2)
+    try:
+        now = datetime.now(moscow_tz)
+        if now.hour < 12:
+            next_dt = now.replace(hour=12, minute=0, second=0, microsecond=0)
+        else:
+            next_dt = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(sql_update_lab)
+                now_ts = int(datetime.now(timezone.utc).timestamp())
+                await cur.execute(sql_del_victims, (now_ts,))
+                await cur.execute(sql_update_service, (int(next_dt.timestamp()),))
+    except Exception as e:
+        logger.error(f"Ошибка в gave_victims_food: {e}")
 # изменить логику чтобы измежать фор луп или перенести в mysql
 async def refresh_pets_vuln_indicator(redis: Redis):
     while True:
