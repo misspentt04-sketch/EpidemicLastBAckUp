@@ -160,6 +160,12 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
             return await msg.answer(tricks_biowar['infect']['pathogens_over'])
     
     difference = inf_infect - vic_immunity
+    if difference <= -222:
+        return await msg.answer(
+            f'❌ Вы не можете пробить, ведь у вас большая разница ({abs(difference)}).\n'
+            f'Бить сможете, когда разница будет меньше 222.'
+        )
+
     logging.info(f"[INFECT DEBUG] inf_infect={inf_infect}, vic_immunity={vic_immunity}, diff={difference}")
     CHANCES_GRID = {0: 100.0, -1: 75.0, -2: 50.0, -3: 40.0, -4: 25.0, -5: 15.0, -6: 13.2, -7: 11.4, -8: 9.6, -9: 7.8, -10: 6.0, -11: 5.87, -12: 5.75, -13: 5.62, -14: 5.5, -15: 5.37, -16: 5.25, -17: 5.12, -18: 5.0, -19: 4.87, -20: 4.75, -21: 4.62, -22: 4.5, -23: 4.37, -24: 4.25, -25: 4.12, -26: 4.0, -27: 3.87, -28: 3.75, -29: 3.62, -30: 3.5, -31: 3.37, -32: 3.25, -33: 3.12, -34: 3.0, -35: 2.87, -36: 2.75, -37: 2.62, -38: 2.5, -39: 2.37, -40: 2.25, -41: 2.12, -42: 2.0, -43: 1.87, -44: 1.75, -45: 1.62, -46: 1.5, -47: 1.37, -48: 1.25, -49: 1.12, -50: 1.0, -51: 0.982, -52: 0.964, -53: 0.946, -54: 0.928, -55: 0.91, -56: 0.892, -57: 0.874, -58: 0.856, -59: 0.838, -60: 0.82, -61: 0.802, -62: 0.784, -63: 0.766, -64: 0.748, -65: 0.73, -66: 0.712, -67: 0.694, -68: 0.676, -69: 0.658, -70: 0.64, -71: 0.622, -72: 0.604, -73: 0.586, -74: 0.568, -75: 0.55, -76: 0.532, -77: 0.514, -78: 0.496, -79: 0.478, -80: 0.46, -81: 0.442, -82: 0.424, -83: 0.406, -84: 0.388, -85: 0.37, -86: 0.352, -87: 0.334, -88: 0.316, -89: 0.298, -90: 0.28, -91: 0.262, -92: 0.244, -93: 0.226, -94: 0.208, -95: 0.19, -96: 0.172, -97: 0.154, -98: 0.136, -99: 0.118, -100: 0.1, -101: 0.095, -102: 0.091, -103: 0.086, -104: 0.082, -105: 0.078, -106: 0.074, -107: 0.07, -108: 0.067, -109: 0.063, -110: 0.06, -111: 0.057, -112: 0.054, -113: 0.052, -114: 0.049, -115: 0.047, -116: 0.044, -117: 0.042, -118: 0.04, -119: 0.038, -120: 0.036, -121: 0.034, -122: 0.033, -123: 0.031, -124: 0.029, -125: 0.028, -126: 0.027, -127: 0.025, -128: 0.024, -129: 0.023, -130: 0.022, -131: 0.021, -132: 0.02, -133: 0.019, -134: 0.018, -135: 0.017, -136: 0.016, -137: 0.015, -138: 0.014, -139: 0.014, -140: 0.013, -141: 0.012, -142: 0.012, -143: 0.011, -144: 0.011, -145: 0.01, -146: 0.0098, -147: 0.0093, -148: 0.0088, -149: 0.0084, -150: 0.008, -151: 0.0076, -152: 0.0072, -153: 0.0068, -154: 0.0065, -155: 0.0062, -156: 0.0059, -157: 0.0056, -158: 0.0053, -159: 0.005, -160: 0.0048, -161: 0.0045, -162: 0.0043, -163: 0.0041, -164: 0.0039, -165: 0.0037, -166: 0.0035, -167: 0.0033, -168: 0.0032, -169: 0.003, -170: 0.0029, -171: 0.0027, -172: 0.0026, -173: 0.0025, -174: 0.0023, -175: 0.0022, -176: 0.0021, -177: 0.002, -178: 0.0019, -179: 0.0018, -180: 0.0017, -181: 0.0016, -182: 0.0015, -183: 0.0015, -184: 0.0014, -185: 0.0013, -186: 0.0013, -187: 0.0012, -188: 0.0012, -189: 0.0011, -190: 0.0011, -191: 0.001, -192: 0.001, -193: 0.001, -194: 0.001, -195: 0.001, -196: 0.001, -197: 0.001, -198: 0.001, -199: 0.001, -200: 0.001}
 
@@ -175,7 +181,8 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     redis_key = f"infect_accum_bonus:{infecter['id']}:{victimer['id']}"
     accumulated_chance = await redis.get(redis_key)
     p_count = int(spent_pathogens) if spent_pathogens else 1
-    current_attack_chance = float(base_chance) * p_count
+    p_single = float(base_chance) / 100.0
+    current_attack_chance = (1.0 - ((1.0 - p_single) ** p_count)) * 100.0
 
     if accumulated_chance is not None:
         raw_val = accumulated_chance.decode() if isinstance(accumulated_chance, bytes) else accumulated_chance
@@ -189,13 +196,10 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     logging.info(f"[INFECT DEBUG] base_chance={base_chance}, spent_raw={spent_pathogens}, p_count={p_count}, total_chance={total_chance}")
 
     is_success = False
-    actual_spent = 0
-    for attempt in range(1, spent_pathogens + 1):
-        actual_spent = attempt
-        if random.uniform(0, 100) <= total_chance:
-            is_success = True
-            await redis.delete(redis_key)
-            break
+    actual_spent = spent_pathogens
+    if random.uniform(0, 100) <= total_chance:
+        is_success = True
+        await redis.delete(redis_key)
 
     infect_chance = total_chance
     # Вывод красивого числа без экспоненты (e-notation) и без потери точности
