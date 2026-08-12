@@ -29,7 +29,7 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from datetime import datetime
+from datetime import datetime, timedelta
 from humanize import intcomma
 from redis.asyncio import Redis
 
@@ -266,9 +266,14 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
 
         custom_emoji = lab_info['customization_emoji'] if lab_info['customization_emoji'] else ''
 
-        time_food = await repo_biowar.get_time_food()
-        time_food_diff = datetime.utcfromtimestamp(time_food) - datetime.utcnow()
-        get_food_text = func.convert_seconds_to_human(time_food_diff.total_seconds())
+        now_msk = datetime.utcnow() + timedelta(hours=3)
+        next_award = now_msk.replace(minute=0, second=0, microsecond=0)
+        if now_msk.hour < 12:
+            next_award = next_award.replace(hour=12)
+        else:
+            next_award = (next_award + timedelta(days=1)).replace(hour=0)
+        seconds_left = (next_award - now_msk).total_seconds()
+        get_food_text = func.convert_seconds_to_human(seconds_left)
 
         lab_text = (
             f'<b>📩 Досье лаборатории {lab_name}:</b>\n'
@@ -546,13 +551,13 @@ async def list_active_ac_mutes(message: Message, repo_biowar):
             async with repo_biowar.pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     await cursor.execute(
-                        "SELECT user_id, time_expire, admin, reason FROM BioMute WHERE time_expire > %s ORDER BY time_expire DESC",
+                        "SELECT user_id, time_expire, admin, reason FROM BioMute WHERE time_expire > %s   ORDER BY time_expire DESC",
                         (current_time,)
                     )
                     mutes = await cursor.fetchall()
         elif hasattr(repo_biowar, "execute"):
             mutes = await repo_biowar.execute(
-                "SELECT user_id, time_expire, admin, reason FROM BioMute WHERE time_expire > %s ORDER BY time_expire DESC",
+                "SELECT user_id, time_expire, admin, reason FROM BioMute WHERE time_expire > %s   ORDER BY time_expire DESC",
                 (current_time,)
             )
     except Exception as e:
