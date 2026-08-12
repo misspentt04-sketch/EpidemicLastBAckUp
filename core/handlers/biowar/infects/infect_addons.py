@@ -318,32 +318,9 @@ async def del_virus_signal(msg: Message, bot: Bot, db: Cursor, repo_biowar: Requ
     await msg.answer(text)
 
 async def buy_vaccine_joke(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
-    
-    id = msg.from_user.id
-    
-    bag = await repo_biowar.get_bag(id)
-    lab = await repo_biowar.get_info_user_lab(id)
-    
-    text = random.choice(tricks_biowar['infect']['buy_vaccine_joke']) + '\n\n<blockquote>'
-    
-    bio_resource_rand = random.randint(1, 50000)
-    primogem_rand = random.randint(1, 50)
-    stellar_jade_rand = random.randint(1, 15)
-    
-    bio_resource_cost = func.adjust_value(lab['bio_resource'], bio_resource_rand, '-', 0)
-    primogem_cost = func.adjust_value(bag['primogem'], primogem_rand, '-', 0)
-    stellar_jade_cost = func.adjust_value(bag['stellar_jade'], stellar_jade_rand, '-', 0)
-    
-    text += f'┌ 🧬 Утилизировано <b>{bio_resource_rand}</b> био-ресурсов...\n'
-    if random.randint(1, 2) == 1:
-        text += f'├ 💠 скурено <b>{primogem_rand}</b> примогемов...\n'
-        await repo_biowar.update_bag_primogem(id, primogem_cost, None)
-        if random.randint(1, 5) == 1:
-            text += f'└ ✨ а ещё <b>{stellar_jade_rand}</b> нефрита...'
-            await repo_biowar.update_bag_stellar_jade(id, stellar_jade_cost, None)
-    
-    text += '</blockquote>'
-    await repo_biowar.update_lab_skill_val(id, 'bio_resource', bio_resource_cost)
-    
+    text = (
+        "🚫 <b>Команда больше не работает!</b>\n\n"
+        "🚬 Скурить вакцину больше нельзя.\n"
+        "💡 Для покупки вакцины используйте команду: <code>!купить вакцину</code>"
+    )
     await msg.answer(text)
-
