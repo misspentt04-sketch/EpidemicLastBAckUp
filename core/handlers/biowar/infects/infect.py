@@ -1,3 +1,4 @@
+import logging
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from asyncmy.cursors import Cursor
@@ -34,13 +35,15 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     chat_id = msg.chat.id
     parts = msg.text.split() if msg.text else []
     victimer_id = getattr(msg, "_override_target_id", None) or func.reply_or_tag_geeter(msg)
-    if not victimer_id and len(parts) > 1 and parts[1].isdigit():
+    digits = [int(p) for p in parts if p.isdigit()]
+    if not victimer_id and len(parts) > 1 and parts[1].isdigit() and len(parts[1]) > 5:
         victimer_id = int(parts[1])
-    
+
     if getattr(msg, "_override_target_id", None):
         spent_pathogens = 1
     else:
-        spent_pathogens = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+        raw_p = digits[-1] if digits else 1
+        spent_pathogens = min(10, max(1, raw_p))
     is_tag = func.check_if_tag(msg)
     sb_answer = True
     pet_boost_exp = False
@@ -157,54 +160,48 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
             return await msg.answer(tricks_biowar['infect']['pathogens_over'])
     
     difference = inf_infect - vic_immunity
+    logging.info(f"[INFECT DEBUG] inf_infect={inf_infect}, vic_immunity={vic_immunity}, diff={difference}")
+    CHANCES_GRID = {0: 100.0, -1: 75.0, -2: 50.0, -3: 40.0, -4: 25.0, -5: 15.0, -6: 13.2, -7: 11.4, -8: 9.6, -9: 7.8, -10: 6.0, -11: 5.87, -12: 5.75, -13: 5.62, -14: 5.5, -15: 5.37, -16: 5.25, -17: 5.12, -18: 5.0, -19: 4.87, -20: 4.75, -21: 4.62, -22: 4.5, -23: 4.37, -24: 4.25, -25: 4.12, -26: 4.0, -27: 3.87, -28: 3.75, -29: 3.62, -30: 3.5, -31: 3.37, -32: 3.25, -33: 3.12, -34: 3.0, -35: 2.87, -36: 2.75, -37: 2.62, -38: 2.5, -39: 2.37, -40: 2.25, -41: 2.12, -42: 2.0, -43: 1.87, -44: 1.75, -45: 1.62, -46: 1.5, -47: 1.37, -48: 1.25, -49: 1.12, -50: 1.0, -51: 0.982, -52: 0.964, -53: 0.946, -54: 0.928, -55: 0.91, -56: 0.892, -57: 0.874, -58: 0.856, -59: 0.838, -60: 0.82, -61: 0.802, -62: 0.784, -63: 0.766, -64: 0.748, -65: 0.73, -66: 0.712, -67: 0.694, -68: 0.676, -69: 0.658, -70: 0.64, -71: 0.622, -72: 0.604, -73: 0.586, -74: 0.568, -75: 0.55, -76: 0.532, -77: 0.514, -78: 0.496, -79: 0.478, -80: 0.46, -81: 0.442, -82: 0.424, -83: 0.406, -84: 0.388, -85: 0.37, -86: 0.352, -87: 0.334, -88: 0.316, -89: 0.298, -90: 0.28, -91: 0.262, -92: 0.244, -93: 0.226, -94: 0.208, -95: 0.19, -96: 0.172, -97: 0.154, -98: 0.136, -99: 0.118, -100: 0.1, -101: 0.095, -102: 0.091, -103: 0.086, -104: 0.082, -105: 0.078, -106: 0.074, -107: 0.07, -108: 0.067, -109: 0.063, -110: 0.06, -111: 0.057, -112: 0.054, -113: 0.052, -114: 0.049, -115: 0.047, -116: 0.044, -117: 0.042, -118: 0.04, -119: 0.038, -120: 0.036, -121: 0.034, -122: 0.033, -123: 0.031, -124: 0.029, -125: 0.028, -126: 0.027, -127: 0.025, -128: 0.024, -129: 0.023, -130: 0.022, -131: 0.021, -132: 0.02, -133: 0.019, -134: 0.018, -135: 0.017, -136: 0.016, -137: 0.015, -138: 0.014, -139: 0.014, -140: 0.013, -141: 0.012, -142: 0.012, -143: 0.011, -144: 0.011, -145: 0.01, -146: 0.0098, -147: 0.0093, -148: 0.0088, -149: 0.0084, -150: 0.008, -151: 0.0076, -152: 0.0072, -153: 0.0068, -154: 0.0065, -155: 0.0062, -156: 0.0059, -157: 0.0056, -158: 0.0053, -159: 0.005, -160: 0.0048, -161: 0.0045, -162: 0.0043, -163: 0.0041, -164: 0.0039, -165: 0.0037, -166: 0.0035, -167: 0.0033, -168: 0.0032, -169: 0.003, -170: 0.0029, -171: 0.0027, -172: 0.0026, -173: 0.0025, -174: 0.0023, -175: 0.0022, -176: 0.0021, -177: 0.002, -178: 0.0019, -179: 0.0018, -180: 0.0017, -181: 0.0016, -182: 0.0015, -183: 0.0015, -184: 0.0014, -185: 0.0013, -186: 0.0013, -187: 0.0012, -188: 0.0012, -189: 0.0011, -190: 0.0011, -191: 0.001, -192: 0.001, -193: 0.001, -194: 0.001, -195: 0.001, -196: 0.001, -197: 0.001, -198: 0.001, -199: 0.001, -200: 0.001}
 
-    # Новая сетка шансов с капом 0.1%
     if difference >= 0:
         base_chance = 100.0
+    elif difference in CHANCES_GRID:
+        base_chance = CHANCES_GRID[difference]
+    elif difference < -200:
+        base_chance = 0.001
     else:
-        table = {
-            -1: 50.0, -2: 35.0, -3: 25.0, -4: 18.0, -5: 12.0,
-            -6: 8.0,  -7: 5.0,  -8: 3.0,  -9: 2.0,  -10: 1.0,
-            -11: 0.8, -12: 0.6, -13: 0.4, -14: 0.3, -15: 0.25,
-            -16: 0.22, -17: 0.20, -18: 0.18, -19: 0.16, -20: 0.15,
-            -21: 0.14, -22: 0.13, -23: 0.12, -24: 0.11, -25: 0.108,
-            -26: 0.106, -27: 0.104, -28: 0.102, -29: 0.101
-        }
-        base_chance = table.get(difference, 0.10)
+        base_chance = 1.0
 
-    # Ограничиваем количество патогенов в серии от 1 до 10
-    try:
-        spent_pathogens = int(spent_pathogens)
-    except Exception:
-        spent_pathogens = 1
-    
-    max_pathogens = min(10, max(1, spent_pathogens))
-    available_pathogens = infecter.get("pathogens", 1)
-    spent_pathogens = min(max_pathogens, available_pathogens)
-
-    # Redis-бонус за прошлые нехиты
     redis_key = f"infect_accum_bonus:{infecter['id']}:{victimer['id']}"
-    raw_accum = await redis.get(redis_key)
-    accum_bonus = float(raw_accum) if raw_accum else 0.0
+    accumulated_chance = await redis.get(redis_key)
+    p_count = int(spent_pathogens) if spent_pathogens else 1
+    current_attack_chance = float(base_chance) * p_count
 
-    step_add = 0.05 if difference <= -30 else base_chance / 2.0
-    actual_spent = 0
+    if accumulated_chance is not None:
+        raw_val = accumulated_chance.decode() if isinstance(accumulated_chance, bytes) else accumulated_chance
+        total_chance = float(raw_val) + current_attack_chance
+    else:
+        total_chance = current_attack_chance
+
+    # Продлеваем жизнь накопленного шанса на 60 секунд от текущего удара
+    await redis.set(redis_key, str(total_chance), ex=60)
+
+    logging.info(f"[INFECT DEBUG] base_chance={base_chance}, spent_raw={spent_pathogens}, p_count={p_count}, total_chance={total_chance}")
+
     is_success = False
-
+    actual_spent = 0
     for attempt in range(1, spent_pathogens + 1):
         actual_spent = attempt
-        current_chance = min(100.0, base_chance + accum_bonus)
-        
-        if random.random() * 100 <= current_chance:
+        if random.uniform(0, 100) <= total_chance:
             is_success = True
-            await redis.delete(redis_key)  # Сброс бонуса при успехе
+            await redis.delete(redis_key)
             break
-        else:
-            accum_bonus += step_add
-            await redis.set(redis_key, accum_bonus, ex=60)
 
-    spent_pathogens = actual_spent
-    infect_chance = min(100.0, base_chance + accum_bonus)
+    infect_chance = total_chance
+    # Вывод красивого числа без экспоненты (e-notation) и без потери точности
+    display_chance_str = f"{infect_chance:.8f}".rstrip("0").rstrip(".")
+    if display_chance_str == "" or display_chance_str == "0":
+        display_chance_str = f"{infect_chance:.10f}" 
 
     if not is_success:
         await repo_biowar.subtract_pathogens(infecter['id'], spent_pathogens)
@@ -226,7 +223,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
                 vic_entity,
                 inf_ready_pathogens_left,
                 '',
-                f'{infect_chance}%'
+                f'{display_chance_str}% '
             )
         )
 
@@ -283,6 +280,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     lose_exp = victimer['bio_experience'] - lose_exp
     
     earn_exp = 1 if earn_exp <= 0 else earn_exp
+    earn_exp = max(1, int(earn_exp))
     vic_exp = 0 if lose_exp < 0 else lose_exp
     
     vic_expire = int((datetime.utcnow() + timedelta(days=infecter["lethality"])).timestamp())
@@ -532,28 +530,46 @@ async def cmd_check_victim(message: Message, bot: Bot, repo_biowar: RequestsRepo
     response_text = f"🧬 {header_info}: <a href='{link_url}'>ссылка на игрока</a>\n💰 Приносит: {fbio} био-ресурсов.\n⏳ Осталось: {time_str}."
     
     kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="💥 Ебнуть", callback_data=f"hit_target:{target_id}")
+        InlineKeyboardButton(text="💥 Ебнуть", callback_data=f"hit_target:{target_id}:{owner_id}")
     ]])
     await message.reply(response_text, parse_mode="HTML", reply_markup=kb)
 
 
 
 async def hit_target_callback(callback: CallbackQuery, bot: Bot, db, repo_biowar: RequestsRepoBiowar, redis: Redis, lock: Lock):
-    # Анти-спам замок в Redis
-    click_key = f"hit_cb_lock:{callback.from_user.id}:{callback.message.message_id}"
-    if await redis.get(click_key):
-        return await callback.answer('⏳ Подожди немного...', show_alert=False)
-    await redis.set(click_key, '1', ex=2)
+    # 1. Моментально отвечаем Telegram, чтобы исключить дублирование запросов
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+    # 2. Жесткая защита через Redis по ID сообщения (строго 1 срабатывание)
+    lock_key = f"strict_hit_lock:{callback.message.chat.id}:{callback.message.message_id}"
+    if await redis.get(lock_key):
+        return
+    await redis.set(lock_key, "1", ex=30)
+
+    # 3. Сразу убираем инлайн-кнопку, чтобы исключить повторные клики
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
 
     data_parts = callback.data.split(':')
-    target_id = int(data_parts[1])
-    
+    if len(data_parts) < 2:
+        return
+
+    try:
+        target_id = int(data_parts[1])
+    except ValueError:
+        return
+
     owner_id = int(data_parts[2]) if len(data_parts) > 2 and data_parts[2].isdigit() else None
 
     if not owner_id and callback.message.reply_to_message and callback.message.reply_to_message.from_user:
         owner_id = callback.message.reply_to_message.from_user.id
 
-    # Проверка на админа через БД / repo
+    # Проверка на администратора
     is_admin = False
     try:
         user_data = await repo_biowar.get_user(callback.from_user.id)
@@ -562,148 +578,30 @@ async def hit_target_callback(callback: CallbackQuery, bot: Bot, db, repo_biowar
     except Exception:
         pass
 
-    # Если в config прописан
     try:
-        from core.config import settings
-        if callback.from_user.id in getattr(settings.bots, 'admin_ids', []) or callback.from_user.id == getattr(settings.bots, 'admin_id', None):
+        from core.settings import settings
+        admin_ids = getattr(settings.bots, 'admin_ids', [])
+        if not isinstance(admin_ids, (list, tuple, set)):
+            admin_ids = [admin_ids]
+        if callback.from_user.id in admin_ids or callback.from_user.id == getattr(settings.bots, 'admin_id', None):
             is_admin = True
     except Exception:
         pass
 
-    # Обычным игрокам запрещаем чужие кнопки, АДМИНАМ РАЗРЕШАЕМ ВСЁ!
+    # Проверки доступа
     if owner_id and callback.from_user.id != owner_id and not is_admin:
         return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
 
     if callback.from_user.id == target_id:
         return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
 
+    # Формируем фейковое сообщение для выполнения заражения
     fake_message = callback.message.model_copy(update={
         'from_user': callback.from_user,
         'text': f'заразить {target_id} 1',
         'reply_to_message': None
     })
-    
     setattr(fake_message, '_override_target_id', target_id)
 
-    await callback.answer('🚀 Запуск атаки...', show_alert=False)
-    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
-
-    data_parts = callback.data.split(':')
-    target_id = int(data_parts[1])
-    
-    owner_id = int(data_parts[2]) if len(data_parts) > 2 and data_parts[2].isdigit() else None
-
-    if not owner_id and callback.message.reply_to_message and callback.message.reply_to_message.from_user:
-        owner_id = callback.message.reply_to_message.from_user.id
-
-    # Проверяем, является ли нажимающий администратором
-    from core.config import settings
-    admin_ids = getattr(settings.bots, 'admin_ids', [])
-    if not isinstance(admin_ids, (list, tuple, set)):
-        admin_ids = [admin_ids]
-    
-    is_admin = callback.from_user.id in admin_ids or callback.from_user.id in getattr(settings.bots, 'admin_id_list', [])
-
-    # Обычным пользователям запрещаем чужие кнопки, админам — разрешаем!
-    if owner_id and callback.from_user.id != owner_id and not is_admin:
-        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
-
-    if callback.from_user.id == target_id:
-        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
-
-    fake_message = callback.message.model_copy(update={
-        'from_user': callback.from_user,
-        'text': f'заразить {target_id} 1',
-        'reply_to_message': None
-    })
-    
-    setattr(fake_message, '_override_target_id', target_id)
-
-    await callback.answer('🚀 Запуск атаки...', show_alert=False)
-    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
-
-    data_parts = callback.data.split(':')
-    target_id = int(data_parts[1])
-    
-    # 1. Проверяем owner_id из callback_data
-    owner_id = int(data_parts[2]) if len(data_parts) > 2 and data_parts[2].isdigit() else None
-
-    # 2. Проверяем owner_id из reply_to_message
-    if not owner_id and callback.message.reply_to_message and callback.message.reply_to_message.from_user:
-        owner_id = callback.message.reply_to_message.from_user.id
-
-    # Блокировка чужих кликов
-    if owner_id and callback.from_user.id != owner_id:
-        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
-
-    # Запрет атаки самого себя
-    if callback.from_user.id == target_id:
-        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
-
-    fake_message = callback.message.model_copy(update={
-        'from_user': callback.from_user,
-        'text': f'заразить {target_id} 1',
-        'reply_to_message': None
-    })
-    
-    setattr(fake_message, '_override_target_id', target_id)
-
-    await callback.answer('🚀 Запуск атаки...', show_alert=False)
-    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
-
-    # 2. Если в callback_data нет owner_id, пытаемся узнать владельца через reply_to_message
-    if not owner_id and callback.message.reply_to_message and callback.message.reply_to_message.from_user:
-        owner_id = callback.message.reply_to_message.from_user.id
-
-    # 3. Блокируем чужие клики, если удалось определить владельца
-    if owner_id and callback.from_user.id != owner_id:
-        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
-
-    # 4. Запрет на атаку самого себя
-    if callback.from_user.id == target_id:
-        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
-
-    fake_message = callback.message.model_copy(update={
-        'from_user': callback.from_user,
-        'text': f'заразить {target_id} 1',
-        'reply_to_message': None
-    })
-    
-    setattr(fake_message, '_override_target_id', target_id)
-
-    await callback.answer('🚀 Запуск атаки...', show_alert=False)
-    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
-
-    # Проверка: если кнопку нажимает не тот, кто её вызвал
-    if owner_id and callback.from_user.id != owner_id:
-        return await callback.answer('❌ Это не твоя кнопка!', show_alert=True)
-
-    if callback.from_user.id == target_id:
-        return await callback.answer('❌ Нельзя атаковать самого себя!', show_alert=True)
-
-    fake_message = callback.message.model_copy(update={
-        'from_user': callback.from_user,
-        'text': f'заразить {target_id} 1',
-        'reply_to_message': None
-    })
-    
-    setattr(fake_message, '_override_target_id', target_id)
-
-    await callback.answer('🚀 Запуск атаки...', show_alert=False)
-    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
-
-    fake_message = callback.message.model_copy(update={
-        'from_user': callback.from_user,
-        'text': f'заразить {target_id} 1',
-        'reply_to_message': None
-    })
-    
-    # Передаем явно ID целевого игрока
-    setattr(fake_message, '_override_target_id', target_id)
-
-    await callback.answer('🚀 Запуск атаки...', show_alert=False)
-    await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
-
-    await callback.answer("🚀 Запуск заражения...", show_alert=False)
-    
+    # Запускаем заражение ровно один раз
     await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
