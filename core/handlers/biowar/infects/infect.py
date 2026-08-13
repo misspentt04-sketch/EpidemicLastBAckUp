@@ -181,14 +181,19 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     redis_key = f"infect_accum_bonus:{infecter['id']}:{victimer['id']}"
     accumulated_chance = await redis.get(redis_key)
     p_count = int(spent_pathogens) if spent_pathogens else 1
-    p_single = float(base_chance) / 100.0
-    current_attack_chance = (1.0 - ((1.0 - p_single) ** p_count)) * 100.0
+    # Затрата патогенов умножает шаговый прирост
+    step_multiplier = (1.0 + (p_count - 1) * 0.2722)
 
     if accumulated_chance is not None:
+        # Повторные удары добавляют +25% (1/4) от базового шанса
+        add_step = (base_chance / 4.0) * step_multiplier
         raw_val = accumulated_chance.decode() if isinstance(accumulated_chance, bytes) else accumulated_chance
-        total_chance = float(raw_val) + current_attack_chance
+        total_chance = float(raw_val) + add_step
     else:
-        total_chance = current_attack_chance
+        # Первый удар берет 100% от базового шанса из сетки
+        total_chance = base_chance * step_multiplier
+
+# Шанс уже рассчитан выше
 
     # Продлеваем жизнь накопленного шанса на 60 секунд от текущего удара
     await redis.set(redis_key, str(total_chance), ex=60)
@@ -203,7 +208,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
     infect_chance = total_chance
     # Вывод красивого числа без экспоненты (e-notation) и без потери точности
-    display_chance_str = f"{infect_chance:.8f}".rstrip("0").rstrip(".")
+    display_chance_str = f"{infect_chance:.4f}"
     if display_chance_str == "" or display_chance_str == "0":
         display_chance_str = f"{infect_chance:.10f}" 
 
