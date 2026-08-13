@@ -145,7 +145,7 @@ class RequestsRepoBiowar:
     # User
     
     async def get_random_user(self):
-        return await self.select_all('SELECT * FROM Users ORDER BY RAND() LIMIT 1;')
+        return await self.select_all('SELECT * FROM Users   ORDER BY RAND() LIMIT 1;')
 
     ### Chat ###
     
@@ -187,13 +187,13 @@ class RequestsRepoBiowar:
 
     
     async def get_lab_biotop(self):
-        query = 'SELECT * FROM Lab ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM Lab   ORDER BY bio_experience DESC;'
         return await self.select_all(query, use_index_zero=False)
     
     async def get_lab_biotop_chat(self, chat_id: int):
         query = (
             'SELECT * FROM Lab INNER JOIN Chat ON Lab.lab_id = Chat.user_id '
-            'WHERE chat_id=%s ORDER BY bio_experience DESC;'
+            'WHERE chat_id=%s   ORDER BY bio_experience DESC;'
         )
         return await self.select_all(query, chat_id, use_index_zero=False)
 
@@ -231,12 +231,26 @@ class RequestsRepoBiowar:
     async def add_lab_bio_currency(self, id: int, bio_resources: int):
         query = 'UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s;'
         await self.cur.execute(query, (bio_resources, id))
-        await self.conn.commit()
+        if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
+            if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+            elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+        elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
 
     async def add_epicoins(self, id: int, amount: int):
         query = 'UPDATE Lab SET epicoins = epicoins + %s WHERE lab_id = %s;'
         await self.cur.execute(query, (amount, id))
-        await self.conn.commit()
+        if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
+            if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+            elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+        elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
 
     ### Lab Addons ###
     
@@ -264,17 +278,24 @@ class RequestsRepoBiowar:
     
     # Get
     
+    async def get_victim(self, owner_id: int, victim_id: int):
+        query = (
+            'SELECT * FROM Victims '
+            'WHERE victims_owner_id = %s AND victim_id = %s;'
+        )
+        return await self.select_one(query, (owner_id, victim_id))
+
     async def get_victims(self, user_id: int):
         query = (
             'SELECT * FROM Victims INNER JOIN Lab ON lab_id=victim_id'
-            ' WHERE victims_owner_id=%s ORDER BY infect_date DESC;'
+            ' WHERE victims_owner_id=%s   ORDER BY infect_date DESC;'
         )
         return await self.select_all(query, user_id, use_index_zero=False)
     
     async def get_victim_by_infect_range(self, user_id: int, lower_val: int, higher_val: int):
         query = (
             'SELECT * FROM Users INNER JOIN Lab ON Lab.lab_id=Users.id '
-            'WHERE lab_id != %s AND id != %s AND bio_experience BETWEEN %s AND %s ORDER BY RAND() LIMIT 1;'
+            'WHERE lab_id != %s AND id != %s AND bio_experience BETWEEN %s AND %s   ORDER BY RAND() LIMIT 1;'
         )
         params = (user_id, user_id, lower_val, higher_val)
         return await self.select_all(query, params)
@@ -282,7 +303,7 @@ class RequestsRepoBiowar:
     async def get_random_victim(self, user_id: int):
         query = (
             'SELECT * FROM Users INNER JOIN Lab ON Lab.lab_id=Users.id '
-            'WHERE lab_id != %s AND id != %s ORDER BY RAND() LIMIT 1;'
+            'WHERE lab_id != %s AND id != %s   ORDER BY RAND() LIMIT 1;'
         )
         params = (user_id, user_id)
         return await self.select_all(query, params)
@@ -360,6 +381,17 @@ class RequestsRepoBiowar:
     async def subtract_pathogens(self, user_id: int, pathogens: int):
         query = 'UPDATE Lab SET ready_pathogens=GREATEST(0, ready_pathogens-%s) WHERE lab_id=%s;'
         await self.cur.execute(query, (pathogens, user_id))
+        if hasattr(self, 'conn') and self.conn:
+            if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+            if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+            elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+        elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
+        elif hasattr(self.cur, 'connection') and self.cur.connection:
+            await self.cur.connection.commit()
     
     async def update_pet_boost_exp(self, user_id: int, pet_boost_exp: int):
         query = 'UPDATE Lab SET pet_boost_exp=%s WHERE lab_id=%s;'
@@ -385,7 +417,7 @@ class RequestsRepoBiowar:
     async def get_illnesses(self, user_id: int):
         query = (
             'SELECT * FROM Victims INNER JOIN Lab ON lab_id=victim_id'
-            ' WHERE victim_id=%s ORDER BY infect_date DESC;'
+            ' WHERE victim_id=%s   ORDER BY infect_date DESC;'
         )
         return await self.select_all(query, user_id, use_index_zero=False)
     
@@ -426,15 +458,15 @@ class RequestsRepoBiowar:
         return await self.select_all(query, corp_code if corp_code else user_id)
     
     async def get_biotop_corps(self):
-        query = 'SELECT * FROM Corporation ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM Corporation   ORDER BY bio_experience DESC;'
         return await self.select_all(query, use_index_zero=False)
     
     async def get_corporation_members(self, corp_code: str):
-        query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s   ORDER BY bio_experience DESC;'
         return await self.select_all(query, corp_code, False)
     
     async def get_corporation_members_ids_list(self, corp_code: str):
-        query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s   ORDER BY bio_experience DESC;'
         members = await self.select_all(query, corp_code, False)
         return [id['member_id'] for id in members]
     
@@ -443,7 +475,7 @@ class RequestsRepoBiowar:
         return await self.select_one(query, corp_code)
     
     async def get_corp_invite_list(self, corp_code: str):
-        query = 'SELECT * FROM CorporationInviteList WHERE corporation_code=%s ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM CorporationInviteList WHERE corporation_code=%s   ORDER BY bio_experience DESC;'
         return await self.select_all(query, corp_code, False)
     
     async def get_corp_admin_list(self, corp_code: str):
@@ -874,7 +906,7 @@ class RequestsRepoBiowar:
 
     async def get_suggestions(self):
         return await self.select_all(
-            "SELECT * FROM suggestions ORDER BY id DESC;"
+            "SELECT * FROM suggestions   ORDER BY id DESC;"
         )
 
     # Service #
@@ -929,9 +961,122 @@ class RequestsRepoBiowar:
     async def add_cases(self, id: int, case1: int = 1, case2: int = 0):
         query = 'UPDATE Lab SET case1 = case1 + %s, case2 = case2 + %s WHERE lab_id = %s;'
         await self.cur.execute(query, (case1, case2, id))
-        await self.conn.commit()
+        if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
+            if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+            elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+        elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
 
     async def add_lab_epicoins(self, lab_id: int, amount: int):
         query = "UPDATE Lab SET epicoins = epicoins + %s WHERE lab_id = %s;"
         await self.cur.execute(query, (amount, lab_id))
-        await self.conn.commit()
+        if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
+            if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+            elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+                await self.cur.connection.commit()
+        elif hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    async def get_fallen_targets(self, user_id: int):
+        now = int(__import__('time').time())
+        query = """
+            SELECT DISTINCT
+                target_id AS victim_id,
+                u.username,
+                u.full_name
+            FROM (
+                -- 1. Жертвы, у которых истекло время в Victims
+                SELECT victim_id AS target_id
+                FROM Victims
+                WHERE victims_owner_id = %s AND victim_expire < %s
+                
+                UNION
+                
+                -- 2. Цели из истории, у которых вообще нет записи в Victims
+                SELECT h.victim_id AS target_id
+                FROM biowar_infection_history h
+                LEFT JOIN Victims v ON h.victim_id = v.victim_id AND v.victims_owner_id = %s
+                WHERE h.attacker_id = %s AND v.victim_id IS NULL
+            ) AS combined
+            LEFT JOIN Users u ON combined.target_id = u.id;
+        """
+        res = await self.select_all(query, (user_id, now, user_id, user_id), use_index_zero=False)
+        if not res:
+            return []
+            
+        result = []
+        for row in res:
+            if isinstance(row, dict):
+                result.append({
+                    'victim_id': row.get('victim_id'),
+                    'username': row.get('username'),
+                    'full_name': row.get('full_name')
+                })
+            elif isinstance(row, (list, tuple)):
+                result.append({
+                    'victim_id': row[0],
+                    'username': row[1] if len(row) > 1 else None,
+                    'full_name': row[2] if len(row) > 2 else None
+                })
+        return result
+
+
+
+
+
+
+
+    async def transfer_lab(self, from_id: int, to_id: int):
+        # 1. Проверяем существование обеих лабораторий
+        await self.cur.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (from_id,))
+        lab_from = await self.cur.fetchone()
+
+        await self.cur.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (to_id,))
+        lab_to = await self.cur.fetchone()
+
+        if not lab_from or not lab_to:
+            raise ValueError("Одна из лабораторий не найдена в базе данных.")
+
+        # 2. Обмен данными лабораторий через временные переменные MySQL
+        query_swap_labs = """
+            UPDATE Lab l1, Lab l2
+            SET 
+                l1.pathogens = @p1:=l1.pathogens, l1.pathogens = l2.pathogens, l2.pathogens = @p1,
+                l1.ready_pathogens = @p2:=l1.ready_pathogens, l1.ready_pathogens = l2.ready_pathogens, l2.ready_pathogens = @p2,
+                l1.science = @p3:=l1.science, l1.science = l2.science, l2.science = @p3,
+                l1.infect = @p4:=l1.infect, l1.infect = l2.infect, l2.infect = @p4,
+                l1.immunity = @p5:=l1.immunity, l1.immunity = l2.immunity, l2.immunity = @p5,
+                l1.lethality = @p6:=l1.lethality, l1.lethality = l2.lethality, l2.lethality = @p6,
+                l1.security_service = @p7:=l1.security_service, l1.security_service = l2.security_service, l2.security_service = @p7,
+                l1.bio_resource = @p8:=l1.bio_resource, l1.bio_resource = l2.bio_resource, l2.bio_resource = @p8,
+                l1.victims_food = @p9:=l1.victims_food, l1.victims_food = l2.victims_food, l2.victims_food = @p9,
+                l1.lab_dossier = @p10:=l1.lab_dossier, l1.lab_dossier = l2.lab_dossier, l2.lab_dossier = @p10,
+                l1.bio_experience = @p11:=l1.bio_experience, l1.bio_experience = l2.bio_experience, l2.bio_experience = @p11,
+                l1.pet_boost_exp = @p12:=l1.pet_boost_exp, l1.pet_boost_exp = l2.pet_boost_exp, l2.pet_boost_exp = @p12
+            WHERE l1.lab_id = %s AND l2.lab_id = %s;
+        """
+        await self.cur.execute(query_swap_labs, (from_id, to_id))
+
+        # 3. Обмен жертвами в Victims
+        await self.cur.execute("SET FOREIGN_KEY_CHECKS = 0;")
+        try:
+            await self.cur.execute("UPDATE Victims SET victims_owner_id = -999999 WHERE victims_owner_id = %s;", (from_id,))
+            await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = %s;", (from_id, to_id))
+            await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = -999999;", (to_id,))
+        finally:
+            await self.cur.execute("SET FOREIGN_KEY_CHECKS = 1;")

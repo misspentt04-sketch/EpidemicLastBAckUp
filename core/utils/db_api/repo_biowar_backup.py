@@ -135,7 +135,7 @@ class RequestsRepoBiowar:
     # User
     
     async def get_random_user(self):
-        return await self.select_all('SELECT * FROM Users ORDER BY RAND() LIMIT 1;')
+        return await self.select_all('SELECT * FROM Users   ORDER BY RAND() LIMIT 1;')
 
     ### Chat ###
     
@@ -177,13 +177,13 @@ class RequestsRepoBiowar:
 
     
     async def get_lab_biotop(self):
-        query = 'SELECT * FROM Lab ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM Lab   ORDER BY bio_experience DESC;'
         return await self.select_all(query, use_index_zero=False)
     
     async def get_lab_biotop_chat(self, chat_id: int):
         query = (
             'SELECT * FROM Lab INNER JOIN Chat ON Lab.lab_id = Chat.user_id '
-            'WHERE chat_id=%s ORDER BY bio_experience DESC;'
+            'WHERE chat_id=%s   ORDER BY bio_experience DESC;'
         )
         return await self.select_all(query, chat_id, use_index_zero=False)
 
@@ -250,14 +250,14 @@ class RequestsRepoBiowar:
     async def get_victims(self, user_id: int):
         query = (
             'SELECT * FROM Victims INNER JOIN Lab ON lab_id=victim_id'
-            ' WHERE victims_owner_id=%s ORDER BY infect_date DESC;'
+            ' WHERE victims_owner_id=%s   ORDER BY infect_date DESC;'
         )
         return await self.select_all(query, user_id, use_index_zero=False)
     
     async def get_victim_by_infect_range(self, user_id: int, lower_val: int, higher_val: int):
         query = (
             'SELECT * FROM Users INNER JOIN Lab ON Lab.lab_id=Users.id '
-            'WHERE lab_id != %s AND id != %s AND bio_experience BETWEEN %s AND %s ORDER BY RAND() LIMIT 1;'
+            'WHERE lab_id != %s AND id != %s AND bio_experience BETWEEN %s AND %s   ORDER BY RAND() LIMIT 1;'
         )
         params = (user_id, user_id, lower_val, higher_val)
         return await self.select_all(query, params)
@@ -265,7 +265,7 @@ class RequestsRepoBiowar:
     async def get_random_victim(self, user_id: int):
         query = (
             'SELECT * FROM Users INNER JOIN Lab ON Lab.lab_id=Users.id '
-            'WHERE lab_id != %s AND id != %s ORDER BY RAND() LIMIT 1;'
+            'WHERE lab_id != %s AND id != %s   ORDER BY RAND() LIMIT 1;'
         )
         params = (user_id, user_id)
         return await self.select_all(query, params)
@@ -364,7 +364,7 @@ class RequestsRepoBiowar:
     async def get_illnesses(self, user_id: int):
         query = (
             'SELECT * FROM Victims INNER JOIN Lab ON lab_id=victim_id'
-            ' WHERE victim_id=%s ORDER BY infect_date DESC;'
+            ' WHERE victim_id=%s   ORDER BY infect_date DESC;'
         )
         return await self.select_all(query, user_id, use_index_zero=False)
     
@@ -398,15 +398,15 @@ class RequestsRepoBiowar:
         return await self.select_all(query, corp_code if corp_code else user_id)
     
     async def get_biotop_corps(self):
-        query = 'SELECT * FROM Corporation ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM Corporation   ORDER BY bio_experience DESC;'
         return await self.select_all(query, use_index_zero=False)
     
     async def get_corporation_members(self, corp_code: str):
-        query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s   ORDER BY bio_experience DESC;'
         return await self.select_all(query, corp_code, False)
     
     async def get_corporation_members_ids_list(self, corp_code: str):
-        query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s   ORDER BY bio_experience DESC;'
         members = await self.select_all(query, corp_code, False)
         return [id['member_id'] for id in members]
     
@@ -415,7 +415,7 @@ class RequestsRepoBiowar:
         return await self.select_one(query, corp_code)
     
     async def get_corp_invite_list(self, corp_code: str):
-        query = 'SELECT * FROM CorporationInviteList WHERE corporation_code=%s ORDER BY bio_experience DESC;'
+        query = 'SELECT * FROM CorporationInviteList WHERE corporation_code=%s   ORDER BY bio_experience DESC;'
         return await self.select_all(query, corp_code, False)
     
     async def get_corp_admin_list(self, corp_code: str):
@@ -927,7 +927,7 @@ async def add_suggestion(self, user_id: int, category: str, text: str):
 
 async def get_suggestions(self):
     return await self.select_all(
-        "SELECT * FROM suggestions ORDER BY id DESC;"
+        "SELECT * FROM suggestions   ORDER BY id DESC;"
     )
 
     # Service #

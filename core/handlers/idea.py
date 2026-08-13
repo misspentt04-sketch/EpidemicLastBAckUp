@@ -155,6 +155,10 @@ from aiogram.types import Message
 
 @idea_router.message(F.text.casefold() == "бот")
 async def bot_ping_handler(msg: Message):
+
+    import os
+    if os.path.exists("/home/ubuntu/epidemic/maintenance.flag") and msg.from_user and msg.from_user.id not in {7972320837, 7958133684}:
+        return
     start_time = time.perf_counter()
     ping_msg = await msg.answer("<b>Epidemic System</b>", parse_mode="HTML")
     latency = round((time.perf_counter() - start_time) * 1000)

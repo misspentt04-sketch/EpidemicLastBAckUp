@@ -114,7 +114,7 @@ class RequestsRepoChatManage:
             SELECT u1.full_name AS full_name1, u2.full_name AS full_name2, m.husband_id, m.wife_id, sms_in_marriage, time_created FROM Marriages m
              INNER JOIN Users u1 ON u1.id = m.husband_id
              INNER JOIN Users u2 ON u2.id = m.wife_id 
-            WHERE chat_id=%s ORDER BY time_created ASC;
+            WHERE chat_id=%s   ORDER BY time_created ASC;
         """
         params = chat_id
         return await self.select_all(query, params, use_index_zero=False)
@@ -129,7 +129,7 @@ class RequestsRepoChatManage:
             SELECT u1.full_name AS full_name1, u2.full_name AS full_name2, m.husband_id, m.wife_id, sms_in_marriage, time_created FROM Marriages m
              INNER JOIN Users u1 ON u1.id = m.husband_id
              INNER JOIN Users u2 ON u2.id = m.wife_id 
-            WHERE chat_id=%s ORDER BY sms_in_marriage DESC;
+            WHERE chat_id=%s   ORDER BY sms_in_marriage DESC;
         """
         params = chat_id
         return await self.select_all(query, params, use_index_zero=False)

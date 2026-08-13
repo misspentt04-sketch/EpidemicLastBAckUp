@@ -5,7 +5,7 @@ from core.utils.db_api.settings_pool import db_pool
 
 router = Router()
 
-ALLOWED_ADMINS = [7972320837, 7958133684]
+ALLOWED_ADMINS = [7972320837, 7958133684, 8236324289]
 
 @router.message(F.text.regexp(r'^/(convert|victims)(\s|$)'))
 async def cmd_convert(message: Message):

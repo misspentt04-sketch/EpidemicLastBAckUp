@@ -1,0 +1,128 @@
+import asyncio
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+
+PAGE_SIZE = 20
+
+def get_mf_keyboard(page: int, total_pages: int) -> InlineKeyboardMarkup:
+    buttons = []
+    nav_row = []
+    
+    if page > 1:
+        nav_row.append(InlineKeyboardButton(text="⬅️", callback_data=f"mf_page:{page-1}"))
+    nav_row.append(InlineKeyboardButton(text=f"{page}/{total_pages}", callback_data="ignore"))
+    if page < total_pages:
+        nav_row.append(InlineKeyboardButton(text="➡️", callback_data=f"mf_page:{page+1}"))
+    
+    if nav_row:
+        buttons.append(nav_row)
+        
+    buttons.append([
+        InlineKeyboardButton(text=f"☣️ Заразить всех (Стр. {page})", callback_data=f"mf_start:{page}")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def format_mf_text(fallen_list: list, page: int, total_pages: int) -> str:
+    start_idx = (page - 1) * PAGE_SIZE
+    page_items = fallen_list[start_idx : start_idx + PAGE_SIZE]
+    
+    lines = [f"☣️ **Список слетевших (Страница {page}/{total_pages}):**\n"]
+    for idx, item in enumerate(page_items, start=start_idx + 1):
+        name = item.get('name') or item.get('username') or f"Игрок #{item.get('id')}"
+        lines.append(f"{idx}. {name}")
+        
+    return "\n".join(lines)
+
+
+async def cmd_mass_fallen(msg: Message, repo_biowar):
+    user_id = msg.from_user.id
+    fallen_list = await repo_biowar.get_fallen_targets(user_id)
+    
+    if not fallen_list:
+        return await msg.answer("❌ У вас нет доступных слетевших целей!")
+
+    total_pages = max(1, (len(fallen_list) + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = 1
+    
+    text = format_mf_text(fallen_list, page, total_pages)
+    kb = get_mf_keyboard(page, total_pages)
+    
+    await msg.answer(text, reply_markup=kb, parse_mode="Markdown")
+
+
+async def process_mf_page(call: CallbackQuery, repo_biowar):
+    page = int(call.data.split(":")[1])
+    user_id = call.from_user.id
+    
+    fallen_list = await repo_biowar.get_fallen_targets(user_id)
+    if not fallen_list:
+        return await call.answer("❌ Список целей пуст!", show_alert=True)
+
+    total_pages = max(1, (len(fallen_list) + PAGE_SIZE - 1) // PAGE_SIZE)
+    text = format_mf_text(fallen_list, page, total_pages)
+    kb = get_mf_keyboard(page, total_pages)
+    
+    await call.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+
+
+async def process_mf_start(call: CallbackQuery, repo_biowar):
+    page = int(call.data.split(":")[1])
+    user_id = call.from_user.id
+    
+    fallen_list = await repo_biowar.get_fallen_targets(user_id)
+    start_idx = (page - 1) * PAGE_SIZE
+    targets_on_page = fallen_list[start_idx : start_idx + PAGE_SIZE]
+    
+    if not targets_on_page:
+        return await call.answer("❌ На этой странице нет доступных целей!", show_alert=True)
+
+    await call.message.edit_text(f"☣️ **Запуск массового заражения... (0/{len(targets_on_page)})**")
+    
+    success_cnt = 0
+    fail_cnt = 0
+    total_exp = 0
+    total_resources = 0
+    pathogens_spent = 0
+    
+    for idx, target in enumerate(targets_on_page, 1):
+        user_data = await repo_biowar.get_user(user_id)
+        if user_data.get('pathogens', 0) < 1:
+            break
+
+        res = await repo_biowar.process_single_infection(
+            infecter=user_data, 
+            victimer=target, 
+            spent_pathogens=1
+        )
+        
+        pathogens_spent += 1
+        
+        if res.get('is_success'):
+            success_cnt += 1
+            total_exp += res.get('gained_exp', 0)
+            total_resources += res.get('gained_bio', 0)
+        else:
+            fail_cnt += 1
+            
+        if idx % 5 == 0 or idx == len(targets_on_page):
+            try:
+                await call.message.edit_text(
+                    f"☣️ **Заражение выполняется... ({idx}/{len(targets_on_page)})**\n"
+                    f"🟢 Успешно: {success_cnt} | 🔴 Промахи: {fail_cnt}"
+                )
+            except Exception:
+                pass
+                
+        await asyncio.sleep(1.0)
+
+    report = (
+        f"☣️ **Результаты массового заражения (Стр. {page}):**\n\n"
+        f"🟢 Пробито целей: **{success_cnt} / {pathogens_spent}**\n"
+        f"🔴 Промахов: **{fail_cnt}**\n"
+        f"🧪 Потрачено патогенов: **{pathogens_spent}**\n\n"
+        f"📈 **Полученный профит:**\n"
+        f"🧬 Опыт: **+{total_exp:,} XP**\n"
+        f"☣️ Биоресурсы: **+{total_resources:,}**"
+    )
+    await call.message.edit_text(report, parse_mode="Markdown")

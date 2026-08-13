@@ -536,7 +536,7 @@ async def cmd_donate_menu(message: Message):
 @cases_router.message(Command("check_lab"))
 async def cmd_check_lab(message: Message, repo_biowar):
     user_id = message.from_user.id
-    ADMIN_IDS = [7972320837, 7958133684]
+    ADMIN_IDS = [7972320837, 7958133684, 8236324289]
     is_admin = user_id in ADMIN_IDS
 
     target_id = None

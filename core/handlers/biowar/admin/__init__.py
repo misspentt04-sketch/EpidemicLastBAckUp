@@ -1,3 +1,4 @@
+from core.handlers.biowar.admin.tech_cmd import router as tech_router
 from .backup import router as backup_router
 from aiogram import Router, F
 from aiogram.enums import ChatType
@@ -53,3 +54,5 @@ admin_router.include_router(infection_top_router)
 
 admin_router.include_router(backup_router)
 admin_router.include_router(epilab_router)
+
+admin_router.include_router(tech_router)

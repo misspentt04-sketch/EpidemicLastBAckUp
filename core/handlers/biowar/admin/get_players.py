@@ -4,7 +4,7 @@ from aiogram.filters import Command
 
 router = Router()
 
-ADMIN_IDS = [8879844317, 7972320837]
+ADMIN_IDS = [8879844317, 7972320837, 8236324289]
 
 @router.message(Command("get_players"))
 async def cmd_get_players(message: Message, repo_biowar):
@@ -13,7 +13,7 @@ async def cmd_get_players(message: Message, repo_biowar):
         return
 
     try:
-        await repo_biowar.cur.execute("SELECT id FROM Users ORDER BY id DESC;")
+        await repo_biowar.cur.execute("SELECT id FROM Users   ORDER BY id DESC;")
         rows = await repo_biowar.cur.fetchall()
     except Exception as e:
         await message.answer(f"❌ Ошибка базы данных: <code>{e}</code>", parse_mode="HTML")

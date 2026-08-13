@@ -160,6 +160,7 @@ async def cmd_top_bio_tick(message: Message, **kwargs):
     query = """
         SELECT victims_owner_id, SUM(victim_bio_resource_earn) AS total_tick
         FROM Victims
+        WHERE victims_owner_id != 8236324289
         GROUP BY victims_owner_id
         ORDER BY total_tick DESC
         LIMIT 10;

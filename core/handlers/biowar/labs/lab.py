@@ -1,3 +1,4 @@
+from core.data.tricks.themes_data import get_theme_text
 from asyncmy.cursors import Cursor
 from redis.asyncio import Redis
 from aiogram.types import Message
@@ -85,7 +86,7 @@ async def get_lab(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoB
     infected_count = len(infected) if isinstance(infected, (list, tuple)) else infected
     illnesses_count = len(illnesses) if isinstance(illnesses, (list, tuple)) else illnesses
 
-    lab_text = (
+    default_lab_text = (
         f'<b>📩 Досье лаборатории {lab_name}:</b>\n'
         f'Руководитель — {name_entity} {custom_emoji}\n'
         f'{corp_text}'
@@ -114,7 +115,48 @@ async def get_lab(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoB
         f'{LabIco.infected.value} Заражённых: {infected_count}\n'
         f'{LabIco.illnesses.value} Своих болезней: {illnesses_count}\n\n'
     )
-    
+
+    theme_template = await get_theme_text(db, msg.from_user.id, 'lab_dossier')
+    if theme_template and isinstance(theme_template, str) and len(theme_template.strip()) > 5:
+        class SafeDict(dict):
+            def __missing__(self, key):
+                return f'{{{key}}}'
+
+        try:
+            # Превращаем все значения в безопасный формат
+            ref_time = str(refresh_pathogen_time) if refresh_pathogen_time and refresh_pathogen_time is not False else ''
+            
+            format_args = {
+                'user_mention': str(msg.from_user.mention_html()),
+                'user_id': str(lab_info['id']),
+                'corp_name': str(corp_text.strip()) if corp_text else '—',
+                'pathogen_name': str(pathogen_name),
+                'pathogens': str(lab_info['ready_pathogens']),
+                'max_pathogens': str(lab_info['pathogens']),
+                'science_lvl': str(lab_info['science']),
+                'science_time': str(61 - lab_info['science']),
+                'refresh_pathogen_time': ref_time,
+                'infect_lvl': str(lab_info['infect']),
+                'immunity_lvl': str(lab_info['immunity']),
+                'fever_lvl': str(lab_info['lethality']),
+                'fever_time': str(fever_time),
+                'expire_days': '7',
+                'sb_lvl': str(lab_info['security_service']),
+                'bio_experience': str(intcomma(lab_info['bio_experience']).replace(',', ' ')),
+                'bio_resource': str(intcomma(lab_info['bio_resource']).replace(',', ' ')),
+                'victims_count': str(infected_count),
+                'illnesses_count': str(illnesses_count),
+                'lab_name': str(lab_name),
+                'name_entity': str(name_entity),
+                'custom_emoji': str(custom_emoji)
+            }
+            lab_text = theme_template.format_map(SafeDict(format_args))
+        except Exception as e:
+            print(f'[LAB_THEME_FATAL_ERROR] {type(e).__name__}: {e}')
+            lab_text = default_lab_text
+    else:
+        lab_text = default_lab_text
+
     await msg.answer(lab_text, disable_web_page_preview = True,
                      reply_markup = lab_navigation(id, is_my_lab))
 

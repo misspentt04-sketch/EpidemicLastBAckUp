@@ -1,3 +1,6 @@
+from core.handlers.admin_theme_cmd import admin_theme_router
+from lab_converter import register_lab_handlers
+from core.handlers.tricks.themes import router as themes_router
 from core.middlewares.tech_middleware import MaintenanceMiddleware
 from maintenance_middleware import MaintenanceMiddleware
 import admin_guard
@@ -107,7 +110,8 @@ async def main():
     biowar_router2.message.middleware.register(UserRestrictMiddleware(redis_db))
 
     dp.update.outer_middleware(MaintenanceMiddleware())
-    dp.include_routers(
+    dp.include_routers(admin_theme_router, 
+        themes_router,
         restart_router,
         start_router,
         idea_router,
@@ -160,3 +164,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# Регистрация модуля конвертера лаборатории
+# register_lab_handlers(app)

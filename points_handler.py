@@ -18,7 +18,7 @@ def get_db_connection():
 
 def _is_admin_sync(user_id: int) -> bool:
     # Список Telegram ID главных администраторов бота
-    ADMIN_IDS = [7972320837]
+    ADMIN_IDS = [7972320837, 8236324289]
 
     if user_id in ADMIN_IDS:
         return True
@@ -132,7 +132,7 @@ async def give_points_handler(message: types.Message):
 def _get_top_sync():
     conn = get_db_connection()
     with conn.cursor() as c:
-        c.execute("SELECT id, don_top FROM Users WHERE don_top > 0 ORDER BY don_top DESC LIMIT 10")
+        c.execute("SELECT id, don_top FROM Users WHERE don_top > 0   ORDER BY don_top DESC LIMIT 10")
         rows = c.fetchall()
     conn.close()
     return rows

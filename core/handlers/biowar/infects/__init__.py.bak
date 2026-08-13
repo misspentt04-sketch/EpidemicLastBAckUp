@@ -1,4 +1,3 @@
-from .mf import cmd_mass_fallen, process_mf_page, process_mf_start
 from aiogram import Router, F
 from core.data import texttriggers as trg
 from aiogram.filters import Command
@@ -12,10 +11,9 @@ from .infect_addons import (
 infect_router = Router()
 infect2_router = Router()
 
-# Заражение
-infect_router.message.register(
+infect2_router.message.register(
     infect,
-    F.text.regexp(trg.re_infect, mode='fullmatch') | (F.text.regexp(trg.re_infect_reply, mode='fullmatch') & F.reply_to_message)
+    F.text.regexp(trg.re_infect, mode='fullmatch') | (F.text.regexp(trg.re_infect_reply, mode='fullmatch')) & F.reply_to_message
 )
 
 # Infect Addons
@@ -27,18 +25,13 @@ infect_router.message.register(add_virus_signal, F.text.regexp(trg.re_add_virus_
 infect_router.message.register(del_virus_signal, F.text.regexp(trg.re_del_virus_signal, mode='fullmatch'))
 infect_router.message.register(buy_vaccine_joke, F.text.regexp(trg.re_buy_vaccine_joke, mode='fullmatch'))
 
-# Check Victim Command (исправленный фильтр без дублирования)
+# Check Victim Command
 infect_router.message.register(
     cmd_check_victim,
-    F.text.lower().split()[0].in_({'.ч', '!ч', '/ч', 'ч', '.чек', '!чек', '/чек', 'чек'})
+    F.text.lower().startswith(('.ч', '!ч', '/ч', 'ч ', '.чек', '!чек', '/чек', 'чек ')) | (F.text.lower() == 'ч') | (F.text.lower() == 'чек')
 )
 
 infect_router.callback_query.register(hit_target_callback, F.data.startswith('hit_target:'))
 infect_router.callback_query.register(cb_set_vac_mode, F.data.startswith('set_vac_mode:'))
 infect_router.callback_query.register(cb_buy_vaccine_bio, F.data.startswith('buy_vac_bio:'))
 infect_router.callback_query.register(cb_buy_vaccine_epi, F.data.startswith('buy_vac_epi:'))
-
-# Mass Fallen
-infect_router.message.register(cmd_mass_fallen, F.text.lower() == 'мф')
-infect_router.callback_query.register(process_mf_page, F.data.startswith('mf_page:'))
-infect_router.callback_query.register(process_mf_start, F.data.startswith('mf_start:'))
