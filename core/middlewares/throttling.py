@@ -11,7 +11,7 @@ class ThrottlingMiddleware(BaseMiddleware):
     def __init__(
         self,
         limit: int=2.0,
-        per_chat_limit: int = 100,
+        per_chat_limit: int = 1500,
         time_window: int = 60,
         cmd_peer_second: int = 2,
         time_inteval_floodwait: int = 30
