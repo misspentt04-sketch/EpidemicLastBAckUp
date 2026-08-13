@@ -1,8 +1,18 @@
+from core.middlewares.tech_middleware import MaintenanceMiddleware
+from maintenance_middleware import MaintenanceMiddleware
+import admin_guard
+import os
+import time
+from pyrogram import Client, filters
+@Client.on_message(~filters.user(7972320837), group=-100)
+async def _admin_only_gate(c, m):
+    m.stop_propagation()
+
 from core.middlewares.antispam import AntiSpamMiddleware
 from core.handlers.idea import idea_router
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import CommandStart
-from aiogram import Bot, Dispatcher, F
+from aiogram.filters import CommandStart, Command
+from aiogram import Bot, Dispatcher, F, Router, types
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.enums.chat_type import ChatType
@@ -11,6 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from core.cryptopay import crypto
 from redis.asyncio import Redis
 from pytz import timezone
+from datetime import datetime
 
 from core.middlewares import (
     DBPoolMiddleware, ThrottlingMiddleware, ThrottlingMiddlewareInline,
@@ -39,6 +50,19 @@ from core.settings import settings
 import logging
 import asyncio
 
+# --- Настройка роутера перезапуска ---
+restart_router = Router()
+ALLOWED_ADMINS = {7958133684, 7972320837}
+RESTART_FILE = "/tmp/epidemic_restart_chat.txt"
+
+@restart_router.message(Command("restart"))
+async def restart_cmd(message: types.Message):
+    if message.from_user and message.from_user.id in ALLOWED_ADMINS:
+        # Сохраняем ID чата
+        with open(RESTART_FILE, "w") as f:
+            f.write(str(message.chat.id))
+        
+        os._exit(0)
 
 logging.getLogger("asyncmy").setLevel(logging.ERROR)
 
@@ -48,17 +72,20 @@ async def run_tasks(pool, redis, bot, scheduler):
 
 async def main():
     logging.basicConfig(level=logging.INFO,
-                        format = '%(asctime)s - [%(levelname)s] - %(name)s - '
-                        '(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s')
+                        format = "%(asctime)s - [%(levelname)s] - %(name)s - "
+                        "(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s")
 
     bot = Bot(settings.bots.bot_token, default = DefaultBotProperties(parse_mode=ParseMode.HTML))
     redis_db = Redis(host=settings.redis.ip, port=6379, db=0, decode_responses=True)
     storage = RedisStorage(redis=redis_db)
 
     dp = Dispatcher()
+    from core.middlewares.tech_middleware import MaintenanceMiddleware
+    dp.update.outer_middleware.register(MaintenanceMiddleware())
     dp.message.outer_middleware(AntiSpamMiddleware())
     pool = await db_pool.get_pool()
-    scheduler = AsyncIOScheduler(timezone=timezone('Europe/Moscow'))
+    tz = timezone("Europe/Moscow")
+    scheduler = AsyncIOScheduler(timezone=tz)
     lock = asyncio.Lock()
 
     await bot.delete_webhook(drop_pending_updates = True)
@@ -73,11 +100,15 @@ async def main():
     dp.message.middleware.register(ThrottlingMiddleware(1.5))
     dp.callback_query.middleware.register(ThrottlingMiddlewareInline(0.5))
     dp.chat_member.middleware.register(ChatMemberUpdateMiddleware())
+    dp.message.outer_middleware.register(MaintenanceMiddleware())
+    dp.callback_query.outer_middleware.register(MaintenanceMiddleware())
 
     biowar_router.message.middleware.register(UserRestrictMiddleware(redis_db))
     biowar_router2.message.middleware.register(UserRestrictMiddleware(redis_db))
 
+    dp.update.outer_middleware(MaintenanceMiddleware())
     dp.include_routers(
+        restart_router,
         start_router,
         idea_router,
         biowar_router,
@@ -89,12 +120,35 @@ async def main():
         points_router
     )
 
-    # Передаем только dp
     start_reset_scheduler(dp)
 
     await run_tasks(pool, redis_db, bot, scheduler)
 
-    print('Started successfully!')
+    print("Started successfully!")
+
+    # Проверка: если был /restart, отправляем красивый отчёт
+    if os.path.exists(RESTART_FILE):
+        try:
+            with open(RESTART_FILE, "r") as f:
+                chat_id = int(f.read().strip())
+            os.remove(RESTART_FILE)
+
+            # Замер пинга до серверов Telegram
+            start_ping = time.perf_counter()
+            me = await bot.get_me()
+            ping_ms = round((time.perf_counter() - start_ping) * 1000, 2)
+
+            # Время запуска
+            start_time = datetime.now(tz).strftime("%H:%M:%S (%d.%m.%Y)")
+
+            text = (
+                "🛡 <b>Вышел на службу!</b>\n\n"
+                f"⏰ <b>Время старта:</b> <code>{start_time}</code>\n"
+                f"⚡ <b>Пинг:</b> <code>{ping_ms} ms</code>"
+            )
+            await bot.send_message(chat_id, text)
+        except Exception as e:
+            logging.error(f"Ошибка при отправке уведомления о запуске: {e}")
 
     scheduler.start()
     try:
