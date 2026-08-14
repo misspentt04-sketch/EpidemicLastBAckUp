@@ -1,3 +1,4 @@
+from aiogram.exceptions import TelegramBadRequest
 import json
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -198,19 +199,28 @@ async def themes_menu_handler(message: Message, db=None):
 @router.callback_query(F.data == "main_themes_menu")
 async def main_themes_callback(call: CallbackQuery, db=None):
     text, kb = await get_main_menu(db, call.from_user.id)
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    try:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except TelegramBadRequest:
+        await call.answer()
     await call.answer()
 
 @router.callback_query(F.data == "my_themes_menu")
 async def my_themes_callback(call: CallbackQuery, db=None):
     text, kb = await get_my_themes_menu(db, call.from_user.id)
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    try:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except TelegramBadRequest:
+        await call.answer()
     await call.answer()
 
 @router.callback_query(F.data == "shop_themes_menu")
 async def shop_themes_callback(call: CallbackQuery, db=None):
     text, kb = await get_shop_themes_menu(db, call.from_user.id)
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    try:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except TelegramBadRequest:
+        await call.answer()
     await call.answer()
 
 @router.callback_query(F.data.startswith("set_theme:"))
@@ -227,7 +237,10 @@ async def set_theme_callback(call: CallbackQuery, db=None):
     theme_name = theme_info.get("name", theme_id)
 
     text, kb = await get_my_themes_menu(db, call.from_user.id)
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    try:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except TelegramBadRequest:
+        await call.answer()
     await call.answer(f"✅ Установлена тема: {theme_name}", show_alert=False)
 
 @router.callback_query(F.data.startswith("buy_theme:"))
@@ -260,4 +273,13 @@ async def buy_theme_callback(call: CallbackQuery, db=None):
     await call.answer(f"🎉 Вы успешно купили и установили тему: {theme_name}!", show_alert=True)
 
     text, kb = await get_shop_themes_menu(db, user_id)
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    try:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except TelegramBadRequest:
+        await call.answer()
+
+
+async def get_theme_text(db, user_id: int, text_key: str) -> str:
+    active_theme = await get_user_theme(db, user_id)
+    from core.data.tricks.themes_data import get_theme_text as get_raw_theme_text
+    return get_raw_theme_text(active_theme, text_key)

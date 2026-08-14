@@ -48,7 +48,7 @@ async def pathogen_name_change(msg: Message, bot: Bot, db: Cursor, repo_biowar: 
     await msg.answer(text)
     await asyncio.sleep(1)
     
-    is_mat = gpt_thinks(tricks_genai['prompts']['anti_mat'].format(pathogen_name))
+   # is_mat = gpt_thinks(tricks_genai['prompts']['anti_mat'].format(pathogen_name))
     
     if int(is_mat) == 1:
         try:

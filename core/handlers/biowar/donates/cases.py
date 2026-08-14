@@ -217,7 +217,7 @@ async def cb_open_case1(call: CallbackQuery, db):
         "<blockquote expandable>",
         "📊 <b>Шансы на дроп:</b>",
         f"├ 💎 <b>Донат-кейс:</b> <code>2.5%</code>",
-        f"├ 🧪 <b>Патогены:</b> <code>{ch_pat}</code>",
+        f"├ 🧪 <b>🧪 Готовых патогенов:</b> <code>{ch_pat}</code>",
         f"├ ☣️ <b>ЗЗ / 🛡 Иммун / ☠️ Летальность:</b> по <code>{ch_oth}</code>",
         f"└ 🧬 <b>Разработка (макс +3):</b> <code>{ch_sci}</code>",
         "</blockquote>"
@@ -573,7 +573,7 @@ async def cmd_check_lab(message: Message, repo_biowar):
     admin_note = " <i>(Админ-доступ)</i>" if is_admin else ""
     text = (
         f"🔬 <b>Лаборатория игрока</b> ID: <code>{target_id}</code>{admin_note}\n\n"
-        f"{emoji} <b>Патоген:</b> {p_name}\n"
+        f"{emoji} <b>🏷 Имя патогена:</b> {p_name}\n"
         f"🎯 <b>Заразность:</b> {infectivity}\n"
         f"☠️ <b>Летальность:</b> {lethality}\n"
         f"🛡 <b>Иммунитет:</b> {immunity}\n"
