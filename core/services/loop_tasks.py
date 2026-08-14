@@ -288,7 +288,7 @@ async def sanitize_pathogens(pool: Pool):
             await cur.execute("UPDATE Lab SET science_time = NULL WHERE ready_pathogens >= pathogens AND science_time IS NOT NULL;")
 
 async def weekly_exp_grant(pool: Pool):
-    """Каждое воскресенье в 00:00 начисляется 1000 EXP всем лабораториям"""
+    """Каждое воскресенье в 00:00 начисляется 100 EXP всем лабораториям"""
     while True:
         now = datetime.now(moscow_tz)
         # 6 = Воскресенье (Monday=0 ... Sunday=6)
@@ -307,7 +307,7 @@ async def weekly_exp_grant(pool: Pool):
         try:
             async with pool.acquire() as conn:
                 async with conn.cursor(DictCursor) as cur:
-                    await cur.execute("UPDATE Lab SET bio_experience = bio_experience + 1000;")
-            print("[Weekly EXP] Успешно начислено 1000 EXP всем игрокам (Воскресенье 00:00)!")
+                    await cur.execute("UPDATE Lab SET bio_experience = bio_experience + 100;")
+            print("[Weekly EXP] Успешно начислено 100 EXP всем игрокам (Воскресенье 00:00)!")
         except Exception as e:
             print(f"[Weekly EXP Error] {e}")

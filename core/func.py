@@ -273,24 +273,26 @@ def get_biotop_corp(corp_members: List[dict]):
     
     return users_list
 
-def get_biotop_lab(lab_list: List[dict]):
-    
+def get_biotop_lab(lab_list: List[dict], page: int = 1):
+
     if not lab_list:
-        return ''
-    
+        return [[], [0]]
+
     users_list = [[], [0]]
-    
-    for num, string in enumerate(lab_list, 1):
-        users_list[1][0] += string['bio_experience']
+    for string in lab_list:
+        users_list[1][0] += string.get("bio_experience", 0)
+
+    start_idx = (page - 1) * 20
+    end_idx = start_idx + 20
+    page_items = lab_list[start_idx:end_idx]
+
+    for offset, string in enumerate(page_items):
+        num = start_idx + offset + 1
         users_list[0].append(
-            (
-                f'{num}. <a href="{deep_links["mention"]}{string["lab_id"]}">{string["lab_name"]}</a> | '
-                f'{intcomma(string["bio_experience"])} опыт'
-            )
+            f"{num}. <a href=\"{deep_links["mention"]}{string["lab_id"]}\">{string["lab_name"]}</a> | "
+            f"{intcomma(string["bio_experience"])} опыт"
         )
-        if num >= 20:
-            break
-    
+
     return users_list
 
 def get_notes_list(notes: List[dict]):

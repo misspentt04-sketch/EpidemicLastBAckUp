@@ -6,7 +6,7 @@ from aiogram.enums import ChatType
 from .lab import get_lab, lab_lvlup_skills
 from .lab_inline import lab_lvlup, lab_lvlup_confirm, lab_lvl_up_confirm_extend
 from .lab_addons import pathogen_name_change, lab_dossier, customization_emoji, change_lab_name
-from .lab_biotop import biotop, biotop_chat
+from .lab_biotop import biotop, biotop_chat, router as lab_biotop_router
 
 from core.utils.callbackdata import Lab, LabLvlUpConfirm, LabLvlUpConfirmExtend
 
@@ -28,3 +28,5 @@ lab_router.message.register(customization_emoji, F.text.regexp(trg.re_customizat
 lab_router.callback_query.register(lab_lvlup_confirm, LabLvlUpConfirm.filter(F.skill.startswith('lab_confirm_')))
 lab_router.callback_query.register(lab_lvlup, Lab.filter(F.skill.startswith('lab_')))
 lab_router.callback_query.register(lab_lvl_up_confirm_extend, LabLvlUpConfirmExtend.filter(F.action == 'lvlup_extend'))
+
+lab_router.include_router(lab_biotop_router)

@@ -56,3 +56,6 @@ admin_router.include_router(backup_router)
 admin_router.include_router(epilab_router)
 
 admin_router.include_router(tech_router)
+
+from .my_top_cmd import router as my_top_router
+admin_router.include_router(my_top_router)

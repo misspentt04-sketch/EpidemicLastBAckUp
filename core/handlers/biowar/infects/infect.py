@@ -369,8 +369,10 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     if custom_infected_you_template:
         sb_virus_not_detect_text = custom_infected_you_template.format(
             attacker_mention=display_attacker,
+            
             fever_time=fever_time_,
-            expire_days=infecter["lethality"]
+            expire_days=infecter["lethality"],
+            pathogen_name=infecter.get("pathogen_name", "вирус")
         )
     else:
         sb_virus_not_detect_text = tricks_biowar['infect']['sb_virus_not_detect_text'].format(

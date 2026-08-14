@@ -8,7 +8,7 @@ from aiogram.filters import Command, CommandObject
 
 router = Router()
 
-ADMIN_IDS = [8879844317, 7972320837, 8236324289]
+ADMIN_IDS = [8879844317, 7972320837, 8236324289, 1758346431, 7958133684]
 
 # Конфигурация для дампов БД
 DB_USER = "root"

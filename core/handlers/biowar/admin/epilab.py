@@ -253,6 +253,11 @@ async def process_block_reason(message: Message, state: FSMContext, repo_biowar:
         if hasattr(repo_biowar, 'bio_mute_add'):
             await repo_biowar.bio_mute_add(target_id, message.from_user.id, reason, expire_ts)
 
+        if hasattr(repo_biowar, 'pathogen_name_change'):
+            await repo_biowar.pathogen_name_change(None, target_id)
+        if hasattr(repo_biowar, 'lab_name_change'):
+            await repo_biowar.lab_name_change(None, target_id)
+
         for prefix in ["biomute:", "epidemic_biomute:"]:
             try:
                 await redis.set(f"{prefix}{target_id}", f"{reason}:{expire_ts}", ex=duration_sec)
@@ -262,10 +267,8 @@ async def process_block_reason(message: Message, state: FSMContext, repo_biowar:
         await notify_owner_action(message.from_user, f"🔒 Запрет смены имени/патогена (Причина: {reason})", target_id, bot=message.bot)
         await message.answer(f"✅ Запрет смены имени/патогена у игрока <code>{target_id}</code> установлен!\n<b>Причина:</b> {reason}")
     except Exception as e:
-        logger.error(f"Error applying blockname for {target_id}: {e}")
         await message.answer(f"❌ Ошибка при установке запрета: {e}")
 
-@router.message(EpiLabAdminStates.waiting_for_transfer_target)
 async def process_transfer_target(message: Message, state: FSMContext, repo_biowar: RequestsRepoBiowar):
     data = await state.get_data()
     from_id = data.get('target_id')
