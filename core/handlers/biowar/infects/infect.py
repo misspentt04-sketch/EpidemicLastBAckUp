@@ -224,7 +224,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         custom_fail_template = await get_theme_text(db, msg.from_user.id, 'infect_failed')
         if custom_fail_template:
             fail_text = custom_fail_template.format(
-                target_mention=vic_entity,
+                target_name=vic_entity_sb, target_mention=vic_entity,
                 pathogens_left=inf_ready_pathogens_left,
                 penetration_chance=display_chance_str
             )
@@ -324,36 +324,31 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
     custom_success_template = await get_theme_text(db, msg.from_user.id, 'infect_success')
     if custom_success_template:
-        if vic_new:
-            text = custom_success_template.format(
+        p_name = pathogen_name if pathogen_name else "Неизвестный патоген"
+        try:
+            if not vic_new:
+                t_lines = custom_success_template.splitlines()
+                t_lines = [l for l in t_lines if not l.strip().startswith("✨")]
+                template_to_use = chr(10).join(t_lines)
+            else:
+                template_to_use = custom_success_template
+
+            text = template_to_use.format(
                 attacker_mention=inf_entity,
+                target_name=vic_entity_sb,
                 target_mention=vic_entity,
-                pathogen_name=infecter['pathogen_name'] if infecter['pathogen_name'] else "Неизвестное дело",
+                pathogen_name=p_name,
                 fever_time=fever_time_,
                 expire_days=infecter["lethality"],
                 exp_gain=intcomma(earn_exp),
                 res_gain=intcomma(earn_exp),
                 victim_new=intcomma(earn_exp)
             )
-        else:
-            # Если жертва старая, удаляем последнюю строчку шаблона с иконкой ✨
-            template_lines = custom_success_template.splitlines()
-            cleaned_lines = [l for l in template_lines if not l.strip().startswith("✨")]
-            cleaned_template = chr(10).join(cleaned_lines)
-            
-            text = cleaned_template.format(
-                attacker_mention=inf_entity,
-                target_mention=vic_entity,
-                pathogen_name=infecter['pathogen_name'] if infecter['pathogen_name'] else "Неизвестное дело",
-                fever_time=fever_time_,
-                expire_days=infecter["lethality"],
-                exp_gain=intcomma(earn_exp),
-                res_gain="",
-                victim_new=""
-            )
+        except Exception as e:
+            print(f"[INFECT SUCCESS FORMAT ERROR] {e}")
+            text = default_success_msg
     else:
         text = default_success_msg
-
     sb_virus_detect_text = tricks_biowar['infect']['sb_virus_detect'].format(
         vic_entity, spent_pathogens, inf_entity,
         inf_entity, pathogen_name, vic_entity_sb, fever_time_,
@@ -367,11 +362,19 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
     custom_infected_you_template = await get_theme_text(db, victimer.get('user_id', victimer.get('id')), 'infected_you')
     if custom_infected_you_template:
-        sb_virus_not_detect_text = custom_infected_you_template.format(
-            attacker_mention=display_attacker,
-            fever_time=fever_time_,
-            expire_days=infecter["lethality"]
-        )
+        try:
+            sb_virus_not_detect_text = custom_infected_you_template.format(
+                attacker_mention=display_attacker,
+                target_mention=vic_entity,
+                pathogen_name=pathogen_name,
+                fever_time=fever_time_,
+                expire_days=infecter["lethality"]
+            )
+        except Exception as ex_vic:
+            print(f"[INFECTED_YOU FORMAT ERROR] {ex_vic}")
+            sb_virus_not_detect_text = tricks_biowar['infect']['sb_virus_not_detect_text'].format(
+                pathogen_name, vic_entity_sb, fever_time_, infecter["lethality"]
+            )
     else:
         sb_virus_not_detect_text = tricks_biowar['infect']['sb_virus_not_detect_text'].format(
             pathogen_name, vic_entity_sb, fever_time_, infecter["lethality"]
