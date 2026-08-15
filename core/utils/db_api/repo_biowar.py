@@ -1039,15 +1039,20 @@ class RequestsRepoBiowar:
         from_id, to_id = int(from_id), int(to_id)
 
         # 1. Проверяем существование обеих лабораторий
-        await self.cur.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (from_id,))
-        if not await self.cur.fetchone():
+        await self.cur.execute("SELECT lab_id, pathogen_name FROM Lab WHERE lab_id = %s;", (from_id,))
+        lab1 = await self.cur.fetchone()
+        if not lab1:
             raise ValueError(f"Лаборатория {from_id} не найдена.")
 
-        await self.cur.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (to_id,))
-        if not await self.cur.fetchone():
+        await self.cur.execute("SELECT lab_id, pathogen_name FROM Lab WHERE lab_id = %s;", (to_id,))
+        lab2 = await self.cur.fetchone()
+        if not lab2:
             raise ValueError(f"Лаборатория {to_id} не найдена.")
 
-        # 2. Обмен характеристиками лабораторий через переменные MySQL
+        pathogen1 = lab1.get('pathogen_name') if isinstance(lab1, dict) else lab1[1]
+        pathogen2 = lab2.get('pathogen_name') if isinstance(lab2, dict) else lab2[1]
+
+        # 2. Обмен характеристиками лабораторий в таблице Lab
         swap_sql = """
             UPDATE Lab l1, Lab l2
             SET 
@@ -1078,7 +1083,18 @@ class RequestsRepoBiowar:
         """
         await self.cur.execute(swap_sql, (from_id, to_id))
 
-        # 3. Фиксируем изменения в транзакции
+        # 3. Перенос жертв в таблице Victims
+        await self.cur.execute("UPDATE Victims SET victims_owner_id = -999999 WHERE victims_owner_id = %s;", (from_id,))
+        await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = %s;", (from_id, to_id))
+        await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = -999999;", (to_id,))
+
+        # 4. Обновляем имя патогена в таблице Victims
+        if pathogen1:
+            await self.cur.execute("UPDATE Victims SET pathogen_name = %s WHERE victims_owner_id = %s;", (pathogen1, to_id))
+        if pathogen2:
+            await self.cur.execute("UPDATE Victims SET pathogen_name = %s WHERE victims_owner_id = %s;", (pathogen2, from_id))
+
+        # 5. Фиксируем транзакцию
         for attr in ['conn', '_conn', 'connection', '_connection']:
             if hasattr(self, attr) and getattr(self, attr):
                 obj = getattr(self, attr)
