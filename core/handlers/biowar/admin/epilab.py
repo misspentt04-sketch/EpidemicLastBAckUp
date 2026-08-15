@@ -269,6 +269,7 @@ async def process_block_reason(message: Message, state: FSMContext, repo_biowar:
     except Exception as e:
         await message.answer(f"❌ Ошибка при установке запрета: {e}")
 
+@router.message(EpiLabAdminStates.waiting_for_transfer_target)
 async def process_transfer_target(message: Message, state: FSMContext, repo_biowar: RequestsRepoBiowar):
     data = await state.get_data()
     from_id = data.get('target_id')

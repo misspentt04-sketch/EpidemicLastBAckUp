@@ -1035,48 +1035,56 @@ class RequestsRepoBiowar:
                 })
         return result
 
-
-
-
-
-
-
     async def transfer_lab(self, from_id: int, to_id: int):
+        from_id, to_id = int(from_id), int(to_id)
+
         # 1. Проверяем существование обеих лабораторий
         await self.cur.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (from_id,))
-        lab_from = await self.cur.fetchone()
+        if not await self.cur.fetchone():
+            raise ValueError(f"Лаборатория {from_id} не найдена.")
 
         await self.cur.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (to_id,))
-        lab_to = await self.cur.fetchone()
+        if not await self.cur.fetchone():
+            raise ValueError(f"Лаборатория {to_id} не найдена.")
 
-        if not lab_from or not lab_to:
-            raise ValueError("Одна из лабораторий не найдена в базе данных.")
-
-        # 2. Обмен данными лабораторий через временные переменные MySQL
-        query_swap_labs = """
+        # 2. Обмен характеристиками лабораторий через переменные MySQL
+        swap_sql = """
             UPDATE Lab l1, Lab l2
             SET 
-                l1.pathogens = @p1:=l1.pathogens, l1.pathogens = l2.pathogens, l2.pathogens = @p1,
-                l1.ready_pathogens = @p2:=l1.ready_pathogens, l1.ready_pathogens = l2.ready_pathogens, l2.ready_pathogens = @p2,
-                l1.science = @p3:=l1.science, l1.science = l2.science, l2.science = @p3,
-                l1.infect = @p4:=l1.infect, l1.infect = l2.infect, l2.infect = @p4,
-                l1.immunity = @p5:=l1.immunity, l1.immunity = l2.immunity, l2.immunity = @p5,
-                l1.lethality = @p6:=l1.lethality, l1.lethality = l2.lethality, l2.lethality = @p6,
-                l1.security_service = @p7:=l1.security_service, l1.security_service = l2.security_service, l2.security_service = @p7,
-                l1.bio_resource = @p8:=l1.bio_resource, l1.bio_resource = l2.bio_resource, l2.bio_resource = @p8,
-                l1.victims_food = @p9:=l1.victims_food, l1.victims_food = l2.victims_food, l2.victims_food = @p9,
-                l1.lab_dossier = @p10:=l1.lab_dossier, l1.lab_dossier = l2.lab_dossier, l2.lab_dossier = @p10,
-                l1.bio_experience = @p11:=l1.bio_experience, l1.bio_experience = l2.bio_experience, l2.bio_experience = @p11,
-                l1.pet_boost_exp = @p12:=l1.pet_boost_exp, l1.pet_boost_exp = l2.pet_boost_exp, l2.pet_boost_exp = @p12
+                l1.lab_name = @v1:=l1.lab_name, l1.lab_name = l2.lab_name, l2.lab_name = @v1,
+                l1.customization_emoji = @v2:=l1.customization_emoji, l1.customization_emoji = l2.customization_emoji, l2.customization_emoji = @v2,
+                l1.pathogen_name = @v3:=l1.pathogen_name, l1.pathogen_name = l2.pathogen_name, l2.pathogen_name = @v3,
+                l1.pathogens = @v4:=l1.pathogens, l1.pathogens = l2.pathogens, l2.pathogens = @v4,
+                l1.ready_pathogens = @v5:=l1.ready_pathogens, l1.ready_pathogens = l2.ready_pathogens, l2.ready_pathogens = @v5,
+                l1.science = @v6:=l1.science, l1.science = l2.science, l2.science = @v6,
+                l1.science_time = @v7:=l1.science_time, l1.science_time = l2.science_time, l2.science_time = @v7,
+                l1.infect = @v8:=l1.infect, l1.infect = l2.infect, l2.infect = @v8,
+                l1.immunity = @v9:=l1.immunity, l1.immunity = l2.immunity, l2.immunity = @v9,
+                l1.lethality = @v10:=l1.lethality, l1.lethality = l2.lethality, l2.lethality = @v10,
+                l1.security_service = @v11:=l1.security_service, l1.security_service = l2.security_service, l2.security_service = @v11,
+                l1.bio_experience = @v12:=l1.bio_experience, l1.bio_experience = l2.bio_experience, l2.bio_experience = @v12,
+                l1.bio_resource = @v13:=l1.bio_resource, l1.bio_resource = l2.bio_resource, l2.bio_resource = @v13,
+                l1.fever = @v14:=l1.fever, l1.fever = l2.fever, l2.fever = @v14,
+                l1.fever_pathogen_name = @v15:=l1.fever_pathogen_name, l1.fever_pathogen_name = l2.fever_pathogen_name, l2.fever_pathogen_name = @v15,
+                l1.victims_food = @v16:=l1.victims_food, l1.victims_food = l2.victims_food, l2.victims_food = @v16,
+                l1.chat_setup_virus = @v17:=l1.chat_setup_virus, l1.chat_setup_virus = l2.chat_setup_virus, l2.chat_setup_virus = @v17,
+                l1.lab_dossier = @v18:=l1.lab_dossier, l1.lab_dossier = l2.lab_dossier, l2.lab_dossier = @v18,
+                l1.pet_boost_exp = @v19:=l1.pet_boost_exp, l1.pet_boost_exp = l2.pet_boost_exp, l2.pet_boost_exp = @v19,
+                l1.epicoins = @v20:=l1.epicoins, l1.epicoins = l2.epicoins, l2.epicoins = @v20,
+                l1.case1 = @v21:=l1.case1, l1.case1 = l2.case1, l2.case1 = @v21,
+                l1.case2 = @v22:=l1.case2, l1.case2 = l2.case2, l2.case2 = @v22,
+                l1.last_farm = @v23:=l1.last_farm, l1.last_farm = l2.last_farm, l2.last_farm = @v23
             WHERE l1.lab_id = %s AND l2.lab_id = %s;
         """
-        await self.cur.execute(query_swap_labs, (from_id, to_id))
+        await self.cur.execute(swap_sql, (from_id, to_id))
 
-        # 3. Обмен жертвами в Victims
-        await self.cur.execute("SET FOREIGN_KEY_CHECKS = 0;")
-        try:
-            await self.cur.execute("UPDATE Victims SET victims_owner_id = -999999 WHERE victims_owner_id = %s;", (from_id,))
-            await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = %s;", (from_id, to_id))
-            await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = -999999;", (to_id,))
-        finally:
-            await self.cur.execute("SET FOREIGN_KEY_CHECKS = 1;")
+        # 3. Фиксируем изменения в транзакции
+        for attr in ['conn', '_conn', 'connection', '_connection']:
+            if hasattr(self, attr) and getattr(self, attr):
+                obj = getattr(self, attr)
+                if hasattr(obj, 'commit'):
+                    await obj.commit()
+            if hasattr(self.cur, attr) and getattr(self.cur, attr):
+                obj = getattr(self.cur, attr)
+                if hasattr(obj, 'commit'):
+                    await obj.commit()
