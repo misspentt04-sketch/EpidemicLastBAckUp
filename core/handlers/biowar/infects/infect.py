@@ -32,6 +32,9 @@ import time
 
 
 async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar, redis: Redis, lock: Lock):
+    if await redis.get(f"epidemic_infect_cooldown:{msg.from_user.id}"):
+        return
+    await redis.set(f"epidemic_infect_cooldown:{msg.from_user.id}", "1", px=500)
     async with lock:
         id = msg.from_user.id
         chat_id = msg.chat.id
