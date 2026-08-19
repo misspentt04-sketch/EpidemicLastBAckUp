@@ -1,11 +1,21 @@
 from aiogram.filters import Command
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters.callback_data import CallbackData
 from aiogram.utils.text_decorations import html_decoration as hd
+from aiogram.exceptions import TelegramBadRequest
 from core.utils.db_api.settings_pool import db_pool
 from datetime import datetime, timedelta
+import time
 
 router = Router()
+
+# Антиспам кэш (user_id: timestamp)
+_user_cooldowns = {}
+
+class TopCallback(CallbackData, prefix="top"):
+    period: str
+    owner_id: int
 
 def get_next_sunday_reset():
     now = datetime.now()
@@ -30,7 +40,6 @@ async def get_top_text(period_type):
         async with conn.cursor() as cur:
             if period_type == "w":
                 title = "Топ заражений (за неделю)"
-                # Используем надежную фильтрацию по YEARWEEK (ISO 1 mode)
                 date_filter = "AND (YEARWEEK(h.infect_date, 1) = YEARWEEK(NOW(), 1) OR h.week_str = DATE_FORMAT(NOW(), '%G-%V'))"
                 reset_date = get_next_sunday_reset()
                 reset_info = f"🔄 <i>Сброс: {reset_date}</i>"
@@ -92,70 +101,51 @@ async def get_top_text(period_type):
             text += f"\n{reset_info}"
             return text
 
-def get_keyboard():
+def get_keyboard(owner_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="📅 Неделя", callback_data="top_w"),
-            InlineKeyboardButton(text="📅 Месяц", callback_data="top_m"),
-            InlineKeyboardButton(text="⏳ Всё время", callback_data="top_a")
+            InlineKeyboardButton(text="📅 Неделя", callback_data=TopCallback(period="w", owner_id=owner_id).pack()),
+            InlineKeyboardButton(text="📅 Месяц", callback_data=TopCallback(period="m", owner_id=owner_id).pack()),
+            InlineKeyboardButton(text="⏳ Всё время", callback_data=TopCallback(period="a", owner_id=owner_id).pack())
         ]
     ])
 
 @router.message(F.text.regexp(r"(?i)^топ\s+зар$"))
 async def cmd_top_zar(message: Message):
     text = await get_top_text("a")
-    await message.answer(text, parse_mode="HTML", reply_markup=get_keyboard())
+    await message.answer(text, parse_mode="HTML", reply_markup=get_keyboard(message.from_user.id))
 
-@router.callback_query(F.data.in_({"top_w", "top_m", "top_a"}))
-async def top_callback(callback: CallbackQuery):
-    p_type = callback.data.split("_")[1] # w, m, a
-    text = await get_top_text(p_type)
+@router.callback_query(TopCallback.filter())
+async def top_callback(callback: CallbackQuery, callback_data: TopCallback):
+    user_id = callback.from_user.id
+
+    # 1. Проверка владельца кнопки
+    if user_id != callback_data.owner_id:
+        await callback.answer("❌ Вы не можете переключать чужое меню!", show_alert=True)
+        return
+
+    # 2. Ограничение в 1 секунду (Кулдаун)
+    now = time.time()
+    last_time = _user_cooldowns.get(user_id, 0)
+    if now - last_time < 1.0:
+        await callback.answer("⏳ Не так быстро! Подождите секунду.", show_alert=False)
+        return
+
+    _user_cooldowns[user_id] = now
+    text = await get_top_text(callback_data.period)
 
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_keyboard())
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_keyboard(callback_data.owner_id))
+        await callback.answer()
+    except TelegramBadRequest:
+        # Подавляем ошибку "message is not modified" при клике по активной вкладке
+        await callback.answer()
     except Exception:
-        pass
-    await callback.answer()
+        await callback.answer()
 
 
 @router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-
-
-@router.message(Command("top_bio"))
-@router.message(F.text.regexp(r"(?i)^(топ\\s+(био|биовойн[аы]))$"))
+@router.message(F.text.regexp(r"(?i)^(топ\s+(био|биовойн[аы]))$"))
 async def cmd_top_bio_tick(message: Message, **kwargs):
     query = """
         SELECT victims_owner_id, SUM(victim_bio_resource_earn) AS total_tick
@@ -165,7 +155,7 @@ async def cmd_top_bio_tick(message: Message, **kwargs):
         ORDER BY total_tick DESC
         LIMIT 10;
     """
-    
+
     async with db_pool._pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(query)
