@@ -596,13 +596,13 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
     elif action == 'ac':
         await state.update_data(target_id=target_id)
         await state.set_state(EpiLabAdminStates.waiting_for_ac_reason)
-        await callback.message.answer("✍️ Введите причину для АС:")
+        await callback.message.answer("✍️ Введите причину для АС (выдается НАВСЕГДА):")
         await callback.answer()
 
     elif action == 'blockname':
         await state.update_data(target_id=target_id)
         await state.set_state(EpiLabAdminStates.waiting_for_block_reason)
-        await callback.message.answer("✍️ Введите причину для запрета смены имени/патогена:")
+        await callback.message.answer("✍️ Введите причину для запрета смены имени/патогена (выдается на 31 день):")
         await callback.answer()
 
     elif action == 'unblock':
@@ -628,6 +628,7 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
 
     elif action == 'reset':
         try:
+            # Сбрасываем параметры лаборатории
             await repo_biowar.update_lab_skill_val(target_id, 'infect', 1)
             await repo_biowar.update_lab_skill_val(target_id, 'immunity', 1)
             await repo_biowar.update_lab_skill_val(target_id, 'lethality', 1)
@@ -640,9 +641,13 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
 
             await repo_biowar.pathogen_name_change(None, target_id)
             await repo_biowar.lab_name_change(None, target_id)
+            
+            # Удаляем всех жертв игрока
+            await repo_biowar.execute_query("DELETE FROM Victims WHERE victims_owner_id = %s;", target_id)
+            logger.info(f"Жертвы игрока {target_id} удалены при обнуле")
 
-            await notify_owner_action(callback.from_user, "💣 Сброс параметров лаборатории (Обнул)", target_id, bot=callback.bot)
-            await callback.answer("💣 Лаборатория успешно сброшена до начального уровня!", show_alert=True)
+            await notify_owner_action(callback.from_user, "💣 Сброс параметров лаборатории и удаление жертв (Обнул)", target_id, bot=callback.bot)
+            await callback.answer("💣 Лаборатория сброшена, все жертвы удалены!", show_alert=True)
         except Exception as e:
             logger.error(f"Error reset lab {target_id}: {e}")
             await callback.answer("❌ Ошибка при сбросе лаборатории!", show_alert=True)

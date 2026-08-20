@@ -1195,3 +1195,61 @@ class RequestsRepoBiowar:
         if result and isinstance(result, list) and len(result) > 0:
             return result[0]
         return None
+
+    async def game_mute_add(self, user_id: int, admin_id: int, reason: str, time_expire: int):
+        query = """
+            INSERT INTO GameMute (user_id, admin, reason, time_expire)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                admin = VALUES(admin),
+                reason = VALUES(reason),
+                time_expire = VALUES(time_expire)
+        """
+        return await self.execute(query, user_id, admin_id, reason, time_expire)
+
+    async def game_mute_cancel(self, user_id: int):
+        query = "DELETE FROM GameMute WHERE user_id=%s"
+        return await self.execute(query, user_id)
+
+    async def bio_mute_add(self, user_id: int, admin_id: int, reason: str, time_expire: int):
+        query = """
+            INSERT INTO BioMute (user_id, admin, reason, time_expire)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                admin = VALUES(admin),
+                reason = VALUES(reason),
+                time_expire = VALUES(time_expire)
+        """
+        return await self.execute(query, user_id, admin_id, reason, time_expire)
+
+    async def bio_mute_cancel(self, user_id: int):
+        query = "DELETE FROM BioMute WHERE user_id=%s"
+        return await self.execute(query, user_id)
+
+    async def get_user_bio_mute(self, user_id: int):
+        query = "SELECT * FROM BioMute WHERE user_id=%s"
+        result = await self.select_all(query, user_id)
+        if result and isinstance(result, list) and len(result) > 0:
+            return result[0]
+        return None
+
+    async def get_user_game_mute(self, user_id: int):
+        query = "SELECT * FROM GameMute WHERE user_id=%s"
+        result = await self.select_all(query, user_id)
+        if result and isinstance(result, list) and len(result) > 0:
+            return result[0]
+        return None
+
+    async def get_biomute_list(self):
+        query = "SELECT * FROM BioMute"
+        return await self.select_all(query)
+
+    async def get_gamemute_list(self):
+        query = "SELECT * FROM GameMute"
+        return await self.select_all(query)
+
+    async def execute(self, query: str, *args):
+        if args:
+            await self.cur.execute(query, args)
+        else:
+            await self.cur.execute(query)
