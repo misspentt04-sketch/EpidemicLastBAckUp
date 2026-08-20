@@ -1,10 +1,9 @@
-ARMY_THEME_DATA = {
-    "name": "🎖 Армейская",
+ARMY_THEME_DATA = {"name": "🎖 Армейская",
     "lab_dossier": (
         "🎖 Военный бункер {lab_name}:\n"
         "Командир — {user_mention}\n"
         "{corp_name}\n\n"
-        "🎯 Боевой приказ: {patogen_name}\n"
+        "🎯 Боевой приказ: {pathogen_name}\n"
         "💣 <b>Снаряды на складе:</b> {pathogens}/{max_pathogens}\n"
         "🪖 <b>Офицеры штаба:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Сводка Генштаба ]——\n"
@@ -30,13 +29,12 @@ ARMY_THEME_DATA = {
     "cases_menu": "📦 <b>Полевые ящики:</b>\n\n🪙 <b>Жалованье:</b> {epicoins}\n📦 <b>Армейский вещмешок:</b> {case1} шт.\n💎 <b>Офицерский сундук:</b> {case2} шт."
 }
 
-MAFIA_THEME_DATA = {
-    "name": "🖤 Мафия",
+MAFIA_THEME_DATA = {"name": "🖤 Мафия",
     "lab_dossier": (
         "🖤 <b>Синдикат {lab_name}:</b>\n"
         "Дон — {user_mention}\n"
         "{corp_name}\n\n"
-        "🔪 <b>Заказ:</b> {patogen_name}\n"
+        "🔪 <b>Заказ:</b> {pathogen_name}\n"
         "💼 <b>Стволы в общаке:</b> {pathogens}/{max_pathogens}\n"
         "🕶 <b>Консильери:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Криминальная Сводка ]——\n"
@@ -61,13 +59,12 @@ MAFIA_THEME_DATA = {
     "cases_menu": "📦 <b>Дипломаты с деньгами:</b>\n\n🪙 <b>Черный нал:</b> {epicoins}\n📦 <b>Чемоданчик:</b> {case1} шт.\n💎 <b>Сейф босса:</b> {case2} шт."
 }
 
-ZOMBIE_THEME_DATA = {
-    "name": "🧟 Зомби",
+ZOMBIE_THEME_DATA = {"name": "🧟 Зомби",
     "lab_dossier": (
         "🧟 <b>Убежище выживших {lab_name}:</b>\n"
         "Вожак стаи — {user_mention}\n"
         "{corp_name}\n\n"
-        "☣️ <b>Вирусный штамм:</b> {patogen_name}\n"
+        "☣️ <b>Вирусный штамм:</b> {pathogen_name}\n"
         "🧪 <b>Запас заразы:</b> {pathogens}/{max_pathogens}\n"
         "🧬 <b>Мутаторы:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Статистика Заражения ]——\n"
@@ -91,13 +88,12 @@ ZOMBIE_THEME_DATA = {
     "cases_menu": "📦 <b>Контейнеры из лаборатории:</b>\n\n🪙 <b>Жетоны выживших:</b> {epicoins}\n📦 <b>Коробка с ампулами:</b> {case1} шт.\n💎 <b>Запечатанный бокс:</b> {case2} шт."
 }
 
-SPACE_THEME_DATA = {
-    "name": "🚀 Космос",
+SPACE_THEME_DATA = {"name": "🚀 Космос",
     "lab_dossier": (
         "🚀 <b>Космическая станция {lab_name}:</b>\n"
         "Капитан — {user_mention}\n"
         "{corp_name}\n\n"
-        "🛸 <b>Звездный маяк:</b> {patogen_name}\n"
+        "🛸 <b>Звездный маяк:</b> {pathogen_name}\n"
         "⚡️ <b>Заряды плазмы:</b> {pathogens}/{max_pathogens}\n"
         "👽 <b>Биоинженеры флота:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Бортовые Системы ]——\n"
@@ -122,13 +118,12 @@ SPACE_THEME_DATA = {
     "cases_menu": "📦 <b>Грузовые контейнеры:</b>\n\n🪙 <b>Кредиты Альянса:</b> {epicoins}\n📦 <b>Стандартный модуль:</b> {case1} шт.\n💎 <b>Квантовый контейнер:</b> {case2} шт."
 }
 
-FANTASY_THEME_DATA = {
-    "name": "🔮 Фэнтези",
+FANTASY_THEME_DATA = {"name": "🔮 Фэнтези",
     "lab_dossier": (
         "🔮 <b>Магическая цитадель {lab_name}:</b>\n"
         "Архимаг — {user_mention}\n"
         "{corp_name}\n\n"
-        "📜 <b>Древнее заклятие:</b> {patogen_name}\n"
+        "📜 <b>Древнее заклятие:</b> {pathogen_name}\n"
         "✨ <b>Мана в резерве:</b> {pathogens}/{max_pathogens}\n"
         "🧙‍♂️ <b>Алхимики башни:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Магические Свойства ]——\n"
@@ -153,13 +148,12 @@ FANTASY_THEME_DATA = {
     "cases_menu": "📦 <b>Магические сундуки:</b>\n\n🪙 <b>Монеты царства:</b> {epicoins}\n📦 <b>Деревянный ларец:</b> {case1} шт.\n💎 <b>Рунический сундук:</b> {case2} шт."
 }
 
-MEDIC_THEME_DATA = {
-    "name": "💊 Медицинская",
+MEDIC_THEME_DATA = {"name": "💊 Медицинская",
     "lab_dossier": (
         "🏥 <b>Медицинский центр {lab_name}:</b>\n"
         "Главврач — {user_mention}\n"
         "{corp_name}\n\n"
-        "🔬 <b>Штамм-вирус:</b> {patogen_name}\n"
+        "🔬 <b>Штамм-вирус:</b> {pathogen_name}\n"
         "💉 <b>Запас вакцин/шприцев:</b> {pathogens}/{max_pathogens}\n"
         "👩‍⚕️ <b>Инфекционисты:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Клинические Метрики ]——\n"
@@ -184,8 +178,7 @@ MEDIC_THEME_DATA = {
     "cases_menu": "📦 <b>Медицинские боксы:</b>\n\n🪙 <b>Премия Минздрава:</b> {epicoins}\n📦 <b>Кейс с ампулами:</b> {case1} шт.\n💎 <b>Элитный медпак:</b> {case2} шт."
 }
 
-THEME_ID_MAP = {
-    0: "default",
+THEME_ID_MAP = {0: "default",
     1: "police",
     2: "it",
     3: "army",
@@ -196,11 +189,9 @@ THEME_ID_MAP = {
     8: "fantasy",
     9: "medic",
     10: "vip",
-    11: "admin"
-}
+    11: "admin"}
 
-DEFAULT_THEME_DATA = {
-    "name": "🧪 Обычная",
+DEFAULT_THEME_DATA = {"name": "🧪 Обычная",
     "lab_dossier": (
         "📩<b> Досье лаборатории {lab_name}:</b>\n"
         "Руководитель — {user_mention}\n"
@@ -229,44 +220,46 @@ DEFAULT_THEME_DATA = {
     "cases_menu": "📦 <b>Кейсы с патогенами:</b>\n\n🪙 <b>Эпикоины:</b> {epicoins}\n📦 <b>Обычный кейс:</b> {case1} шт.\n💎 <b>VIP кейс:</b> {case2} шт."
 }
 
+
 ADMIN_THEME_DATA = {
     "name": "👑 Админская",
     "lab_dossier": (
-        "👑 <b>Корпоративный Сервер Мира {lab_name}:</b>\n"
-        "Главный системный администратор — {user_mention}\n"
+        "👑 <b>Административный центр {lab_name}:</b>\n"
+        "Главный администратор — {user_mention}\n"
         "{corp_name}\n\n"
-        "⚡️ <b>Основной патоген:</b> {pathogen_name}\n"
-        "🔌 <b>Свободных ядер:</b> {pathogens}/{max_pathogens}\n"
-        "💻 <b>Элитные разработчики:</b> {science_lvl} ур ({science_time} мин.)\n"
-        "<i>{refresh_pathogen_time}</i><blockquote>——[ Мониторинг Ядра ]——\n"
-        "⚡️ Мощность атаки: {infect_lvl} ур\n"
-        "🛡 Абсолютный файрвол: {immunity_lvl} ур\n"
-        "☠️ Блокировка доступа: {fever_lvl} ур ({fever_time} мин | {fever_lvl} дн)\n"
-        "🕵️‍♂️ Системный монитор: {sb_lvl} ур</blockquote>"
+        "⚡️ <b>Био-угроза:</b> {pathogen_name}\n"
+        "🔌 <b>Доступно патогенов:</b> {pathogens}/{max_pathogens}\n"
+        "💻 <b>Команда разработчиков:</b> {science_lvl} ур ({science_time} мин.)\n"
+        "<i>{refresh_pathogen_time}</i><blockquote>——[ Характеристики Системы ]——\n"
+        "⚡️ Мощность: {infect_lvl} ур\n"
+        "🛡 Защита: {immunity_lvl} ур\n"
+        "☠️ Летальность: {fever_lvl} ур ({fever_time} мин | {fever_lvl} дн)\n"
+        "🕵️ Мониторинг: {sb_lvl} ур</blockquote>\n"
         "——————————————\n"
-        "Root ID: <code>{user_id}</code>\n"
+        "Системный ID: <code>{user_id}</code>\n"
         "——————————————\n"
         "<blockquote>——[ Ресурсы Системы ]——\n"
-        "💎 Баланс опыта: {bio_experience}\n"
-        "🔋 Серверные ресурсы: {bio_resource}\n"
+        "💎 Опыт: {bio_experience}\n"
+        "🔋 Ресурсы: {bio_resource}\n"
         "⏱ <i>Получение бонусов: В 12.00 и 00.00</i></blockquote>\n"
-        "🤒 Заражённых объектов: {victims_count}\n"
-        "😷 Активных заражений: {illnesses_count}"
+        "🤒 Заражённых: {victims_count}\n"
+        "😷 Активных болезней: {illnesses_count}"
     ),
-    "infect_failed": "🛡 СБОЙ АТАКИ!\n\nСистема защиты пользователя {target_mention} отразила административный запрос.\n\n⚡️ Осталось ядер: {pathogens_left}\n📊 Шанс пробития: {penetration_chance}%",
-    "infected_you": "👑 Администратор {attacker_mention} заблокировал ваш узел патогеном {pathogen_name}\n☠️ Ограничения на {fever_time} минут\n🔒 Бан на {expire_days} дней",
-    "sb_report": "🕵️‍♂️ Системный монитор зафиксировал попытку взлома от {attacker_mention}! Попыток: {attempts_count}",
+    "infect_success": "🦠 {attacker_mention} заразил {target_mention} патогеном {pathogen_name}\n☠️ Горячка на {fever_time} минут\n🤒 Заражение на {expire_days} дней\n☣️ +{exp_gain} био-опыта",
+    "infect_failed": "🛡 ЗАРАЖЕНИЕ НЕ УДАЛОСЬ!\n\nИммунитет {target_mention} отразил атаку админ-патогена.\n\n🧪 Осталось: {pathogens_left}\n📊 Шанс: {penetration_chance}%",
+    "infected_you": "👑 Администратор {attacker_mention} заразил вас патогеном {pathogen_name}\n☠️ Блокировка на {fever_time} минут\n🔒 Бан на {expire_days} дней",
+    "sb_report": "🕵️ Системный монитор зафиксировал {attempts_count} попыток атаки!\nНападающий: {attacker_mention}",
     "victims_list_title": "🤒 <b>Заражённые объекты под наблюдением:</b>\n",
     "cases_menu": "📦 <b>Системные контейнеры:</b>\n\n🪙 <b>Эпикоины:</b> {epicoins}\n📦 <b>Админ-кейс:</b> {case1} шт.\n💎 <b>Root-кейс:</b> {case2} шт."
 }
 
-POLICE_THEME_DATA = {
-    "name": "🚨 Полицейская",
+
+POLICE_THEME_DATA = {"name": "🚨 Полицейская",
     "lab_dossier": (
         "🚔 <b>Полицейский участок {lab_name}:</b>\n"
         "Шериф — {user_mention}\n"
         "{corp_name}\n\n"
-        "📜 <b>Ориентировка:</b> {patogen_name}\n"
+        "📜 <b>Ориентировка:</b> {pathogen_name}\n"
         "📻 <b>Заряды спецсредств:</b> {pathogens}/{max_pathogens}\n"
         "👮‍♂️ <b>Детективы:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Сводка Уголовного Розыска ]——\n"
@@ -291,13 +284,12 @@ POLICE_THEME_DATA = {
     "cases_menu": "📦 <b>Конфискованные кейсы:</b>\n\n🪙 <b>Премия:</b> {epicoins}\n📦 <b>Стандартный сейф:</b> {case1} шт.\n💎 <b>Особый конфискат:</b> {case2} шт."
 }
 
-IT_THEME_DATA = {
-    "name": "💻 IT / Хакерская",
+IT_THEME_DATA = {"name": "💻 IT / Хакерская",
     "lab_dossier": (
         "💻 <b>Хакерский дата-центр {lab_name}:</b>\n"
         "Тимлид — {user_mention}\n"
         "{corp_name}\n\n"
-        "💾 <b>Эксплойт:</b> {patogen_name}\n"
+        "💾 <b>Эксплойт:</b> {pathogen_name}\n"
         "🔌 <b>Серверный поток:</b> {pathogens}/{max_pathogens}\n"
         "🧑‍💻 <b>Сеньор-разработчики:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Метрики Серверов ]——\n"
@@ -322,13 +314,12 @@ IT_THEME_DATA = {
     "cases_menu": "📦 <b>Зашифрованные накопители:</b>\n\n🪙 <b>Крипто-валюта:</b> {epicoins}\n📦 <b>Базовый диск:</b> {case1} шт.\n💎 <b>Сверхбыстрый SSD:</b> {case2} шт."
 }
 
-CYBER_THEME_DATA = {
-    "name": "⚡ Cyber",
+CYBER_THEME_DATA = {"name": "⚡ Cyber",
     "lab_dossier": (
         "💻 <b>Сетевая Нео-Лаборатория {lab_name}:</b>\n"
         "Оператор — {user_mention}\n"
         "{corp_name}\n\n"
-        "💾 <b>Био-код (патоген):</b> {patogen_name}\n"
+        "💾 <b>Био-код (патоген):</b> {pathogen_name}\n"
         "🔋 <b>Загружено эксплойтов:</b> {pathogens}/{max_pathogens}\n"
         "🤖 <b>Нейро-процессоры:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ CYBER METRICS ]——\n"
@@ -353,13 +344,12 @@ CYBER_THEME_DATA = {
     "cases_menu": "📦 <b>Нейро-контейнеры:</b>\n\n🪙 <b>Кредиты:</b> {epicoins}\n📦 <b>Базовый чипсет:</b> {case1} шт.\n💎 <b>Квантовый накопитель:</b> {case2} шт."
 }
 
-VIP_THEME_DATA = {
-    "name": "💎 VIP",
+VIP_THEME_DATA = {"name": "💎 VIP",
     "lab_dossier": (
         "🏛 <b>Досье VIP-комплекса {lab_name}:</b>\n"
         "Владелец — {user_mention}\n"
         "{corp_name}\n\n"
-        "👑 <b>Премиум-патоген:</b> {patogen_name}\n"
+        "👑 <b>Премиум-патоген:</b> {pathogen_name}\n"
         "💎 <b>Запас ампул:</b> {pathogens}/{max_pathogens}\n"
         "🎩 <b>VIP-вирусологи:</b> {science_lvl} ур ({science_time} мин.)\n"
         "<i>{refresh_pathogen_time}</i><blockquote>——[ Статус Систем ]——\n"
@@ -384,8 +374,7 @@ VIP_THEME_DATA = {
     "cases_menu": "📦 <b>Премиальные кейсы:</b>\n\n🪙 <b>Эпикоины:</b> {epicoins}\n📦 <b>Золотой кейс:</b> {case1} шт.\n💎 <b>Платиновый кейс:</b> {case2} шт."
 }
 
-THEMES_DATA = {
-    "default": DEFAULT_THEME_DATA,
+THEMES_DATA = {"default": DEFAULT_THEME_DATA,
     "police": POLICE_THEME_DATA,
     "it": IT_THEME_DATA,
     "army": ARMY_THEME_DATA,
@@ -397,8 +386,7 @@ THEMES_DATA = {
     "fantasy": FANTASY_THEME_DATA,
     "medic": MEDIC_THEME_DATA,
     "vip": VIP_THEME_DATA,
-    "admin": ADMIN_THEME_DATA,
-}
+    "admin": ADMIN_THEME_DATA,}
 
 async def get_theme_text(db_or_theme, user_id_or_key, text_key=None) -> str:
     from core.handlers.tricks.themes import get_user_theme
@@ -412,3 +400,11 @@ async def get_theme_text(db_or_theme, user_id_or_key, text_key=None) -> str:
 
     theme = THEMES_DATA.get(theme_key, DEFAULT_THEME_DATA)
     return theme.get(key, DEFAULT_THEME_DATA.get(key, ""))
+
+# Добавляем недостающие ключи для админской темы (если их нет)
+ADMIN_THEME_DATA["infect_success"] = "🦠 {attacker_mention} заразил {target_mention} патогеном {pathogen_name}\n☠️ Горячка на {fever_time} минут\n🤒 Заражение на {expire_days} дней\n☣️ +{exp_gain} био-опыта"
+ADMIN_THEME_DATA["infect_failed"] = "🛡 ЗАРАЖЕНИЕ НЕ УДАЛОСЬ!\n\nИммунитет {target_mention} оказался сильнее.\n\n🧪 Осталось: {pathogens_left}\n📊 Шанс: {penetration_chance}%"
+ADMIN_THEME_DATA["infected_you"] = "👑 {attacker_mention} заразил вас патогеном {pathogen_name}\n☠️ Ограничения на {fever_time} минут\n🔒 Бан на {expire_days} дней"
+ADMIN_THEME_DATA["sb_report"] = "🕵️‍♂️ Системный монитор зафиксировал {attempts_count} попыток атаки!\nНападающий: {attacker_mention}"
+ADMIN_THEME_DATA["victims_list_title"] = "🤒 <b>Заражённые объекты под наблюдением:</b>\n"
+ADMIN_THEME_DATA["cases_menu"] = "📦 <b>Системные контейнеры:</b>\n\n🪙 <b>Эпикоины:</b> {epicoins}\n📦 <b>Админ-кейс:</b> {case1} шт.\n💎 <b>Root-кейс:</b> {case2} шт."

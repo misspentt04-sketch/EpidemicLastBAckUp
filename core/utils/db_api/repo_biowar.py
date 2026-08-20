@@ -1,4 +1,4 @@
-﻿from asyncmy import Pool
+from asyncmy import Pool
 from asyncmy.cursors import Cursor, DictCursor
 from dataclasses import dataclass
 
@@ -1104,3 +1104,94 @@ class RequestsRepoBiowar:
                 obj = getattr(self.cur, attr)
                 if hasattr(obj, 'commit'):
                     await obj.commit()
+
+    async def bio_mute_add(self, user_id: int, admin_id: int, reason: str, time_expire: int):
+        """Добавляет запрет на смену имени/патогена"""
+        query = '''
+            INSERT INTO BioMute (user_id, admin, reason, time_expire)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                admin = VALUES(admin),
+                reason = VALUES(reason),
+                time_expire = VALUES(time_expire)
+        '''
+        return await self.execute_query(query, user_id, admin_id, reason, time_expire)
+
+    async def execute_query(self, query: str, *args):
+        """Выполняет запрос с параметрами"""
+        try:
+            async with self.cur as cursor:
+                await cursor.execute(query, args)
+                return cursor
+        except Exception as e:
+            logger.error(f"Ошибка выполнения запроса: {e}")
+            raise
+
+    async def execute_query(self, query: str, *args):
+        """Выполняет запрос с параметрами через курсор"""
+        try:
+            # Проверяем есть ли курсор
+            if not hasattr(self, 'cur') or self.cur is None:
+                raise Exception("Курсор не инициализирован")
+            
+            # Выполняем запрос
+            await self.cur.execute(query, args)
+            return self.cur
+        except Exception as e:
+            logger.error(f"Ошибка выполнения запроса: {e}")
+            raise
+
+    async def bio_mute_add(self, user_id: int, admin_id: int, reason: str, time_expire: int):
+        """Добавляет запрет на смену имени/патогена"""
+        query = '''
+            INSERT INTO BioMute (user_id, admin, reason, time_expire)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                admin = VALUES(admin),
+                reason = VALUES(reason),
+                time_expire = VALUES(time_expire)
+        '''
+        return await self.execute_query(query, user_id, admin_id, reason, time_expire)
+
+    async def bio_mute_cancel(self, user_id: int):
+        """Снимает запрет на смену имени/патогена"""
+        query = 'DELETE FROM BioMute WHERE user_id=%s;'
+        return await self.execute_query(query, user_id)
+
+    async def get_user_bio_mute(self, user_id: int):
+        """Получает информацию о запрете для пользователя"""
+        import logging
+        logger = logging.getLogger(__name__)
+        query = 'SELECT * FROM BioMute WHERE user_id=%s;'
+        result = await self.select_all(query, user_id)
+        logger.info(f"[REPO_DEBUG] get_user_bio_mute: user_id={user_id}, result={result}")
+        if result and isinstance(result, list) and len(result) > 0:
+            logger.info(f"[REPO_DEBUG] Возвращаем первый элемент: {result[0]}")
+            return result[0]
+        logger.info(f"[REPO_DEBUG] Возвращаем None")
+        return None
+
+    async def game_mute_add(self, user_id: int, admin_id: int, reason: str, time_expire: int):
+        """Добавляет АС (мут команд)"""
+        query = '''
+            INSERT INTO GameMute (user_id, admin, reason, time_expire)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                admin = VALUES(admin),
+                reason = VALUES(reason),
+                time_expire = VALUES(time_expire)
+        '''
+        return await self.execute_query(query, user_id, admin_id, reason, time_expire)
+
+    async def game_mute_cancel(self, user_id: int):
+        """Снимает АС (мут команд)"""
+        query = 'DELETE FROM GameMute WHERE user_id=%s;'
+        return await self.execute_query(query, user_id)
+
+    async def get_user_game_mute(self, user_id: int):
+        """Получает информацию об АС для пользователя"""
+        query = 'SELECT * FROM GameMute WHERE user_id=%s;'
+        result = await self.select_all(query, user_id)
+        if result and isinstance(result, list) and len(result) > 0:
+            return result[0]
+        return None

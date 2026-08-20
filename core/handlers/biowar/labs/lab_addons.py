@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 from aiogram.types import Message
 from asyncmy.cursors import Cursor
 from aiogram import Bot

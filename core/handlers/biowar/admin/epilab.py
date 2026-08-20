@@ -11,47 +11,106 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from core.middlewares.antispam import banned_users, user_timestamps
-from core.settings import settings
 from core import func
 from core.data.icons import LabIco
 from core.utils.db_api.repo_biowar import RequestsRepoBiowar
+from core.settings import settings
 
 router = Router()
 logger = logging.getLogger(__name__)
 
 OWNER_LOG_ID = -1003688648228
 
+
+def get_time_keyboard(action_type: str, target_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура для выбора времени наказания"""
+    time_options = [
+        ("1 час", "1h"),
+        ("6 часов", "6h"),
+        ("12 часов", "12h"),
+        ("1 день", "1d"),
+        ("3 дня", "3d"),
+        ("7 дней", "7d"),
+        ("14 дней", "14d"),
+        ("30 дней", "30d"),
+        ("31 день", "31d"),
+        ("Навсегда", "forever")
+    ]
+    
+    buttons = []
+    # Разбиваем по 3 кнопки в ряд
+    for i in range(0, len(time_options), 3):
+        row = []
+        for option, value in time_options[i:i+3]:
+            row.append(
+                InlineKeyboardButton(
+                    text=option,
+                    callback_data=f"epilab:time:{action_type}:{value}:{target_id}"
+                )
+            )
+        buttons.append(row)
+    
+    # Добавляем кнопку отмены
+    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data=f"epilab:time_cancel:{target_id}")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 class EpiLabAdminStates(StatesGroup):
     waiting_for_ac_reason = State()
     waiting_for_block_reason = State()
     waiting_for_transfer_target = State()
+    waiting_for_ac_time = State()
+    waiting_for_block_time = State()
 
 def parse_time_duration(text: str) -> tuple[int, int]:
     """Возвращает (expire_timestamp, duration_in_seconds)"""
     text = text.strip().lower()
     now_ts = int(time.time())
 
-    if text in ['навсегда', 'forever', '0', 'perm', 'на вечно', 'всегда']:
-        seconds = 3650 * 24 * 3600  # ~10 лет
+    # Проверка на "навсегда"
+    if text in ['навсегда', 'forever', '0', 'perm', 'на вечно', 'всегда', '∞']:
+        seconds = 3650 * 24 * 3600
         return now_ts + seconds, seconds
 
-    match = re.match(r'^(\d+)\s*([мmhhdдч]?)$', text)
+    # Проверка на формат "31д" или "31 д" или "31дн"
+    match = re.match(r'^(\d+)\s*([дd]|дн|дней|дня|час|часов|ч|h|м|m|мин|минуты?)?$', text)
     if not match:
-        return now_ts + 3600, 3600  # По умолчанию 1 час
+        return now_ts + 3600, 3600
 
     val, unit = match.groups()
     val = int(val)
 
-    if unit in ['м', 'm']:
-        seconds = val * 60
-    elif unit in ['ч', 'h']:
-        seconds = val * 3600
-    elif unit in ['д', 'd']:
+    # Определяем единицу измерения
+    if unit in ['д', 'd', 'дн', 'дней', 'дня', 'days']:
         seconds = val * 86400
-    else:
+    elif unit in ['ч', 'h', 'час', 'часов']:
+        seconds = val * 3600
+    elif unit in ['м', 'm', 'мин', 'минуты', 'минут']:
         seconds = val * 60
+    else:
+        seconds = val * 60  # По умолчанию минуты
 
     return now_ts + seconds, seconds
+
+def get_duration_text(seconds: int) -> str:
+    """Преобразует секунды в читаемый текст"""
+    if seconds >= 3650 * 24 * 3600:
+        return "навсегда"
+    
+    days = seconds // 86400
+    hours = (seconds % 86400) // 3600
+    minutes = (seconds % 3600) // 60
+    
+    parts = []
+    if days > 0:
+        parts.append(f"{days}д")
+    if hours > 0:
+        parts.append(f"{hours}ч")
+    if minutes > 0 and days == 0:
+        parts.append(f"{minutes}м")
+    
+    return " ".join(parts) if parts else "0м"
 
 async def notify_owner_action(message_or_user, action_desc: str, target_id: int = None, bot: Bot = None):
     try:
@@ -126,9 +185,22 @@ async def resolve_lab_target(message: Message, query: str = None, repo_biowar: R
 
     return None
 
+def get_admin_ids():
+    admin_cfg = getattr(settings.bots, "admin_ids", getattr(settings.bots, "admin_id", []))
+    if isinstance(admin_cfg, (int, str)):
+        admin_cfg = [int(admin_cfg)]
+    elif isinstance(admin_cfg, (list, tuple, set)):
+        admin_cfg = [int(a) for a in admin_cfg if a is not None]
+    else:
+        admin_cfg = []
+    return set(admin_cfg)
+
+def is_admin_user(user_id: int) -> bool:
+    return user_id in get_admin_ids()
+
 @router.message(F.text.regexp(r'^!(?:эпилаб|epilab)(?:\s+(.*))?', flags=re.IGNORECASE))
 async def cmd_epi_lab(message: Message, state: FSMContext, repo_biowar: RequestsRepoBiowar):
-    if str(message.from_user.id) not in settings.bots.admin_id:
+    if not is_admin_user(message.from_user.id):
         return
     await state.clear()
     match = re.match(r'^!(?:эпилаб|epilab)(?:\s+(.*))?', message.text, re.IGNORECASE)
@@ -136,7 +208,7 @@ async def cmd_epi_lab(message: Message, state: FSMContext, repo_biowar: Requests
 
     lab_data = await resolve_lab_target(message, query, repo_biowar)
     if not lab_data or 'id' not in lab_data:
-        await message.answer("⚠️ Использование: !эпилаб <user_id, @username> или реплаем на сообщение игрока.")
+        await message.answer("⚠️ Использование: !эпилаб <b>user_id</b>, @username или реплаем на сообщение игрока.")
         return
 
     target_id = lab_data['id']
@@ -155,6 +227,9 @@ async def cmd_epi_lab(message: Message, state: FSMContext, repo_biowar: Requests
 
 @router.message(F.text.regexp(r'^!(?:асы|aclist|списокм)', flags=re.IGNORECASE))
 async def cmd_list_aces(message: Message, repo_biowar: RequestsRepoBiowar):
+    if not is_admin_user(message.from_user.id):
+        return
+    
     game_mutes = await repo_biowar.get_gamemute_list() if hasattr(repo_biowar, 'get_gamemute_list') else []
     bio_mutes = await repo_biowar.get_biomute_list() if hasattr(repo_biowar, 'get_biomute_list') else []
 
@@ -202,20 +277,25 @@ async def process_ac_reason(message: Message, state: FSMContext, repo_biowar: Re
         return await message.answer("❌ Сессия истёкла, повторите команду заново.")
 
     text = message.text.strip()
-    parts = text.rsplit(' ', 1)
-    reason = text
-    expire_ts, duration_sec = parse_time_duration("3600")
-
-    if len(parts) == 2:
-        re_match = re.match(r'^(\d+)\s*([мmhhdдч]?)$', parts[1].lower()) or parts[1].lower() in ['навсегда', 'forever', '0', 'perm', 'всегда']
-        if re_match:
-            reason = parts[0]
-            expire_ts, duration_sec = parse_time_duration(parts[1])
+    
+    # Парсим время и причину
+    # Ищем в конце текста что-то похожее на время
+    time_match = re.search(r'(\d+)\s*([дd]|дн|дней|дня|час|часов|ч|h|м|m|мин|минуты|минут|навсегда|forever|0|perm|всегда|∞)$', text.lower())
+    
+    if time_match:
+        time_part = time_match.group(0)
+        reason = text[:text.lower().rfind(time_part)].strip()
+        if not reason:
+            reason = "Нарушение"
+        expire_ts, duration_sec = parse_time_duration(time_part)
+    else:
+        reason = text
+        expire_ts, duration_sec = parse_time_duration("60м")  # По умолчанию 1 час
 
     try:
         if hasattr(repo_biowar, 'game_mute_add'):
             await repo_biowar.game_mute_add(target_id, message.from_user.id, reason, expire_ts)
-        
+
         banned_users[int(target_id)] = expire_ts
         for prefix in ["epidemic_gamemute:", "gamemute:"]:
             try:
@@ -223,51 +303,38 @@ async def process_ac_reason(message: Message, state: FSMContext, repo_biowar: Re
             except Exception:
                 pass
 
-        await notify_owner_action(message.from_user, f"⛔ Выдача АС (Причина: {reason}, До: {datetime.fromtimestamp(expire_ts).strftime('%d.%m.%Y %H:%M')})", target_id, bot=message.bot)
-        await message.answer(f"✅ АС успешно выдан игроку <code>{target_id}</code>!\n<b>Причина:</b> {reason}")
+        duration_text = get_duration_text(duration_sec)
+        await notify_owner_action(
+            message.from_user, 
+            f"⛔ Выдача АС (Причина: {reason}, До: {datetime.fromtimestamp(expire_ts).strftime('%d.%m.%Y %H:%M')}, Время: {duration_text})", 
+            target_id, 
+            bot=message.bot
+        )
+        await message.answer(f"✅ АС успешно выдан игроку <code>{target_id}</code>!\n<b>Причина:</b> {reason}\n<b>До:</b> {datetime.fromtimestamp(expire_ts).strftime('%d.%m.%Y %H:%M')}\n<b>Время:</b> {duration_text}")
     except Exception as e:
         logger.error(f"Error applying AC for {target_id}: {e}")
         await message.answer(f"❌ Ошибка при выдаче АС: {e}")
 
 @router.message(EpiLabAdminStates.waiting_for_block_reason)
-async def process_block_reason(message: Message, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
+async def process_block_reason(message: Message, state: FSMContext):
     data = await state.get_data()
     target_id = data.get('target_id')
-    await state.clear()
-
+    
     if not target_id:
         return await message.answer("❌ Сессия истёкла, повторите команду заново.")
-
-    text = message.text.strip()
-    parts = text.rsplit(' ', 1)
-    reason = text
-    expire_ts, duration_sec = parse_time_duration("3600")
-
-    if len(parts) == 2:
-        re_match = re.match(r'^(\d+)\s*([мmhhdдч]?)$', parts[1].lower()) or parts[1].lower() in ['навсегда', 'forever', '0', 'perm', 'всегда']
-        if re_match:
-            reason = parts[0]
-            expire_ts, duration_sec = parse_time_duration(parts[1])
-
-    try:
-        if hasattr(repo_biowar, 'bio_mute_add'):
-            await repo_biowar.bio_mute_add(target_id, message.from_user.id, reason, expire_ts)
-
-        if hasattr(repo_biowar, 'pathogen_name_change'):
-            await repo_biowar.pathogen_name_change(None, target_id)
-        if hasattr(repo_biowar, 'lab_name_change'):
-            await repo_biowar.lab_name_change(None, target_id)
-
-        for prefix in ["biomute:", "epidemic_biomute:"]:
-            try:
-                await redis.set(f"{prefix}{target_id}", f"{reason}:{expire_ts}", ex=duration_sec)
-            except Exception:
-                pass
-
-        await notify_owner_action(message.from_user, f"🔒 Запрет смены имени/патогена (Причина: {reason})", target_id, bot=message.bot)
-        await message.answer(f"✅ Запрет смены имени/патогена у игрока <code>{target_id}</code> установлен!\n<b>Причина:</b> {reason}")
-    except Exception as e:
-        await message.answer(f"❌ Ошибка при установке запрета: {e}")
+    
+    reason = message.text.strip()
+    if not reason:
+        return await message.answer("❌ Причина не может быть пустой!")
+    
+    await state.update_data(reason=reason)
+    await state.set_state(EpiLabAdminStates.waiting_for_block_time)
+    
+    keyboard = get_time_keyboard("block", target_id)
+    await message.answer(
+        f"📝 Причина: <b>{reason}</b>\n\nВыберите срок запрета:",
+        reply_markup=keyboard
+    )
 
 @router.message(EpiLabAdminStates.waiting_for_transfer_target)
 async def process_transfer_target(message: Message, state: FSMContext, repo_biowar: RequestsRepoBiowar):
@@ -303,22 +370,120 @@ async def process_transfer_target(message: Message, state: FSMContext, repo_biow
 
 # ===== CALLBACK КНОПКИ ПАНЕЛИ =====
 
+
+@router.callback_query(F.data.startswith('epilab:time:ac:'))
+async def process_ac_time(callback: CallbackQuery, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
+    parts = callback.data.split(':')
+    time_value = parts[3]
+    target_id = int(parts[4])
+    
+    data = await state.get_data()
+    reason = data.get('reason', 'Нарушение')
+    admin_id = callback.from_user.id
+    
+    if time_value == "forever":
+        expire_ts, duration_sec = parse_time_duration("навсегда")
+        duration_text = "навсегда"
+    else:
+        time_display = time_value.replace('h', 'ч').replace('d', 'д')
+        expire_ts, duration_sec = parse_time_duration(time_display)
+        duration_text = get_duration_text(duration_sec)
+    
+    try:
+        if hasattr(repo_biowar, 'game_mute_add'):
+            await repo_biowar.game_mute_add(target_id, admin_id, reason, expire_ts)
+        
+        banned_users[int(target_id)] = expire_ts
+        for prefix in ["epidemic_gamemute:", "gamemute:"]:
+            try:
+                await redis.set(f"{prefix}{target_id}", f"{reason}:{expire_ts}", ex=duration_sec)
+            except Exception:
+                pass
+        
+        await notify_owner_action(
+            callback.from_user,
+            f"⛔ Выдача АС (Причина: {reason}, Срок: {duration_text})",
+            target_id,
+            bot=callback.bot
+        )
+        
+        await callback.message.edit_text(
+            f"✅ АС успешно выдан игроку <code>{target_id}</code>!\n"
+            f"<b>Причина:</b> {reason}\n"
+            f"<b>Срок:</b> {duration_text}"
+        )
+        await state.clear()
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error applying AC: {e}")
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+@router.callback_query(F.data.startswith('epilab:time:block:'))
+async def process_block_time(callback: CallbackQuery, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
+    parts = callback.data.split(':')
+    time_value = parts[3]
+    target_id = int(parts[4])
+    
+    data = await state.get_data()
+    reason = data.get('reason', 'Нарушение')
+    admin_id = callback.from_user.id
+    
+    if time_value == "forever":
+        expire_ts, duration_sec = parse_time_duration("навсегда")
+        duration_text = "навсегда"
+    else:
+        time_display = time_value.replace('h', 'ч').replace('d', 'д')
+        expire_ts, duration_sec = parse_time_duration(time_display)
+        duration_text = get_duration_text(duration_sec)
+    
+    try:
+        if hasattr(repo_biowar, 'bio_mute_add'):
+            await repo_biowar.bio_mute_add(target_id, admin_id, reason, expire_ts)
+        
+        if hasattr(repo_biowar, 'pathogen_name_change'):
+            await repo_biowar.pathogen_name_change(None, target_id)
+        if hasattr(repo_biowar, 'lab_name_change'):
+            await repo_biowar.lab_name_change(None, target_id)
+        
+        for prefix in ["biomute:", "epidemic_biomute:"]:
+            try:
+                await redis.set(f"{prefix}{target_id}", f"{reason}:{expire_ts}", ex=duration_sec)
+            except Exception:
+                pass
+        
+        await notify_owner_action(
+            callback.from_user,
+            f"🔒 Запрет смены имени/патогена (Причина: {reason}, Срок: {duration_text})",
+            target_id,
+            bot=callback.bot
+        )
+        
+        await callback.message.edit_text(
+            f"✅ Запрет смены имени/патогена у игрока <code>{target_id}</code> установлен!\n"
+            f"<b>Причина:</b> {reason}\n"
+            f"<b>Срок:</b> {duration_text}"
+        )
+        await state.clear()
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error applying block: {e}")
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+@router.callback_query(F.data.startswith('epilab:time_cancel:'))
+async def process_time_cancel(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(':')
+    target_id = int(parts[1])
+    
+    if callback.from_user.id != target_id:
+        return await callback.answer("❌ Это не ваше меню!", show_alert=True)
+    
+    await state.clear()
+    await callback.message.edit_text("❌ Операция отменена")
+    await callback.answer()
+
 @router.callback_query(F.data.startswith('epilab:'))
 async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
-    admin_cfg = getattr(settings.bots, "admin_ids", getattr(settings.bots, "admin_id", []))
-    if not isinstance(admin_cfg, (list, tuple, set)): 
-        admin_cfg = [admin_cfg]
-    
-    is_admin = callback.from_user.id in admin_cfg or str(callback.from_user.id) in map(str, admin_cfg)
-    if not is_admin:
-        try:
-            u = await repo_biowar.get_user(callback.from_user.id)
-            if u and (getattr(u, "is_admin", False) or getattr(u, "role", "") in ["admin", "owner", "creator"]): 
-                is_admin = True
-        except Exception: 
-            pass
-
-    if not is_admin:
+    if not is_admin_user(callback.from_user.id):
         return await callback.answer("❌ У вас нет доступа к управлению этой панелью!", show_alert=True)
 
     parts = callback.data.split(':')
@@ -357,7 +522,7 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
             fever_time = int(lethality / 3)
             fever_time = (1 if fever_time == 0 else (60 if fever_time >= 180 else fever_time))
 
-            refresh_pathogen_time = '\n'
+            refresh_pathogen_time = ''
             if lab_info.get("science_time") and hasattr(func, 'fever_expire_difference_check'):
                 science_time = func.fever_expire_difference_check(lab_info["science_time"])
                 refresh_pathogen_time = f'<i>{LabIco.sand_clock.value} Новый патоген через {science_time}</i>\n\n'
@@ -365,7 +530,7 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
             if corp_info and isinstance(corp_info, dict):
                 corp_text = f'В составе Корпорации — «<a href="tg://openmessage?user_id={corp_info.get("leader_id")}">{corp_info.get("name")}</a>»\n\n'
             else:
-                corp_text = '\n'
+                corp_text = ''
 
             custom_emoji = lab_info.get('customization_emoji') or ''
 
@@ -431,13 +596,13 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
     elif action == 'ac':
         await state.update_data(target_id=target_id)
         await state.set_state(EpiLabAdminStates.waiting_for_ac_reason)
-        await callback.message.answer("✍️ Введите причину и время для АС (например: <code>спам 10м</code> или <code>нарушение навсегда</code>):")
+        await callback.message.answer("✍️ Введите причину для АС:")
         await callback.answer()
 
     elif action == 'blockname':
         await state.update_data(target_id=target_id)
         await state.set_state(EpiLabAdminStates.waiting_for_block_reason)
-        await callback.message.answer("✍️ Введите причину и время для запрета смены имени/патогена (например: <code>недопустимое имя 2ч</code>):")
+        await callback.message.answer("✍️ Введите причину для запрета смены имени/патогена:")
         await callback.answer()
 
     elif action == 'unblock':
@@ -481,3 +646,114 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
         except Exception as e:
             logger.error(f"Error reset lab {target_id}: {e}")
             await callback.answer("❌ Ошибка при сбросе лаборатории!", show_alert=True)
+
+@router.callback_query(F.data.startswith('epilab:time:ac:'))
+async def process_ac_time(callback: CallbackQuery, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
+    parts = callback.data.split(':')
+    time_value = parts[3]
+    target_id = int(parts[4])
+    
+    data = await state.get_data()
+    reason = data.get('reason', 'Нарушение')
+    admin_id = callback.from_user.id
+    
+    # Парсим время
+    if time_value == "forever":
+        expire_ts, duration_sec = parse_time_duration("навсегда")
+        duration_text = "навсегда"
+    else:
+        time_display = time_value.replace('h', 'ч').replace('d', 'д')
+        expire_ts, duration_sec = parse_time_duration(time_display)
+        duration_text = get_duration_text(duration_sec)
+    
+    try:
+        if hasattr(repo_biowar, 'game_mute_add'):
+            await repo_biowar.game_mute_add(target_id, admin_id, reason, expire_ts)
+        
+        banned_users[int(target_id)] = expire_ts
+        for prefix in ["epidemic_gamemute:", "gamemute:"]:
+            try:
+                await redis.set(f"{prefix}{target_id}", f"{reason}:{expire_ts}", ex=duration_sec)
+            except Exception:
+                pass
+        
+        await notify_owner_action(
+            callback.from_user,
+            f"⛔ Выдача АС (Причина: {reason}, Срок: {duration_text})",
+            target_id,
+            bot=callback.bot
+        )
+        
+        await callback.message.edit_text(
+            f"✅ АС успешно выдан игроку <code>{target_id}</code>!\n"
+            f"<b>Причина:</b> {reason}\n"
+            f"<b>Срок:</b> {duration_text}"
+        )
+        await state.clear()
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error applying AC: {e}")
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+@router.callback_query(F.data.startswith('epilab:time:block:'))
+async def process_block_time(callback: CallbackQuery, state: FSMContext, repo_biowar: RequestsRepoBiowar, redis: Redis):
+    parts = callback.data.split(':')
+    time_value = parts[3]
+    target_id = int(parts[4])
+    
+    data = await state.get_data()
+    reason = data.get('reason', 'Нарушение')
+    admin_id = callback.from_user.id
+    
+    if time_value == "forever":
+        expire_ts, duration_sec = parse_time_duration("навсегда")
+        duration_text = "навсегда"
+    else:
+        time_display = time_value.replace('h', 'ч').replace('d', 'д')
+        expire_ts, duration_sec = parse_time_duration(time_display)
+        duration_text = get_duration_text(duration_sec)
+    
+    try:
+        if hasattr(repo_biowar, 'bio_mute_add'):
+            await repo_biowar.bio_mute_add(target_id, admin_id, reason, expire_ts)
+        
+        if hasattr(repo_biowar, 'pathogen_name_change'):
+            await repo_biowar.pathogen_name_change(None, target_id)
+        if hasattr(repo_biowar, 'lab_name_change'):
+            await repo_biowar.lab_name_change(None, target_id)
+        
+        for prefix in ["biomute:", "epidemic_biomute:"]:
+            try:
+                await redis.set(f"{prefix}{target_id}", f"{reason}:{expire_ts}", ex=duration_sec)
+            except Exception:
+                pass
+        
+        await notify_owner_action(
+            callback.from_user,
+            f"🔒 Запрет смены имени/патогена (Причина: {reason}, Срок: {duration_text})",
+            target_id,
+            bot=callback.bot
+        )
+        
+        await callback.message.edit_text(
+            f"✅ Запрет смены имени/патогена у игрока <code>{target_id}</code> установлен!\n"
+            f"<b>Причина:</b> {reason}\n"
+            f"<b>Срок:</b> {duration_text}"
+        )
+        await state.clear()
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error applying block: {e}")
+        await callback.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+@router.callback_query(F.data.startswith('epilab:time_cancel:'))
+async def process_time_cancel(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(':')
+    target_id = int(parts[1])
+    
+    if callback.from_user.id != target_id:
+        return await callback.answer("❌ Это не ваше меню!", show_alert=True)
+    
+    await state.clear()
+    await callback.message.edit_text("❌ Операция отменена")
+    await callback.answer()
