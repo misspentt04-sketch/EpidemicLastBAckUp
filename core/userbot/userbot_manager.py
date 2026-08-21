@@ -1,8 +1,10 @@
 import asyncio
 import logging
 import re
+import json
+import os
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -25,6 +27,37 @@ API_ID = 29154972
 API_HASH = "cc13cd6917234b587cf47048ba69072d"
 
 init_sessions_dir()
+
+# ===== ПОРЯДОК АККАУНТОВ =====
+ORDER_FILE = "data/sessions_order.json"
+
+def load_order():
+    try:
+        if os.path.exists(ORDER_FILE):
+            with open(ORDER_FILE, 'r') as f:
+                return json.load(f)
+        return []
+    except:
+        return []
+
+def save_order(order):
+    try:
+        os.makedirs("data", exist_ok=True)
+        with open(ORDER_FILE, 'w') as f:
+            json.dump(order, f, indent=2)
+    except:
+        pass
+
+def get_ordered_sessions():
+    all_sessions = get_all_sessions()
+    order = load_order()
+    if order:
+        ordered = [s for s in order if s in all_sessions]
+        for s in all_sessions:
+            if s not in ordered:
+                ordered.append(s)
+        return ordered
+    return all_sessions
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
@@ -122,6 +155,92 @@ async def cmd_disconnect(msg: Message):
     await disconnect_all_clients()
     await msg.answer("✅ Все юзерботы отключены!")
 
+@router.message(Command("order"))
+async def cmd_order(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    
+    sessions = get_ordered_sessions()
+    if not sessions:
+        await msg.answer("📭 Нет сессий")
+        return
+    
+    text = "📋 **ПОРЯДОК АККАУНТОВ**\n\n"
+    for i, s in enumerate(sessions, 1):
+        text += f"{i}. @{s}\n"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for i, s in enumerate(sessions):
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=f"{i+1}. @{s}", callback_data="noop"),
+            InlineKeyboardButton(text="⬆️", callback_data=f"ord_up:{s}"),
+            InlineKeyboardButton(text="⬇️", callback_data=f"ord_down:{s}")
+        ])
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="🔄 Сбросить", callback_data="ord_reset")
+    ])
+    
+    await msg.answer(text, reply_markup=kb)
+
+@router.callback_query(F.data == "noop")
+async def noop(call: CallbackQuery):
+    await call.answer()
+
+@router.callback_query(F.data.startswith("ord_up:"))
+async def order_up(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return await call.answer("❌ Нет доступа", show_alert=True)
+    
+    s = call.data.split(":")[1]
+    order = load_order()
+    all_s = get_all_sessions()
+    
+    if not order:
+        order = all_s.copy()
+    
+    if s not in order:
+        order.insert(0, s)
+    else:
+        idx = order.index(s)
+        if idx > 0:
+            order[idx], order[idx-1] = order[idx-1], order[idx]
+    
+    save_order(order)
+    await call.answer(f"✅ @{s} поднят")
+    await cmd_order(call.message)
+
+@router.callback_query(F.data.startswith("ord_down:"))
+async def order_down(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return await call.answer("❌ Нет доступа", show_alert=True)
+    
+    s = call.data.split(":")[1]
+    order = load_order()
+    all_s = get_all_sessions()
+    
+    if not order:
+        order = all_s.copy()
+    
+    if s not in order:
+        order.append(s)
+    else:
+        idx = order.index(s)
+        if idx < len(order) - 1:
+            order[idx], order[idx+1] = order[idx+1], order[idx]
+    
+    save_order(order)
+    await call.answer(f"✅ @{s} опущен")
+    await cmd_order(call.message)
+
+@router.callback_query(F.data == "ord_reset")
+async def order_reset(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        return await call.answer("❌ Нет доступа", show_alert=True)
+    
+    save_order([])
+    await call.answer("🔄 Порядок сброшен")
+    await cmd_order(call.message)
+
 @router.message(F.text.lower().startswith("аллеб"))
 async def cmd_alleb(msg: Message):
     if not is_admin(msg.from_user.id):
@@ -132,16 +251,12 @@ async def cmd_alleb(msg: Message):
     reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else None
     
     target_ids = []
-    
-    # Если есть реплай
     if reply_to_id and msg.reply_to_message and msg.reply_to_message.text:
         reply_text = msg.reply_to_message.text
-        # Ищем все ID и username в тексте
         ids = re.findall(r'\b(\d{7,})\b', reply_text)
         usernames = re.findall(r'@([a-zA-Z0-9_]+)', reply_text)
         all_targets = ids + usernames
         
-        # Парсим диапазон
         if full_text and '-' in full_text:
             try:
                 parts = full_text.split('-')
@@ -163,14 +278,12 @@ async def cmd_alleb(msg: Message):
                 await msg.answer(f"❌ Номер {full_text} не найден! Доступно: 1-{len(all_targets)}")
                 return
         else:
-            # Берем все цели
             target_ids = all_targets
         
         if not target_ids:
             await msg.answer("❌ Не найдены ID или @username в реплае!")
             return
     else:
-        # Нет реплая - обычная логика
         if full_text:
             words = full_text.split()
             target = None
@@ -195,7 +308,7 @@ async def cmd_alleb(msg: Message):
         else:
             text = "заразить"
         
-        sessions = get_all_sessions()
+        sessions = get_ordered_sessions()
         if not sessions:
             await msg.answer("❌ Нет доступных сессий")
             return
@@ -203,7 +316,7 @@ async def cmd_alleb(msg: Message):
         results = []
         delay = 0.75
         
-        for i, username in enumerate(sessions):
+        for username in sessions:
             try:
                 session_string = await load_telethon_session(username)
                 if not session_string:
@@ -231,8 +344,13 @@ async def cmd_alleb(msg: Message):
                 logger.error(f"Ошибка {username}: {e}")
                 results.append(f"❌ @{username}: {str(e)}")
             
-            if i < len(sessions) - 1:
-                await asyncio.sleep(delay)
+            # Точная задержка с учетом времени отправки
+            import time
+            send_start = time.time()
+            elapsed = time.time() - send_start
+            sleep_time = max(0, delay - elapsed)
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
         
         response = "✅ Отправлено!\n"
         response += f"📝 Текст: {text}\n"
@@ -241,64 +359,62 @@ async def cmd_alleb(msg: Message):
         await msg.answer(response)
         return
     
-    # Обработка списка жертв
     if not target_ids:
         await msg.answer("❌ Нет целей для заражения!")
         return
     
-    sessions = get_all_sessions()
+    sessions = get_ordered_sessions()
     if not sessions:
         await msg.answer("❌ Нет доступных сессий")
         return
     
     all_results = []
-    delay = 0.75
+    msg_delay = 0.75
     
-    for target_idx, target in enumerate(target_ids):
-        target_text = f"заразить @{target}"
+    for username in sessions:
         results = []
+        session_string = await load_telethon_session(username)
+        if not session_string:
+            results.append(f"❌ @{username}: сессия не найдена")
+            all_results.append({'username': username, 'results': results})
+            continue
         
-        for i, username in enumerate(sessions):
-            try:
-                session_string = await load_telethon_session(username)
-                if not session_string:
-                    results.append(f"❌ @{username}: сессия не найдена")
-                    continue
-                
-                client = TelegramClient(StringSession(session_string), API_ID, API_HASH)
-                await client.connect()
-                
-                try:
-                    await client.send_message(entity="@epidemic2_bot", message="!купить вакцину")
-                except:
-                    pass
-                
-                target_chat = int(chat_id) if chat_id.lstrip('-').isdigit() else chat_id
-                # Отправляем без реплая, но с @ перед цифрами
-                await client.send_message(entity=target_chat, message=target_text)
-                
-                await client.disconnect()
-                results.append(f"✅ @{username}")
-                
-            except Exception as e:
-                logger.error(f"Ошибка {username}: {e}")
-                results.append(f"❌ @{username}: {str(e)}")
+        client = TelegramClient(StringSession(session_string), API_ID, API_HASH)
+        await client.connect()
+        
+        try:
+            await client.send_message(entity="@epidemic2_bot", message="!купить вакцину")
+        except:
+            pass
+        
+        target_chat = int(chat_id) if chat_id.lstrip('-').isdigit() else chat_id
+        
+        import time
+        for target_idx, target in enumerate(target_ids):
+            target_text = f"заразить @{target}"
+            send_start = time.time()
             
-            if i < len(sessions) - 1:
-                await asyncio.sleep(delay)
+            try:
+                await client.send_message(entity=target_chat, message=target_text)
+                results.append(f"✅ @{username} -> {target_text}")
+            except Exception as e:
+                results.append(f"❌ @{username} -> {target}: {str(e)}")
+            
+            if target_idx < len(target_ids) - 1:
+                elapsed = time.time() - send_start
+                sleep_time = max(0, msg_delay - elapsed)
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
         
-        all_results.append({
-            'target': target,
-            'text': target_text,
-            'results': results
-        })
+        await client.disconnect()
+        all_results.append({'username': username, 'results': results})
         
-        if target_idx < len(target_ids) - 1:
+        if username != sessions[-1]:
             await asyncio.sleep(0.5)
     
     response = "✅ Отправлено!\n\n"
     for item in all_results:
-        response += f"🎯 {item['target']}: {item['text']}\n"
+        response += f"👤 @{item['username']}:\n"
         for r in item['results']:
             response += f"  {r}\n"
         response += "\n"
@@ -313,7 +429,7 @@ async def cmd_allhil(msg: Message):
     chat_id = str(msg.chat.id)
     reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else None
     
-    sessions = get_all_sessions()
+    sessions = get_ordered_sessions()
     if not sessions:
         await msg.answer("❌ Нет доступных сессий")
         return
@@ -322,7 +438,7 @@ async def cmd_allhil(msg: Message):
     delay = 0.75
     text = "💊 Хил"
     
-    for i, username in enumerate(sessions):
+    for username in sessions:
         try:
             session_string = await load_telethon_session(username)
             if not session_string:
@@ -334,9 +450,8 @@ async def cmd_allhil(msg: Message):
             
             try:
                 await client.send_message(entity="@epidemic2_bot", message="!купить вакцину")
-                logger.info(f"[{username}] Отправлена команда !купить вакцину")
-            except Exception as e:
-                logger.error(f"[{username}] Ошибка отправки вакцины: {e}")
+            except:
+                pass
             
             target = int(chat_id) if chat_id.lstrip('-').isdigit() else chat_id
             if reply_to_id:
@@ -351,8 +466,7 @@ async def cmd_allhil(msg: Message):
             logger.error(f"Ошибка {username}: {e}")
             results.append(f"❌ @{username}: {str(e)}")
         
-        if i < len(sessions) - 1:
-            await asyncio.sleep(delay)
+        await asyncio.sleep(delay)
     
     response = "💊 Хил отправлен!\n"
     response += f"📝 Текст: {text}\n"
@@ -370,11 +484,10 @@ async def cmd_reghelp(msg: Message):
         "/register - Инструкция по ручной регистрации\n"
         "/sessions - Список всех сессий\n"
         "/del @username - Удалить сессию\n"
-        "/disconnect - Отключить всех юзерботов\n\n"
+        "/disconnect - Отключить всех юзерботов\n"
+        "/order - Порядок аккаунтов\n\n"
         "аллеб - отправить 'заразить' в текущий чат\n"
-        "аллеб текст - отправить текст в текущий чат\n"
         "аллеб 1-3 (реплай) - заразить список из реплая\n"
-        "аллхил - 💊 Хил + !купить вакцину\n"
-        "аллеб (реплай) - ответить на сообщение\n\n"
+        "аллхил - 💊 Хил + !купить вакцину\n\n"
         "Задержка между аккаунтами: 750 мс"
     )

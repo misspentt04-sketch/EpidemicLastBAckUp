@@ -44,16 +44,17 @@ from core.data.tricks.tricks_biowar import tricks_biowar
 import random
 
 
-async def vaccine_choice_menu(msg: Message, bot: Bot, redis: Redis):
+async def vaccine_choice_menu(msg: Message, bot: Bot, redis: Redis, repo_biowar: RequestsRepoBiowar):
     user_id = msg.from_user.id
-    current_mode = await redis.get(f"vac_pay_mode:{user_id}")
-    current_mode = current_mode.decode() if isinstance(current_mode, bytes) else (current_mode or "default")
-
-    mode_text = {
-        "bio": "🧬 Био-ресурсы",
-        "epi": "🪙 Эпикоины",
-        "default": "❓ Каждый раз спрашивать (по умолчанию)"
-    }.get(current_mode, "❓ Каждый раз спрашивать")
+    # ПРИНУДИТЕЛЬНО БИО
+    await redis.set(f"vac_pay_mode:{user_id}", "bio")
+    try:
+        await repo_biowar.execute("UPDATE Users SET vac_pay_mode = 'bio' WHERE id = %s;", (user_id,))
+    except Exception as e:
+        logger.error(f"Ошибка обновления vac_pay_mode: {e}")
+    
+    current_mode = "bio"
+    mode_text = "🧬 Био-ресурсы"
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -86,12 +87,15 @@ async def cb_set_vac_mode(call: CallbackQuery, redis: Redis):
 
     if mode == "default":
         await redis.delete(f"vac_pay_mode:{user_id}")
+        await repo_biowar.execute("UPDATE Users SET vac_pay_mode = NULL WHERE id = %s;", (user_id,))
         msg_text = "🔄 Режим сброшен. Теперь при покупке вакцины будет появляться выбор."
     elif mode == "bio":
         await redis.set(f"vac_pay_mode:{user_id}", "bio")
+        await repo_biowar.execute("UPDATE Users SET vac_pay_mode = 'bio' WHERE id = %s;", (user_id,))
         msg_text = "✅ Установлена автоматическая покупка вакцины за 🧬 Био-ресурсы!"
     elif mode == "epi":
         await redis.set(f"vac_pay_mode:{user_id}", "epi")
+        await repo_biowar.execute("UPDATE Users SET vac_pay_mode = 'epi' WHERE id = %s;", (user_id,))
         msg_text = "✅ Установлена автоматическая покупка вакцины за 🪙 Эпикоины!"
 
     await call.message.edit_text(msg_text)
@@ -101,7 +105,18 @@ async def cb_set_vac_mode(call: CallbackQuery, redis: Redis):
 async def buy_vaccine(msg: Message, bot: Bot, db: Cursor, redis: Redis, repo_biowar: RequestsRepoBiowar):
     user_id = msg.from_user.id
     pay_mode = await redis.get(f"vac_pay_mode:{user_id}")
-    pay_mode = pay_mode.decode() if isinstance(pay_mode, bytes) else pay_mode
+    if not pay_mode:
+        # Если нет выбора - проверяем БД
+        db_mode = await repo_biowar.select_one("SELECT vac_pay_mode FROM Users WHERE id = %s;", (user_id,))
+        if db_mode:
+            pay_mode = db_mode.get('vac_pay_mode') if isinstance(db_mode, dict) else db_mode[0]
+        else:
+            # Ставим bio по умолчанию
+            pay_mode = "bio"
+            await redis.set(f"vac_pay_mode:{user_id}", "bio")
+            await repo_biowar.execute("UPDATE Users SET vac_pay_mode = 'bio' WHERE id = %s;", (user_id,))
+    else:
+        pay_mode = pay_mode.decode() if isinstance(pay_mode, bytes) else pay_mode
 
     lab_info = await repo_biowar.get_info_user_lab(user_id)
 
