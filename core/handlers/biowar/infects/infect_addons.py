@@ -104,19 +104,13 @@ async def cb_set_vac_mode(call: CallbackQuery, redis: Redis):
 
 async def buy_vaccine(msg: Message, bot: Bot, db: Cursor, redis: Redis, repo_biowar: RequestsRepoBiowar):
     user_id = msg.from_user.id
-    pay_mode = await redis.get(f"vac_pay_mode:{user_id}")
-    if not pay_mode:
-        # Если нет выбора - проверяем БД
-        db_mode = await repo_biowar.select_one("SELECT vac_pay_mode FROM Users WHERE id = %s;", (user_id,))
-        if db_mode:
-            pay_mode = db_mode.get('vac_pay_mode') if isinstance(db_mode, dict) else db_mode[0]
-        else:
-            # Ставим bio по умолчанию
-            pay_mode = "bio"
-            await redis.set(f"vac_pay_mode:{user_id}", "bio")
-            await repo_biowar.execute("UPDATE Users SET vac_pay_mode = 'bio' WHERE id = %s;", (user_id,))
-    else:
-        pay_mode = pay_mode.decode() if isinstance(pay_mode, bytes) else pay_mode
+    # Всегда bio
+    pay_mode = "bio"
+    await redis.set(f"vac_pay_mode:{user_id}", "bio")
+    try:
+        await repo_biowar.execute("UPDATE Users SET vac_pay_mode = 'bio' WHERE id = %s;", (user_id,))
+    except:
+        pass
 
     lab_info = await repo_biowar.get_info_user_lab(user_id)
 
@@ -126,6 +120,8 @@ async def buy_vaccine(msg: Message, bot: Bot, db: Cursor, redis: Redis, repo_bio
     fev_seconds = (datetime.fromtimestamp(lab_info["fever"], tz=timezone.utc) - datetime.now(timezone.utc)).total_seconds()
     fev_seconds = 1 if fev_seconds <= 0 else fev_seconds
 
+    # ПРИНУДИТЕЛЬНО БИО (автоматически)
+    pay_mode = "bio"
     # Если установлен автоматический режим оплаты
     if pay_mode == "bio":
         pet = await repo_biowar.get_my_pet(user_id)
