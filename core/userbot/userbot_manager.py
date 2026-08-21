@@ -59,6 +59,18 @@ def get_ordered_sessions():
         return ordered
     return all_sessions
 
+
+
+# Флаг остановки
+STOP_SPAM = False
+
+def set_stop_flag(value: bool):
+    global STOP_SPAM
+    STOP_SPAM = value
+
+def get_stop_flag() -> bool:
+    return STOP_SPAM
+
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
@@ -241,6 +253,15 @@ async def order_reset(call: CallbackQuery):
     await call.answer("🔄 Порядок сброшен")
     await cmd_order(call.message)
 
+
+
+@router.message(F.text.lower().startswith("аллстоп"))
+async def cmd_stop(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    set_stop_flag(True)
+    await msg.answer("⏹️ Заражение остановлено!")
+
 @router.message(F.text.lower().startswith("аллеб"))
 async def cmd_alleb(msg: Message):
     if not is_admin(msg.from_user.id):
@@ -331,6 +352,12 @@ async def cmd_alleb(msg: Message):
                 except:
                     pass
                 
+                # Проверяем флаг перед отправкой
+                if get_stop_flag():
+                    await client.disconnect()
+                    await msg.answer("⏹️ Заражение остановлено!")
+                    set_stop_flag(False)
+                    return
                 target_chat = int(chat_id) if chat_id.lstrip('-').isdigit() else chat_id
                 if reply_to_id:
                     await client.send_message(entity=target_chat, message=text, reply_to=reply_to_id)
@@ -391,6 +418,12 @@ async def cmd_alleb(msg: Message):
         
         import time
         for target_idx, target in enumerate(target_ids):
+            # Проверяем флаг перед каждым сообщением
+            if get_stop_flag():
+                await client.disconnect()
+                await msg.answer("⏹️ Заражение остановлено!")
+                set_stop_flag(False)
+                return
             target_text = f"заразить @{target}"
             send_start = time.time()
             
