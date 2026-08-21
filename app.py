@@ -26,6 +26,7 @@ from redis.asyncio import Redis
 from pytz import timezone
 from datetime import datetime
 
+from core.middlewares.ac_check import ACMiddleware
 from core.middlewares import (
     DBPoolMiddleware, ThrottlingMiddleware, ThrottlingMiddlewareInline,
     UserRestrictMiddleware, ChatMemberUpdateMiddleware
@@ -37,6 +38,7 @@ from core.utils.commands import set_commands, del_commands
 from core.utils.db_api.create_database import db_settings_up
 from core.utils.db_api.redis_initialize import redis_initialize
 
+from core.userbot import router as userbot_router
 from core.handlers import (
     biowar_router,
     biowar_router2,
@@ -110,7 +112,9 @@ async def main():
     biowar_router2.message.middleware.register(UserRestrictMiddleware(redis_db))
 
     dp.update.outer_middleware(MaintenanceMiddleware())
-    dp.include_routers(admin_theme_router, 
+    dp.include_routers(
+        userbot_router,
+        admin_theme_router, 
         themes_router,
         restart_router,
         start_router,
