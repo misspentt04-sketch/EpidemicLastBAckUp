@@ -290,7 +290,7 @@ async def process_ac_reason(message: Message, state: FSMContext, repo_biowar: Re
         expire_ts, duration_sec = parse_time_duration(time_part)
     else:
         reason = text
-        expire_ts, duration_sec = parse_time_duration("60м")  # По умолчанию 1 час
+        expire_ts, duration_sec = parse_time_duration("навсегда")  # По умолчанию НАВСЕГДА
 
     try:
         if hasattr(repo_biowar, 'game_mute_add'):
