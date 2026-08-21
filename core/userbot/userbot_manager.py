@@ -9,6 +9,7 @@ from aiogram.filters import Command
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
+from .chk_handler import router as chk_router
 from .session_manager import (
     get_all_sessions,
     delete_session,
@@ -27,6 +28,40 @@ API_ID = 29154972
 API_HASH = "cc13cd6917234b587cf47048ba69072d"
 
 init_sessions_dir()
+
+def get_ordered_sessions():
+    """Возвращает сессии в правильном порядке"""
+    all_sessions = get_all_sessions()
+    order = load_order()
+    if order:
+        ordered = [s for s in order if s in all_sessions]
+        for s in all_sessions:
+            if s not in ordered:
+                ordered.append(s)
+        return ordered
+    return all_sessions
+
+# ===== Глобальные клиенты =====
+GLOBAL_CLIENTS = {}
+
+async def get_or_create_client(username: str):
+    """Возвращает подключенного клиента или создает нового"""
+    if username in GLOBAL_CLIENTS:
+        client = GLOBAL_CLIENTS[username]
+        try:
+            if client.is_connected():
+                return client
+        except:
+            pass
+    
+    session_string = await load_telethon_session(username)
+    if not session_string:
+        return None
+    
+    client = TelegramClient(StringSession(session_string), API_ID, API_HASH)
+    await client.connect()
+    GLOBAL_CLIENTS[username] = client
+    return client
 
 # ===== ПОРЯДОК АККАУНТОВ =====
 ORDER_FILE = "data/sessions_order.json"
@@ -48,21 +83,14 @@ def save_order(order):
     except:
         pass
 
-def get_ordered_sessions():
-    all_sessions = get_all_sessions()
-    order = load_order()
-    if order:
-        ordered = [s for s in order if s in all_sessions]
-        for s in all_sessions:
-            if s not in ordered:
-                ordered.append(s)
-        return ordered
-    return all_sessions
-
 
 
 # Флаг остановки
 STOP_SPAM = False
+STOP_EVENT = asyncio.Event()
+
+# Флаг заражения
+INFECTION_RUNNING = False
 
 def set_stop_flag(value: bool):
     global STOP_SPAM
@@ -257,23 +285,50 @@ async def order_reset(call: CallbackQuery):
 
 @router.message(F.text.lower().startswith("аллстоп"))
 async def cmd_stop(msg: Message):
+    global INFECTION_RUNNING
+    
     if not is_admin(msg.from_user.id):
         return
     set_stop_flag(True)
+    STOP_EVENT.set()
+    INFECTION_RUNNING = False
     await msg.answer("⏹️ Заражение остановлено!")
 
 @router.message(F.text.lower().startswith("аллеб"))
 async def cmd_alleb(msg: Message):
+    global INFECTION_RUNNING
+    
     if not is_admin(msg.from_user.id):
         return
+    
+    # Проверяем, не запущено ли уже заражение
+    if INFECTION_RUNNING:
+        await msg.answer("⚠️ Заражение уже запущено! Дождитесь окончания.")
+        return
+    
+    if get_stop_flag():
+        await msg.answer("⏹️ Команды остановлены! Используйте аллстоп для сброса.")
+        return
+    
+    INFECTION_RUNNING = True
+    
+    # Сообщение о старте
+    await msg.answer("🦠 Заражение начнется через 3 секунды...")
+    await asyncio.sleep(3)
+
     
     chat_id = str(msg.chat.id)
     full_text = msg.text.lower().replace("аллеб", "").strip()
     reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else None
-    
+
     target_ids = []
-    if reply_to_id and msg.reply_to_message and msg.reply_to_message.text:
-        reply_text = msg.reply_to_message.text
+    if reply_to_id and msg.reply_to_message:
+        # Используем полный текст (включая обрезанный)
+        reply_text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
+        if not reply_text and hasattr(msg.reply_to_message, 'full_text'):
+            reply_text = msg.reply_to_message.full_text
+        if not reply_text and hasattr(msg.reply_to_message, 'md_text'):
+            reply_text = msg.reply_to_message.md_text
         ids = re.findall(r'\b(\d{7,})\b', reply_text)
         usernames = re.findall(r'@([a-zA-Z0-9_]+)', reply_text)
         all_targets = ids + usernames
@@ -335,9 +390,17 @@ async def cmd_alleb(msg: Message):
             return
         
         results = []
-        delay = 0.75
+        delay = 1.0
         
         for username in sessions:
+            # Проверяем Event
+            if STOP_EVENT.is_set():
+                await msg.answer("⏹️ Заражение остановлено!")
+                INFECTION_RUNNING = False
+                STOP_EVENT.clear()
+                set_stop_flag(False)
+                return
+            
             try:
                 session_string = await load_telethon_session(username)
                 if not session_string:
@@ -357,7 +420,16 @@ async def cmd_alleb(msg: Message):
                     await client.disconnect()
                     await msg.answer("⏹️ Заражение остановлено!")
                     set_stop_flag(False)
+                    INFECTION_RUNNING = False
                     return
+                # ПРОВЕРКА ОСТАНОВКИ ПЕРЕД ОТПРАВКОЙ
+                if get_stop_flag():
+                    await client.disconnect()
+                    await msg.answer("⏹️ Заражение остановлено!")
+                    set_stop_flag(False)
+                    INFECTION_RUNNING = False
+                    return
+                
                 target_chat = int(chat_id) if chat_id.lstrip('-').isdigit() else chat_id
                 if reply_to_id:
                     await client.send_message(entity=target_chat, message=text, reply_to=reply_to_id)
@@ -396,7 +468,7 @@ async def cmd_alleb(msg: Message):
         return
     
     all_results = []
-    msg_delay = 0.75
+    msg_delay = 1.0
     
     for username in sessions:
         results = []
@@ -423,8 +495,12 @@ async def cmd_alleb(msg: Message):
                 await client.disconnect()
                 await msg.answer("⏹️ Заражение остановлено!")
                 set_stop_flag(False)
+                INFECTION_RUNNING = False
                 return
-            target_text = f"заразить @{target}"
+            if target.isdigit():
+                target_text = f"заразить tg://openmessage?user_id={target}"
+            else:
+                target_text = f"заразить @{target}"
             send_start = time.time()
             
             try:
@@ -456,19 +532,13 @@ async def cmd_alleb(msg: Message):
 
 @router.message(F.text.lower().startswith("аллхил"))
 async def cmd_allhil(msg: Message):
-    if not is_admin(msg.from_user.id):
-        return
-    
-    chat_id = str(msg.chat.id)
-    reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else None
-    
     sessions = get_ordered_sessions()
     if not sessions:
         await msg.answer("❌ Нет доступных сессий")
         return
     
     results = []
-    delay = 0.75
+    delay = 1.0
     text = "💊 Хил"
     
     for username in sessions:
@@ -509,9 +579,6 @@ async def cmd_allhil(msg: Message):
 
 @router.message(Command("reghelp"))
 async def cmd_reghelp(msg: Message):
-    if not is_admin(msg.from_user.id):
-        return
-    
     await msg.answer(
         "УПРАВЛЕНИЕ ЮЗЕРБОТАМИ\n\n"
         "/register - Инструкция по ручной регистрации\n"
@@ -524,3 +591,7 @@ async def cmd_reghelp(msg: Message):
         "аллхил - 💊 Хил + !купить вакцину\n\n"
         "Задержка между аккаунтами: 750 мс"
     )
+
+
+# Подключаем chk_handler
+router.include_router(chk_router)

@@ -29,6 +29,7 @@ numpy = "^2.2.3"
 soundfile = "^0.13.1"
 pymysql = "^1.2.0"
 aiomysql = "^0.3.2"
+telethon = "^1.44.0"
 
 
 [build-system]

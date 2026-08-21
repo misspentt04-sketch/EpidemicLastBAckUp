@@ -1749,6 +1749,17 @@ files = [
 ]
 
 [[package]]
+name = "pyaes"
+version = "1.6.1"
+description = "Pure-Python Implementation of the AES block-cipher and common modes of operation"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "pyaes-1.6.1.tar.gz", hash = "sha256:02c1b1405c38d3c370b085fb952dd8bea3fadcee6411ad99f312cc129c536d8f"},
+]
+
+[[package]]
 name = "pyasn1"
 version = "0.6.1"
 description = "Pure-Python implementation of ASN.1 types and DER/BER/CER codecs (X.208)"
@@ -2264,6 +2275,25 @@ mpmath = ">=1.1.0,<1.4"
 dev = ["hypothesis (>=6.70.0)", "pytest (>=7.1.0)"]
 
 [[package]]
+name = "telethon"
+version = "1.44.0"
+description = "Full-featured Telegram client library for Python 3"
+optional = false
+python-versions = ">=3.5"
+groups = ["main"]
+files = [
+    {file = "telethon-1.44.0-py3-none-any.whl", hash = "sha256:52fc49efb67a4916c2aedcb295ad286f4afa2aba9bf15d83ed2acdc64af0c718"},
+    {file = "telethon-1.44.0.tar.gz", hash = "sha256:7de1473e9e412e20bd57b102d8f50d48372712462be9ff6c003bb81c50ad7e98"},
+]
+
+[package.dependencies]
+pyaes = "*"
+rsa = "*"
+
+[package.extras]
+cryptg = ["cryptg"]
+
+[[package]]
 name = "torch"
 version = "2.6.0"
 description = "Tensors and Dynamic neural networks in Python with strong GPU acceleration"
@@ -2569,4 +2599,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "f35fa1cc93c6fc45bc2ccdb5a6917b13633aba85fa07df799cc32ad1c7e02737"
+content-hash = "ecf93226342ebd688afede0ff50a094c4a6d9966ae3c4e4ec6d286c97b52c9ef"

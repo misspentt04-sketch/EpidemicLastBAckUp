@@ -112,6 +112,73 @@ async def main():
     biowar_router2.message.middleware.register(UserRestrictMiddleware(redis_db))
 
     dp.update.outer_middleware(MaintenanceMiddleware())
+    
+    # Регистрируем catch_infection ПЕРВЫМ
+    from aiogram import F as AiogramF
+    from aiogram.types import Message as AiogramMessage
+    
+    @dp.message(AiogramF.text.contains("подверг заражению"))
+    async def catch_infection_global(msg: AiogramMessage):
+        import sqlite3 as sql
+        from datetime import datetime as dt, timedelta as td
+        from pathlib import Path
+        
+        try:
+            text = msg.text
+            if not text:
+                return
+            
+            attacker_id_match = re.search(r'user_id=(\d+)', text)
+            if not attacker_id_match:
+                return
+            
+            attacker_id = int(attacker_id_match.group(1))
+            
+            victim_match = re.search(r'патогеном\s+(.+)', text)
+            if not victim_match:
+                return
+            
+            victim_text = victim_match.group(1)
+            victim_id_match = re.search(r'user_id=(\d+)', victim_text)
+            victim_id = int(victim_id_match.group(1)) if victim_id_match else None
+            
+            days_match = re.search(r'🤒\s+Заражение\s+на\s+(\d+)\s+дней', text)
+            days = int(days_match.group(1)) if days_match else 0
+            
+            bio_match = re.search(r'☣️\s+\+([\d,]+)\s+био-опыта', text)
+            bio_earn = int(bio_match.group(1).replace(',', '')) if bio_match else 0
+            
+            from core.userbot.chk_handler import get_or_create_client, get_ordered_sessions
+            
+            attacker_username = None
+            for username in get_ordered_sessions():
+                client = await get_or_create_client(username)
+                if client:
+                    me = await client.get_me()
+                    if me.id == attacker_id:
+                        attacker_username = username
+                        break
+            
+            if not attacker_username:
+                return
+            
+            db_path = Path("data/victims.db")
+            now = dt.now()
+            expire_date = now + td(days=days) if days > 0 else now
+            
+            conn = sql.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO victims (attacker_username, attacker_id, victim_id, victim_username, bio_earn, infected_date, expire_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (attacker_username, attacker_id, victim_id, str(victim_id), bio_earn, now.strftime('%Y-%m-%d %H:%M:%S'), expire_date.strftime('%Y-%m-%d %H:%M:%S')))
+            conn.commit()
+            conn.close()
+            print(f"✅ ЗАПИСАНА ЖЕРТВА: @{attacker_username} -> {victim_id}, +{bio_earn}")
+            
+        except Exception as e:
+            print(f"❌ Ошибка записи жертвы: {e}")
+    
     dp.include_routers(
         userbot_router,
         admin_theme_router, 
@@ -133,6 +200,12 @@ async def main():
     await run_tasks(pool, redis_db, bot, scheduler)
 
     print("Started successfully!")
+    
+    # Запускаем слушатель заражений
+    from core.userbot.chk_handler import start_victim_listener
+    await start_victim_listener()
+    
+
 
     # Проверка: если был /restart, отправляем красивый отчёт
     if os.path.exists(RESTART_FILE):

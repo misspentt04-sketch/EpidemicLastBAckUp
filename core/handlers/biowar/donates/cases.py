@@ -5,6 +5,8 @@ from aiogram import Bot, Router, types, F
 from aiogram.filters import Command, Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
+from core.data.tricks.themes_data import get_theme_text
+
 cases_router = Router()
 
 def get_cases_keyboard():
@@ -79,11 +81,12 @@ async def cmd_cases(msg: types.Message, db):
         case1 = lab[1] or 0
         case2 = lab[2] or 0
 
-    text = (
-        "🎒 <b>Инвентарь кейсов:</b>\n\n"
-        f"🪙 Баланс: <b>{epicoins} эпикоинов</b>\n\n"
-        f"📦 Обычные кейсы (Кейс 1): <b>{case1} шт.</b> (Цена: 500 🪙)\n"
-        f"💎 Донат кейсы (Кейс 2): <b>{case2} шт.</b>"
+    # Используем тему для текста кейсов
+    cases_text = await get_theme_text(db, user_id, "cases_menu")
+    text = cases_text.format(
+        epicoins=f"{epicoins:,}",
+        case1=case1,
+        case2=case2
     )
     
     await msg.reply(text, reply_markup=get_cases_keyboard())
@@ -127,11 +130,11 @@ async def cb_buy_case1(call: CallbackQuery, db):
         up_c1 = updated_lab[1] or 0
         up_c2 = updated_lab[2] or 0
 
-    text = (
-        "🎒 <b>Инвентарь кейсов:</b>\n\n"
-        f"🪙 Баланс: <b>{up_ep} эпикоинов</b>\n\n"
-        f"📦 Обычные кейсы (Кейс 1): <b>{up_c1} шт.</b> (Цена: 500 🪙)\n"
-        f"💎 Донат кейсы (Кейс 2): <b>{up_c2} шт.</b>"
+    cases_text = await get_theme_text(db, user_id, "cases_menu")
+    text = cases_text.format(
+        epicoins=f"{up_ep:,}",
+        case1=up_c1,
+        case2=up_c2
     )
     await call.message.edit_text(text, reply_markup=get_cases_keyboard())
     await call.answer("✅ Вы успешно купили Кейс 1!")

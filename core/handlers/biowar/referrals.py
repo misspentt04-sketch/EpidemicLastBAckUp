@@ -1,6 +1,7 @@
 import logging
 from aiogram import Router, F, Bot
 from aiogram.types import Message
+from aiogram import types
 from aiogram.filters import CommandStart, CommandObject
 from core.utils.db_api.repo_biowar import RequestsRepoBiowar
 
@@ -11,6 +12,9 @@ LOG_CHAT_ID = -1003688648228
 REFERRAL_BONUS = 150
 
 @router.message(CommandStart())
+async def check_chk(message: types.Message, command: CommandObject):
+    if command.args and command.args.startswith("chk_"):
+        return
 async def cmd_start_ref(message: Message, command: CommandObject, repo_biowar: RequestsRepoBiowar, bot: Bot):
     user_id = message.from_user.id
     full_name = message.from_user.full_name
