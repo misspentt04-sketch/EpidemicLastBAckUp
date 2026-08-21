@@ -214,7 +214,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
             and victimer['chat_setup_virus']
             and victimer['chat_setup_virus'] != chat_id
             and vic_user_chat
-            and spent_pathogens >= 2
+            and spent_pathogens >= 1
         ):
             await bot.send_message(victimer['chat_setup_virus'], sb_virus_detect_try_text)
 
@@ -224,7 +224,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
             '',
             f'{display_chance_str}% '
         )
-        custom_fail_template = await get_theme_text(db, msg.from_user.id, 'infect_failed')
+        custom_fail_template = await get_theme_text(repo_biowar, msg.from_user.id, 'infect_failed')
         if custom_fail_template:
             fail_text = custom_fail_template.format(
                 target_name=vic_entity_sb, target_mention=vic_entity,
@@ -310,6 +310,15 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         print("Error inserting infection history:", ex)
 
     # И только ТЕПЕРЬ перезаписываем запись в базе
+    # Сохраняем сколько опыта получили с этой жертвы
+    await repo_biowar.execute_query(
+        "UPDATE Victims SET last_earn_exp = %s WHERE victims_owner_id = %s AND victim_id = %s;",
+        earn_exp, infecter['id'], victimer['id']
+    )
+    
+    # Сохраняем предыдущий опыт в Redis перед обновлением
+    await redis.set(f"last_earn:{infecter['id']}:{victimer['id']}", earn_exp)
+    
     await repo_biowar.infect_setup(
         infecter['id'], victimer['id'], earn_exp, vic_exp,
         vic_expire_kd, inf_ready_pathogens_left,
@@ -325,7 +334,8 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         tricks_biowar['text']['victim_new'].format(intcomma(earn_exp)) if vic_new else ''
     )
 
-    custom_success_template = await get_theme_text(db, msg.from_user.id, 'infect_success')
+    custom_success_template = await get_theme_text(repo_biowar, msg.from_user.id, 'infect_success')
+    print(f"[TEXT DEBUG] custom_success_template: {repr(custom_success_template)}")
     if custom_success_template:
         p_name = pathogen_name if pathogen_name else "Неизвестный патоген"
         try:
@@ -343,9 +353,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
                 pathogen_name=p_name,
                 fever_time=fever_time_,
                 expire_days=infecter["lethality"],
-                exp_gain=intcomma(earn_exp),
-                res_gain=intcomma(earn_exp),
-                victim_new=intcomma(earn_exp)
+                exp_gain=intcomma(earn_exp)
             )
         except Exception as e:
             print(f"[INFECT SUCCESS FORMAT ERROR] {e}")
@@ -363,7 +371,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     vic_sb = victimer.get('security_service', 0)
     display_attacker = "<b>Неизвестная лаборатория</b> 🕵️‍♂️" if inf_sb > vic_sb else inf_entity
 
-    custom_infected_you_template = await get_theme_text(db, victimer.get('user_id', victimer.get('id')), 'infected_you')
+    custom_infected_you_template = await get_theme_text(repo_biowar, victimer.get('user_id', victimer.get('id')), 'infected_you')
     if custom_infected_you_template:
         sb_virus_not_detect_text = custom_infected_you_template.format(
             attacker_mention=display_attacker,
