@@ -456,6 +456,7 @@ async def cmd_alleb(msg: Message):
         response += f"📊 Аккаунтов: {len(sessions)}\n\n"
         response += "\n".join(results)
         await msg.answer(response)
+        INFECTION_RUNNING = False
         return
     
     if not target_ids:
