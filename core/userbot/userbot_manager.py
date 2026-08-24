@@ -289,7 +289,7 @@ async def cmd_stop(msg: Message):
     
     if not is_admin(msg.from_user.id):
         return
-    set_stop_flag(True)
+    set_stop_flag(False)
     STOP_EVENT.set()
     INFECTION_RUNNING = False
     await msg.answer("⏹️ Заражение остановлено!")

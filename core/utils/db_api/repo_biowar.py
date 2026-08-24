@@ -355,7 +355,7 @@ class RequestsRepoBiowar:
         
         params1 = (
             infecter_id, victim_id, vic_expire, infect_date,
-            victim_expire_kd, int(earn_exp+(pet_boost_exp if pet_boost_exp else 0)),
+            victim_expire_kd, earn_exp,
             pathogen_name, ss_detect, victim_id,
             vic_expire, infect_date, victim_expire_kd, earn_exp,
             pathogen_name, ss_detect
