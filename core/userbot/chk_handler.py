@@ -325,6 +325,95 @@ async def cmd_convert(msg: Message):
     
     await msg.answer(result)
 
+# ===== Команда сетпреф (ручная установка) =====
+@router.message(F.text.lower().startswith("сетпреф"))
+async def cmd_set_prefix(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    
+    from .userbot_manager import load_prefixes, save_prefixes
+    
+    parts = msg.text.split()
+    if len(parts) < 3:
+        await msg.answer("❌ Использование: сетпреф @username префикс")
+        return
+    
+    username = parts[1].replace('@', '')
+    prefix = parts[2]
+    
+    sessions = get_ordered_sessions()
+    if username not in sessions:
+        await msg.answer(f"❌ Сессия @{username} не найдена")
+        return
+    
+    prefixes = load_prefixes()
+    prefixes[username] = prefix
+    save_prefixes(prefixes)
+    
+    await msg.answer(f"✅ Префикс для @{username}: <code>{prefix}</code>", parse_mode="HTML")
+
+# ===== Команда !довы =====
+@router.message(F.text.lower().startswith("!довы"))
+async def cmd_dovs_list(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    
+    from .userbot_manager import load_prefixes, load_dovs, save_prefixes, save_dovs
+    
+    sessions = get_ordered_sessions()
+    if not sessions:
+        await msg.answer("❌ Нет доступных сессий")
+        return
+    
+    prefixes = load_prefixes()
+    dovs = load_dovs()
+    
+    # Админы всегда в доверенных
+    for username in sessions:
+        if username not in dovs:
+            dovs[username] = []
+        for admin_id in ADMIN_IDS:
+            if admin_id not in dovs[username]:
+                dovs[username].append(admin_id)
+    save_dovs(dovs)
+    
+    # Автоматически присваиваем префиксы: 1-9, а-я
+    if not prefixes:
+        import string
+        auto_prefixes = list("123456789") + list("абвгдежзиклмнопрстуфхцчшщъыьэюя")
+        for i, username in enumerate(sessions):
+            if i < len(auto_prefixes):
+                prefixes[username] = auto_prefixes[i]
+        save_prefixes(prefixes)
+    
+    # Первый юзербот отправляет весь список
+    first_username = sessions[0]
+    client = await get_or_create_client(first_username)
+    if not client:
+        await msg.answer("❌ Не удалось подключить юзербота")
+        return
+    
+    # Формируем полный список
+    text = "📋 <b>Список юзерботов:</b>\n\n"
+    for username in sessions:
+        prefix = prefixes.get(username, ".с")
+        try:
+            me = await client.get_me()
+            user_id = me.id
+        except:
+            user_id = "?"
+        text += f"👤 @{username}\n🆔 <code>{user_id}</code>\n🔑 Префикс: <code>{prefix}</code>\n————————————\n"
+    
+    # Отправляем реплаем от первого юзербота
+    await client.send_message(msg.chat.id, text, reply_to=msg.message_id, parse_mode="html")
+    
+    # Удаляем команду через 5 сек
+    await asyncio.sleep(5)
+    try:
+        await msg.delete()
+    except:
+        pass
+
 # ===== Команда ЧК =====
 @router.message(F.text.lower().startswith("чк"))
 async def cmd_chk(msg: Message):

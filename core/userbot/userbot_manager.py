@@ -41,6 +41,40 @@ def get_ordered_sessions():
         return ordered
     return all_sessions
 
+# ===== Доверенные и префиксы =====
+import json as json_lib
+import random as random_lib
+
+DOVS_FILE = "data/dovs.json"
+PREFIXES_FILE = "data/prefixes.json"
+
+def load_json_file(path):
+    try:
+        with open(path, 'r') as f:
+            return json_lib.load(f)
+    except:
+        return {}
+
+def save_json_file(path, data):
+    with open(path, 'w') as f:
+        json_lib.dump(data, f, ensure_ascii=False, indent=2)
+
+def load_dovs():
+    return load_json_file(DOVS_FILE)
+
+def save_dovs(data):
+    save_json_file(DOVS_FILE, data)
+
+def load_prefixes():
+    return load_json_file(PREFIXES_FILE)
+
+def save_prefixes(data):
+    save_json_file(PREFIXES_FILE, data)
+
+def get_prefix(username: str) -> str:
+    prefixes = load_prefixes()
+    return prefixes.get(username, '.с')
+
 # ===== Глобальные клиенты =====
 GLOBAL_CLIENTS = {}
 
@@ -62,6 +96,145 @@ async def get_or_create_client(username: str):
     await client.connect()
     GLOBAL_CLIENTS[username] = client
     return client
+
+# ===== Команда <префикс>дов =====
+@router.message(F.text.regexp(r'^\S+дов$'))
+async def cmd_dov(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    
+    text = msg.text.strip()
+    prefix = text.replace("дов", "")
+    
+    # Ищем или создаём префикс для текущего юзербота
+    dovs = load_dovs()
+    prefixes = load_prefixes()
+    
+    # Пробуем найти юзербота по префиксу
+    target_username = None
+    for username in get_ordered_sessions():
+        if prefixes.get(username) == prefix:
+            target_username = username
+            break
+    
+    # Если не нашли - создаём новый префикс для первого доступного
+    if not target_username:
+        sessions = get_ordered_sessions()
+        if sessions:
+            target_username = sessions[0]
+            prefixes[target_username] = prefix
+            save_prefixes(prefixes)
+    
+    # Добавляем отправителя в доверенные
+    if target_username not in dovs:
+        dovs[target_username] = []
+    
+    if msg.from_user.id not in dovs[target_username]:
+        dovs[target_username].append(msg.from_user.id)
+        save_dovs(dovs)
+        await msg.answer(f"✅ Добавлен в доверенные @{target_username}")
+    else:
+        await msg.answer(f"ℹ️ Уже в доверенных @{target_username}")
+
+# ===== Команда <префикс>еб =====
+@router.message(F.text.regexp(r'^[^\s]{1,2}еб\s+'))
+async def cmd_infect_by_prefix(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    
+    text = msg.text.strip()
+    parts = text.split(' ', 1)
+    if len(parts) < 2:
+        await msg.answer("❌ Использование: <префикс>еб цель")
+        return
+    
+    prefix = parts[0][:-2]  # убираем "еб" в конце
+    target_text = parts[1].strip()
+    
+    # Находим юзербота по префиксу
+    prefixes = load_prefixes()
+    target_username = None
+    for username in get_ordered_sessions():
+        if prefixes.get(username) == prefix:
+            target_username = username
+            break
+    
+    if not target_username:
+        await msg.answer(f"❌ Юзербот с префиксом <code>{prefix}</code> не найден")
+        return
+    
+    # Отправляем заражение
+    client = await get_or_create_client(target_username)
+    if not client:
+        await msg.answer(f"❌ Не удалось подключить @{target_username}")
+        return
+    
+    # Формируем команду
+    if target_text.startswith('@') or target_text.isdigit():
+        command_text = f"заразить {target_text}"
+    else:
+        command_text = f"заразить {target_text}"
+    
+    try:
+        await client.send_message(msg.chat.id, command_text)
+        await msg.answer(f"✅ @{target_username} отправляет: {command_text}")
+    except Exception as e:
+        await msg.answer(f"❌ Ошибка: {e}")
+
+# ===== Команда <префикс>с текст =====
+@router.message(F.text.regexp(r'^[^\s]{1,2}с\s+'))
+async def cmd_send_text(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    
+    text = msg.text.strip()
+    # Извлекаем префикс и текст
+    parts = text.split(' ', 1)
+    if len(parts) < 2:
+        await msg.answer("❌ Использование: <префикс>с текст")
+        return
+    
+    # prefix = parts[0][:-1]  # убираем "с"
+    send_text = parts[1].strip()
+    
+    if not send_text:
+        await msg.answer("❌ Использование: <префикс>с текст")
+        return
+    
+    # Админы всегда могут использовать
+    if not is_admin(msg.from_user.id):
+        await msg.answer("❌ Вы не админ")
+        return
+    
+    # Извлекаем префикс из команды
+    prefix = parts[0][:-1]  # убираем "с" в конце
+    
+    # Находим юзербота по префиксу
+    prefixes = load_prefixes()
+    target_username = None
+    for username in get_ordered_sessions():
+        if prefixes.get(username) == prefix:
+            target_username = username
+            break
+    
+    # Если не нашли - берём первого
+    if not target_username:
+        sessions = get_ordered_sessions()
+        if sessions:
+            target_username = sessions[0]
+    
+    # Отправляем текст от юзербота
+    client = await get_or_create_client(target_username)
+    if not client:
+        await msg.answer("❌ Не удалось подключить юзербота")
+        return
+    
+    try:
+        await client.send_message(msg.chat.id, send_text)
+        await asyncio.sleep(0.5)
+        # Не удаляем сообщения
+    except Exception as e:
+        await msg.answer(f"❌ Ошибка отправки: {e}")
 
 # ===== ПОРЯДОК АККАУНТОВ =====
 ORDER_FILE = "data/sessions_order.json"

@@ -141,7 +141,21 @@ async def buy_vaccine(msg: Message, bot: Bot, db: Cursor, redis: Redis, repo_bio
                 pet_effect = f"\n<b>{element_pet_emoji} {pet_name}</b> снизил расходы вакцины на <b>{disc_str}</b> био-ресурсов"
 
         if lab_info.get("bio_resource", 0) < fever_price:
-            return await msg.answer(f"❌ Недостаточно био-ресурсов! Нужно <b>{intcomma(fever_price)}</b> 🧬")
+            # Если не хватает био - пробуем эпикоины (1 минута = 1 коин)
+            fev_minutes = math.ceil(fev_seconds / 60)
+            fever_price_epi = max(5, fev_minutes * 5)  # 5 коинов за 1 минуту
+            
+            if lab_info.get("epicoins", 0) < fever_price_epi:
+                return await msg.answer(
+                    f"❌ Недостаточно био-ресурсов! Нужно <b>{intcomma(fever_price)}</b> 🧬\n"
+                    f"❌ Недостаточно эпикоинов! Нужно <b>{fever_price_epi}</b> 🪙"
+                )
+            
+            # Покупаем за эпикоины
+            await repo_biowar.buy_vaccine_epicoins(fever_price_epi, user_id)
+            await redis.set(f"epidemic_pet_try_count_heal:{user_id}", 0)
+            text = f"🧪 <b>Вакцина успешно куплена за {fever_price_epi} 🪙 эпикоинов!</b>\n\nВы полностью излечились от болезни."
+            return await msg.answer(text)
 
         text = tricks_biowar["text"]["buy_vaccine"].format(intcomma(fever_price), pet_effect)
         await repo_biowar.buy_vaccine(fever_price, user_id)
@@ -150,7 +164,7 @@ async def buy_vaccine(msg: Message, bot: Bot, db: Cursor, redis: Redis, repo_bio
 
     elif pay_mode == "epi":
         fev_minutes = math.ceil(fev_seconds / 60)
-        fever_price = max(1, fev_minutes)
+        fever_price = max(5, fev_minutes * 5)  # 5 коинов за 1 минуту
 
         if lab_info.get("epicoins", 0) < fever_price:
             return await msg.answer(f"❌ Недостаточно эпикоинов! Нужно <b>{fever_price}</b> 🪙")
