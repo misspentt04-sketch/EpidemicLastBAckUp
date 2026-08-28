@@ -85,10 +85,33 @@ async def cmd_rebirth(message: types.Message, db):
     next_disc = min(next_lvl * 2.5, 10.0)
 
     cost = get_rebirth_cost(next_lvl)
-    daily_income = 800_000
+
+    # Расчет суточного дохода на основе базовых тиков с жертв (2 тика в сутки / 12 часов)
+    await db.execute(
+        "SELECT SUM(victim_bio_resource_earn) FROM Victims WHERE victims_owner_id = %s;",
+        (user_id,)
+    )
+    res_tick = await db.fetchone()
+    if isinstance(res_tick, dict):
+        base_tick = res_tick.get("SUM(victim_bio_resource_earn)") or 0
+    elif isinstance(res_tick, tuple):
+        base_tick = res_tick[0] if res_tick[0] is not None else 0
+    else:
+        base_tick = 0
+
+    # Тик раз в 12 часов с учетом бонуса Rebirth (% с ежи)
+    single_tick_earn = base_tick * (1 + curr_ezha / 100.0)
+    daily_income = single_tick_earn * 2  # 24 часа = 2 тика
+
     progress_bar = generate_progress_bar(bio_res, cost)
     needed = cost - bio_res
-    days_left = f"~ {needed / daily_income:.1f} дн." if needed > 0 else "Готово к сбросу!"
+
+    if needed <= 0:
+        days_left = "Готово к сбросу!"
+    elif daily_income <= 0:
+        days_left = "Нет жертв (доход 0/день)"
+    else:
+        days_left = f"~ {needed / daily_income:.1f} дн."
 
     info_text = (
         f"🔄 <b>Перерождение (Rebirth)</b>\n\n"
