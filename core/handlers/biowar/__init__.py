@@ -7,9 +7,9 @@ from .admin.get_players import router as get_players_router
 from .corporations import corporation_router
 from .labs import lab_router
 from .event import event_router
-from .donates import donate_router, promos_router
 from .infects import infect_router, infect2_router
 from .missions import missions_router
+from .donates import promos_router, cases_router
 
 biowar_router = Router()
 biowar_router2 = Router()
@@ -23,7 +23,8 @@ biowar_router.include_routers(
     get_players_router,
     event_router,
     missions_router,
-    donate_router,
+#     donate_router,
+    cases_router,
     promos_router
 )
 

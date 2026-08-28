@@ -97,8 +97,101 @@ async def get_or_create_client(username: str):
     GLOBAL_CLIENTS[username] = client
     return client
 
+# ===== Команда сетпреф =====
+@router.message(F.text.lower().startswith("сетпреф"))
+async def cmd_set_prefix(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    
+    from .session_manager import get_ordered_sessions as get_sessions
+    
+    parts = msg.text.split()
+    if len(parts) < 3:
+        await msg.answer("❌ Использование: сетпреф @username префикс")
+        return
+    
+    username = parts[1].replace('@', '')
+    prefix = parts[2]
+    
+    sessions = get_sessions()
+    if username not in sessions:
+        await msg.answer(f"❌ Сессия @{username} не найдена")
+        return
+    
+    prefixes = load_prefixes()
+    prefixes[username] = prefix
+    save_prefixes(prefixes)
+    
+    await msg.answer(f"✅ Префикс для @{username}: <code>{prefix}</code>", parse_mode="HTML")
+
+
+# ===== Команда <префикс>-дов (удаление) =====
+@router.message(F.text.regexp(r'^([^\s]+)-дов(\s+.*)?$'))
+async def cmd_remove_dov(msg: Message):
+    if not is_admin(msg.from_user.id):
+        return
+    
+    dovs = load_dovs()
+    prefixes = load_prefixes()
+    
+    text = msg.text.strip()
+    prefix = text.split('-')[0]
+    
+    # Находим юзербота по префиксу
+    target_username = None
+    for username in get_ordered_sessions():
+        if prefixes.get(username) == prefix:
+            target_username = username
+            break
+    
+    if not target_username:
+        await msg.answer(f"❌ Юзербот с префиксом <code>{prefix}</code> не найден")
+        return
+    
+    # Если реплай - удаляем отправителя
+    if msg.reply_to_message:
+        sender_id = msg.from_user.id
+        if sender_id in dovs.get(target_username, []):
+            dovs[target_username].remove(sender_id)
+            save_dovs(dovs)
+            await msg.answer(f"✅ Удалён из доверенных @{target_username}")
+        else:
+            await msg.answer(f"ℹ️ Не в доверенных @{target_username}")
+        return
+    
+    # Если указан @username
+    parts = text.split()
+    if len(parts) >= 2:
+        target_del = parts[1].replace('@', '')
+        
+        if target_del.isdigit():
+            target_id = int(target_del)
+            if target_id in dovs.get(target_username, []):
+                dovs[target_username].remove(target_id)
+                save_dovs(dovs)
+                await msg.answer(f"✅ ID {target_id} удалён из доверенных @{target_username}")
+            else:
+                await msg.answer(f"ℹ️ ID {target_id} не в доверенных @{target_username}")
+        else:
+            # Ищем по username
+            for uid in dovs.get(target_username, []):
+                if str(uid) == target_del:
+                    dovs[target_username].remove(uid)
+                    save_dovs(dovs)
+                    await msg.answer(f"✅ @{target_del} удалён из доверенных @{target_username}")
+                    return
+            await msg.answer(f"❌ @{target_del} не найден в доверенных")
+    else:
+        # Удаляем отправителя
+        if msg.from_user.id in dovs.get(target_username, []):
+            dovs[target_username].remove(msg.from_user.id)
+            save_dovs(dovs)
+            await msg.answer(f"✅ Вы удалены из доверенных @{target_username}")
+        else:
+            await msg.answer(f"ℹ️ Вы не в доверенных @{target_username}")
+
 # ===== Команда <префикс>дов =====
-@router.message(F.text.regexp(r'^\S+дов$'))
+@router.message(F.text.regexp(r'^[^-\s]+дов$'))
 async def cmd_dov(msg: Message):
     if not is_admin(msg.from_user.id):
         return
@@ -176,14 +269,36 @@ async def cmd_infect_by_prefix(msg: Message):
         command_text = f"заразить {target_text}"
     
     try:
-        await client.send_message(msg.chat.id, command_text)
+        reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else None
+        
+        if reply_to_id:
+            await client.send_message(msg.chat.id, command_text, reply_to=reply_to_id)
+        else:
+            await client.send_message(msg.chat.id, command_text)
+        
         await msg.answer(f"✅ @{target_username} отправляет: {command_text}")
     except Exception as e:
         await msg.answer(f"❌ Ошибка: {e}")
 
 # ===== Команда <префикс>с текст =====
+SEND_COOLDOWN = {}
+
 @router.message(F.text.regexp(r'^[^\s]{1,2}с\s+'))
 async def cmd_send_text(msg: Message):
+    global SEND_COOLDOWN
+    
+    # Антиспам: 3 секунды между командами
+    import time as time_lib
+    user_id = msg.from_user.id
+    current_time = time_lib.time()
+    
+    if user_id in SEND_COOLDOWN:
+        time_diff = current_time - SEND_COOLDOWN[user_id]
+        if time_diff < 3:
+            await msg.answer(f"⏳ Подождите {3 - int(time_diff)} сек перед следующей командой")
+            return
+    
+    SEND_COOLDOWN[user_id] = current_time
     if not is_admin(msg.from_user.id):
         return
     
@@ -230,7 +345,14 @@ async def cmd_send_text(msg: Message):
         return
     
     try:
-        await client.send_message(msg.chat.id, send_text)
+        # Если команда реплаем - юзербот отвечает реплаем
+        reply_to_id = msg.reply_to_message.message_id if msg.reply_to_message else None
+        
+        if reply_to_id:
+            await client.send_message(msg.chat.id, send_text, reply_to=reply_to_id)
+        else:
+            await client.send_message(msg.chat.id, send_text)
+        
         await asyncio.sleep(0.5)
         # Не удаляем сообщения
     except Exception as e:

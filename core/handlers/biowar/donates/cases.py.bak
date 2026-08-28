@@ -512,7 +512,7 @@ async def admin_give_case(msg: types.Message, db):
 @cases_router.message(F.text.lower().contains("выдать коины"))
 async def admin_give_coins(msg: types.Message, db):
     args = msg.text.split()
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     target_id = None
     amount = 0
 
@@ -539,7 +539,7 @@ async def admin_give_coins(msg: types.Message, db):
 
 @cases_router.message(F.text.lower().contains("выдать кейс"))
 async def admin_give_case(msg: types.Message, db):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     args = msg.text.split()
     target_id = None
     case_type = 1
@@ -662,6 +662,18 @@ async def process_buy_check_lab(callback: CallbackQuery):
         await callback.message.answer(f"❌ Ошибка при создании счета: {e}")
 
 
+@cases_router.message(Command("donate"))
+async def cmd_donate_menu(message: Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎁 Купить Донат-кейсы", callback_data="buy_donate_case")],
+        [InlineKeyboardButton(text="🔬 Купить Просмотр Лабы (0.25 USDT)", callback_data="buy_check_lab")]
+    ])
+    await message.answer(
+        "💎 <b>Магазин Доната Epidemic</b>\n\n"
+        "Выберите интересующий раздел для покупки через CryptoBot:",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
 
 
 # ==================== CHECK LAB LOGIC ====================
@@ -886,170 +898,3 @@ async def admin_manage_pathogens(msg: types.Message, db, bot: Bot):
         await bot.send_message(-1003688648228, log_txt)
     except Exception as e:
         print(f"[Admin Log Error] {e}")
-
-
-# ==================== АВТОВЫДАЧА ДОНАТ КЕЙСОВ ====================
-
-def calculate_cases_bonus(count: int) -> int:
-    return 3 if count >= 10 else (1 if count >= 5 else 0)
-
-async def auto_issue_donate_cases(db_session, user_id: int, cases_count: int, case_type: str = "donate_cases"):
-    bonus = calculate_cases_bonus(cases_count)
-    total_to_give = cases_count + bonus
-
-    column_map = {
-        "donate_cases": "case2",
-        "donate": "case2",
-        "case1": "case1",
-        "1": "case1",
-        "case2": "case2",
-        "2": "case2",
-    }
-    col_name = column_map.get(str(case_type).lower(), "case2")
-
-    query = f"UPDATE Lab SET {col_name} = {col_name} + %s WHERE lab_id = %s;"
-    await db_session.execute(query, (total_to_give, user_id))
-
-    return total_to_give, bonus
-
-
-@cases_router.callback_query(F.data.startswith("check_donate_payment:"))
-async def process_payment_callback(callback: types.CallbackQuery, state, db):
-    user_id = callback.from_user.id
-    data = await state.get_data()
-
-    cases_count = data.get("cases_count", 1)
-    case_type = data.get("case_type", "donate_cases")
-
-    is_paid = True  # Здесь подключается логика проверки платежа
-
-    if is_paid:
-        total_given, bonus = await auto_issue_donate_cases(
-            db_session=db,
-            user_id=user_id,
-            cases_count=cases_count,
-            case_type=case_type,
-        )
-
-        text = (
-            f"✅ <b>Оплата прошла успешно!</b>\n\n"
-            f"🎁 Вам автоматически зачислено кейсов: <b>{total_given} шт.</b>"
-        )
-        if bonus > 0:
-            text += f" <i>(из них бонус: +{bonus})</i>"
-
-        await callback.message.edit_text(text, parse_mode="HTML")
-        await state.clear()
-    else:
-        await callback.answer(
-            "❌ Оплата еще не поступила. Попробуйте через пару минут.",
-            show_alert=True,
-        )
-
-# ==================== НОВАЯ КОМАНДА: ЗАБРАТЬ КЕЙС ====================
-@cases_router.message(F.text.lower().contains("забрать кейс"))
-async def admin_take_case(msg: types.Message, db):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
-    args = msg.text.split()
-    target_id = None
-    case_type = 1
-    amount = 1
-    if msg.reply_to_message:
-        target_id = msg.reply_to_message.from_user.id
-        digits = [int(arg) for arg in args if arg.isdigit()]
-        if len(digits) >= 2:
-            case_type, amount = digits[0], digits[1]
-        elif len(digits) == 1:
-            amount = digits[0]
-    else:
-        digits = [int(arg) for arg in args if arg.isdigit()]
-        if len(digits) >= 3:
-            target_id, case_type, amount = digits[0], digits[1], digits[2]
-    if not target_id or case_type not in (1, 2) or amount <= 0:
-        await msg.reply("❌ Ошибка формата!\nПример реплаем: <code>!забрать кейс 1 3</code>\nПример по ID: <code>!забрать кейс 123456789 1 3</code>")
-        return
-    col = "case1" if case_type == 1 else "case2"
-    result = await db.execute(f"SELECT {col} FROM Lab WHERE lab_id = %s;", (target_id,))
-    lab = await db.fetchone()
-    if not lab:
-        await msg.reply(f"❌ Пользователь <code>{target_id}</code> не найден в базе!")
-        return
-    current_cases = lab[0] if isinstance(lab, (tuple, list)) else lab.get(col, 0) or 0
-    if current_cases < amount:
-        await msg.reply(f"❌ У пользователя <code>{target_id}</code> недостаточно кейсов!\nДоступно: <b>{current_cases}</b> шт. Кейсов {case_type}\nЗапрошено: <b>{amount}</b> шт.")
-        return
-    await db.execute(f"UPDATE Lab SET {col} = {col} - %s WHERE lab_id = %s;", (amount, target_id))
-    await db.execute(f"UPDATE Lab SET {col} = GREATEST(0, {col}) WHERE lab_id = %s;", (target_id,))
-    await msg.reply(f"✅ Успешно <b>забрано {amount} шт.</b> Кейсов {case_type}\n👤 Пользователь: <code>{target_id}</code>")
-
-
-# ==================== НОВАЯ КОМАНДА: ПЕРЕНЕСТИ КЕЙСЫ (СВОП) ====================
-@cases_router.message(F.text.lower().contains("перенести кейсы"))
-async def admin_transfer_cases(msg: types.Message, db):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431, 6129560117]: return
-    args = msg.text.split()
-    if len(args) < 3:
-        await msg.reply("❌ Ошибка формата!\nПример: <code>!перенести кейсы 123456789 987654321</code>")
-        return
-    digits = [int(arg) for arg in args if arg.isdigit()]
-    if len(digits) < 2:
-        await msg.reply("❌ Ошибка формата!\nНужно указать два ID: <code>!перенести кейсы 123456789 987654321</code>")
-        return
-    id1, id2 = digits[0], digits[1]
-    if id1 == id2:
-        await msg.reply("❌ Нельзя переносить кейсы самому себе!")
-        return
-    
-    # Проверяем существование обоих пользователей
-    user1 = await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (id1,))
-    user1_exists = await db.fetchone()
-    user2 = await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (id2,))
-    user2_exists = await db.fetchone()
-    
-    if not user1_exists:
-        await msg.reply(f"❌ Пользователь <code>{id1}</code> не найден в базе!")
-        return
-    if not user2_exists:
-        await msg.reply(f"❌ Пользователь <code>{id2}</code> не найден в базе!")
-        return
-    
-    # Получаем текущие кейсы у обоих пользователей
-    data1 = await db.execute("SELECT case1, case2 FROM Lab WHERE lab_id = %s;", (id1,))
-    row1 = await db.fetchone()
-    data2 = await db.execute("SELECT case1, case2 FROM Lab WHERE lab_id = %s;", (id2,))
-    row2 = await db.fetchone()
-    
-    if isinstance(row1, dict):
-        id1_case1 = row1.get("case1", 0) or 0
-        id1_case2 = row1.get("case2", 0) or 0
-    else:
-        id1_case1 = row1[0] if row1 else 0
-        id1_case2 = row1[1] if row1 else 0
-    
-    if isinstance(row2, dict):
-        id2_case1 = row2.get("case1", 0) or 0
-        id2_case2 = row2.get("case2", 0) or 0
-    else:
-        id2_case1 = row2[0] if row2 else 0
-        id2_case2 = row2[1] if row2 else 0
-    
-    # МЕНЯЕМ МЕСТАМИ (своп)
-    # Устанавливаем id1 кейсы id2
-    await db.execute("UPDATE Lab SET case1 = %s, case2 = %s WHERE lab_id = %s;", (id2_case1, id2_case2, id1))
-    # Устанавливаем id2 кейсы id1
-    await db.execute("UPDATE Lab SET case1 = %s, case2 = %s WHERE lab_id = %s;", (id1_case1, id1_case2, id2))
-    
-    total1 = id1_case1 + id1_case2
-    total2 = id2_case1 + id2_case2
-    
-    await msg.reply(
-        f"🔄 <b>Кейсы успешно перенесены (своп)!</b>\n\n"
-        f"📤 <code>{id1}</code> → <code>{id2}</code>\n"
-        f"  • Кейс 1: <b>{id1_case1}</b> шт.\n"
-        f"  • Кейс 2: <b>{id1_case2}</b> шт.\n"
-        f"  • Всего: <b>{total1}</b> шт.\n\n"
-        f"📤 <code>{id2}</code> → <code>{id1}</code>\n"
-        f"  • Кейс 1: <b>{id2_case1}</b> шт.\n"
-        f"  • Кейс 2: <b>{id2_case2}</b> шт.\n"
-        f"  • Всего: <b>{total2}</b> шт."
-    )

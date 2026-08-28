@@ -1,3 +1,4 @@
+from core.handlers.biowar.rebirth import rebirth_router
 from core.handlers.admin_theme_cmd import admin_theme_router
 from lab_converter import register_lab_handlers
 from core.handlers.tricks.themes import router as themes_router
@@ -180,6 +181,7 @@ async def main():
             print(f"❌ Ошибка записи жертвы: {e}")
     
     dp.include_routers(
+        rebirth_router,
         userbot_router,
         admin_theme_router, 
         themes_router,

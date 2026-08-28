@@ -181,7 +181,10 @@ async def lab_lvlup_skills(msg: Message, bot: Bot, db: Cursor, repo_biowar: Requ
     lab_bio_resource = lab_info['bio_resource']
     
     to_lvl = from_lvl + lvl
-    price = func.lvl_up_calc(en_skill, from_lvl, to_lvl)
+    rebirth_lvl = lab_info.get("rebirth_level", 0) or 0
+    discount = min(rebirth_lvl * 0.025, 0.10)
+    base_price = func.lvl_up_calc(en_skill, from_lvl, to_lvl)
+    price = int(base_price * (1 - discount))
     
     if en_skill == 'science' and to_lvl > tricks_biowar['max']['skill']['science']:
         return await msg.answer(tricks_biowar['lab']['max_level_up_limit'].format(skill))

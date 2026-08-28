@@ -311,7 +311,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
     # И только ТЕПЕРЬ перезаписываем запись в базе
     # Сохраняем сколько опыта получили с этой жертвы
-    await repo_biowar.execute_query(
+    await repo_biowar.execute(
         "UPDATE Victims SET last_earn_exp = %s WHERE victims_owner_id = %s AND victim_id = %s;",
         earn_exp, infecter['id'], victimer['id']
     )

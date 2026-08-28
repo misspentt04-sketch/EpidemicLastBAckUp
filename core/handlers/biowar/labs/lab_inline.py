@@ -27,7 +27,9 @@ async def lab_lvlup(call: CallbackQuery, bot: Bot, callback_data: Lab, db: Curso
     lvl = callback_data.lvl_up
     from_lvl = lab_info[skill]
     to_lvl = from_lvl + lvl
-    price = func.lvl_up_calc(skill, from_lvl, to_lvl)
+    rebirth_lvl = lab_info.get("rebirth_level", 0) or 0
+    discount = min(rebirth_lvl * 0.025, 0.10)
+    price = int(func.lvl_up_calc(skill, from_lvl, to_lvl) * (1 - discount))
     science_max_lvl = tricks_biowar['max']['skill']['science']
     
     if skill == 'science':
@@ -51,7 +53,9 @@ async def lab_lvlup_confirm(call: CallbackQuery, bot: Bot, callback_data: LabLvl
     lvl = callback_data.lvl_up
     from_lvl = lab_info[skill]
     to_lvl = from_lvl + lvl
-    price = func.lvl_up_calc(skill, from_lvl, to_lvl)
+    rebirth_lvl = lab_info.get("rebirth_level", 0) or 0
+    discount = min(rebirth_lvl * 0.025, 0.10)
+    price = int(func.lvl_up_calc(skill, from_lvl, to_lvl) * (1 - discount))
     science_max_lvl = tricks_biowar['max']['skill']['science']
     
     if skill == 'science':
@@ -88,7 +92,9 @@ async def lab_lvl_up_confirm_extend(call: CallbackQuery, callback_data: LabLvlUp
     lvl = callback_data.lvl_up
     from_lvl = lab_info[skill]
     to_lvl = from_lvl + lvl
-    price = func.lvl_up_calc(skill, from_lvl, to_lvl)
+    rebirth_lvl = lab_info.get("rebirth_level", 0) or 0
+    discount = min(rebirth_lvl * 0.025, 0.10)
+    price = int(func.lvl_up_calc(skill, from_lvl, to_lvl) * (1 - discount))
     science_max_lvl = tricks_biowar['max']['skill']['science']
     
     if skill == 'science':
