@@ -32,15 +32,14 @@ import time
 
 
 async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar, redis: Redis, lock: Lock):
-    if await redis.get(f"epidemic_infect_cooldown:{msg.from_user.id}"):
+    lock_key = f"epidemic_infect_cooldown:{msg.from_user.id}"
+    if await redis.get(lock_key):
         return
-    await redis.set(f"epidemic_infect_cooldown:{msg.from_user.id}", "1", px=500)
-    async with lock:
-        id = msg.from_user.id
-        chat_id = msg.chat.id
-        attacker_id = msg.from_user.id
+    await redis.set(lock_key, "1", px=200)
+
     id = msg.from_user.id
     chat_id = msg.chat.id
+    attacker_id = msg.from_user.id
     parts = msg.text.split() if msg.text else []
     victimer_id = getattr(msg, "_override_target_id", None) or func.reply_or_tag_geeter(msg)
     digits = [int(p) for p in parts if p.isdigit()]
@@ -216,7 +215,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
             and vic_user_chat
             and spent_pathogens >= 1
         ):
-            await bot.send_message(victimer['chat_setup_virus'], sb_virus_detect_try_text)
+            asyncio.create_task(bot.send_message(victimer['chat_setup_virus'], sb_virus_detect_try_text))
 
         default_fail_msg = tricks_biowar['infect']['victim_immunity_fail'].format(
             vic_entity,
@@ -313,31 +312,6 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     # Сохраняем сколько опыта получили с этой жертвы
     await repo_biowar.execute(
         "UPDATE Victims SET last_earn_exp = %s WHERE victims_owner_id = %s AND victim_id = %s;",
-        earn_exp, infecter['id'], victimer['id']
-    )
-    
-    # Сохраняем предыдущий опыт в Redis перед обновлением
-    await redis.set(f"last_earn:{infecter['id']}:{victimer['id']}", earn_exp)
-    
-    await repo_biowar.infect_setup(
-        infecter['id'], victimer['id'], earn_exp, vic_exp,
-        vic_expire_kd, inf_ready_pathogens_left,
-        fever_expire, vic_expire,
-        infect_date, pathogen_name, ss_detect,
-        science_time, infecter['science_time'], pet_boost_exp
-    )
-
-    # Формируем текст
-    default_success_msg = tricks_biowar['infect']['infect'].format(
-        inf_entity, pathogen_name, vic_entity, fever_time_,
-        infecter["lethality"], intcomma(earn_exp), vic_username_entity_inv,
-        tricks_biowar['text']['victim_new'].format(intcomma(earn_exp)) if vic_new else ''
-    )
-
-    custom_success_template = await get_theme_text(repo_biowar, msg.from_user.id, 'infect_success')
-    print(f"[TEXT DEBUG] custom_success_template: {repr(custom_success_template)}")
-    if custom_success_template:
-        p_name = pathogen_name if pathogen_name else "Неизвестный патоген"
         try:
             if not vic_new:
                 t_lines = custom_success_template.splitlines()
@@ -637,4 +611,27 @@ async def hit_target_callback(callback: CallbackQuery, bot: Bot, db, repo_biowar
 
     await infect(msg=fake_message, bot=bot, db=db, repo_biowar=repo_biowar, redis=redis, lock=lock)
 
+
+# В функции заражения, где добавляется опыт:
+
 # ===== ПРОВЕРКА БУСТЕРА =====
+async def check_bio_boost(user_id, db):
+    """Проверяет активен ли Био-Ускоритель у игрока"""
+    result = await db.execute("""
+        SELECT expires_at FROM ActiveBoosters 
+        WHERE lab_id = %s AND booster_type = 'bio_boost' AND expires_at > UNIX_TIMESTAMP()
+    """, (user_id,))
+    data = await db.fetchone()
+    return data is not None
+
+# ===== ПРОВЕРКА БУСТЕРА =====
+async def check_bio_boost(user_id, repo_biowar):
+    """Проверяет активен ли Био-Ускоритель у игрока"""
+    try:
+        result = await repo_biowar.select_one("""
+            SELECT expires_at FROM ActiveBoosters 
+            WHERE lab_id = %s AND booster_type = 'bio_boost' AND expires_at > UNIX_TIMESTAMP()
+        """, (user_id,))
+        return result is not None
+    except Exception:
+        return False

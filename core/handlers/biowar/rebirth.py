@@ -93,15 +93,18 @@ async def cmd_rebirth(message: types.Message, db):
     )
     res_tick = await db.fetchone()
     if isinstance(res_tick, dict):
-        base_tick = res_tick.get("SUM(victim_bio_resource_earn)") or 0
+        raw_tick = res_tick.get("SUM(victim_bio_resource_earn)") or 0
     elif isinstance(res_tick, tuple):
-        base_tick = res_tick[0] if res_tick[0] is not None else 0
+        raw_tick = res_tick[0] if res_tick[0] is not None else 0
     else:
-        base_tick = 0
+        raw_tick = 0
+
+    # Явное приведение Decimal к float
+    base_tick = float(raw_tick)
 
     # Тик раз в 12 часов с учетом бонуса Rebirth (% с ежи)
-    single_tick_earn = base_tick * (1 + curr_ezha / 100.0)
-    daily_income = single_tick_earn * 2  # 24 часа = 2 тика
+    single_tick_earn = base_tick * (1.0 + float(curr_ezha) / 100.0)
+    daily_income = single_tick_earn * 2.0  # 24 часа = 2 тика
 
     progress_bar = generate_progress_bar(bio_res, cost)
     needed = cost - bio_res
@@ -192,7 +195,8 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
             epicoins = 0,
             case1 = 0,
             case2 = 0,
-            rebirth_level = %s
+            rebirth_level = %s,
+            pts = pts + %s
         WHERE lab_id = %s;
     """
     await db.execute(query_update, (target_lvl, owner_id))
@@ -213,3 +217,10 @@ async def process_rebirth_cancel(callback: types.CallbackQuery):
         return await callback.answer("❌ Это не ваше меню!", show_alert=True)
 
     await callback.message.edit_text("❌ Перерождение отменено. Ваша Лаборатория в безопасности.")
+
+# ===== РАСЧЁТ ОЧКОВ ЗА ПЕРЕРОЖДЕНИЕ =====
+def calculate_rebirth_pts(rebirth_level: int) -> int:
+    """Очки за перерождение: уровень^2 * 10 + уровень * 5"""
+    if rebirth_level <= 0:
+        return 0
+    return (rebirth_level ** 2) * 10 + (rebirth_level * 5)

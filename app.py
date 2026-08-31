@@ -1,3 +1,8 @@
+from aiogram.exceptions import TelegramRetryAfter
+from aiogram.types import ErrorEvent
+import asyncio
+from aiogram.fsm.storage.memory import SimpleEventIsolation
+from core.middlewares.async_fix import AsyncOptimizerMiddleware
 from core.handlers.biowar.rebirth import rebirth_router
 from core.handlers.admin_theme_cmd import admin_theme_router
 from lab_converter import register_lab_handlers
@@ -82,10 +87,12 @@ async def main():
                         "(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s")
 
     bot = Bot(settings.bots.bot_token, default = DefaultBotProperties(parse_mode=ParseMode.HTML))
+    from core.userbot.userbot_manager import set_bot
+    set_bot(bot)
     redis_db = Redis(host=settings.redis.ip, port=6379, db=0, decode_responses=True)
     storage = RedisStorage(redis=redis_db)
 
-    dp = Dispatcher()
+    dp = Dispatcher(events_isolation=SimpleEventIsolation(), )
     from core.middlewares.tech_middleware import MaintenanceMiddleware
     dp.update.outer_middleware.register(MaintenanceMiddleware())
     dp.message.outer_middleware(AntiSpamMiddleware())
@@ -103,7 +110,7 @@ async def main():
 
     # Middlewares
     dp.update.outer_middleware.register(DBPoolMiddleware(pool, redis_db, lock, bot, crypto))
-    dp.message.middleware.register(ThrottlingMiddleware(1.5))
+    dp.message.middleware.register(ThrottlingMiddleware(0.3))
     dp.callback_query.middleware.register(ThrottlingMiddlewareInline(0.5))
     dp.chat_member.middleware.register(ChatMemberUpdateMiddleware())
     dp.message.outer_middleware.register(MaintenanceMiddleware())
@@ -194,8 +201,8 @@ async def main():
         story_router,
         chat_manage_router,
         suggestions_router,
-        points_router
-    )
+        points_router,
+)
 
     start_reset_scheduler(dp)
 
@@ -246,3 +253,9 @@ if __name__ == "__main__":
 
 # Регистрация модуля конвертера лаборатории
 # register_lab_handlers(app)
+
+
+@dp.error()
+async def global_error_handler(event: ErrorEvent):
+    if isinstance(event.exception, TelegramRetryAfter):
+        return True

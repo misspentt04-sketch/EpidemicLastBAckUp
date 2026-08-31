@@ -140,10 +140,8 @@ async def corporation_stats_refresh(pool: Pool):
 async def gave_victims_food(pool: Pool):
     sql_update_lab = (
         "UPDATE Lab l JOIN ("
-        " SELECT v.victims_owner_id, SUM(v.victim_bio_resource_earn) * (1 + COALESCE(l2.rebirth_level, 0) * 0.10) AS bio_resource"
-        " FROM Victims v"
-        " LEFT JOIN Lab l2 ON l2.lab_id = v.victims_owner_id"
-        " GROUP BY v.victims_owner_id"
+        " SELECT victims_owner_id, SUM(victim_bio_resource_earn) AS bio_resource FROM Victims"
+        " GROUP BY victims_owner_id"
         ") v ON l.lab_id = v.victims_owner_id "
         "SET l.bio_resource = l.bio_resource + v.bio_resource;"
     )

@@ -461,6 +461,14 @@ async def cb_open_case2(call: CallbackQuery, db):
 
 
 
+# ==================== АДМИН-КОМАНДЫ (ВЫДАЧА) ====================
+@cases_router.message(F.text.lower().contains("выдать коины"))
+    await msg.reply(f"✅ Успешно выдано <b>{amount} 🪙</b> пользователю <code>{target_id}</code>!")
+
+@cases_router.message(F.text.lower().contains("выдать кейс"))
+    await msg.reply(f"✅ Успешно выдано <b>{amount} шт. Кейсов {case_type}</b> пользователю <code>{target_id}</code>!")
+
+
 # ==================== CRYPTO DONATES ====================
 from aiocryptopay import AioCryptoPay, Networks
 from core.settings import settings
@@ -965,6 +973,8 @@ async def log_admin_action(bot: Bot, admin_id: int, admin_name: str, action: str
         print(f"[Admin Log Error] {e}")
 
 # ==================== ОБНОВЛЕННАЯ КОМАНДА: ВЫДАТЬ КЕЙС (С ЛОГАМИ) ====================
+@cases_router.message(F.text.lower().contains("выдать кейс"))
+async def admin_give_case(msg: types.Message, db, bot: Bot):
     if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
     args = msg.text.split()
     target_id = None
@@ -1133,164 +1143,3 @@ async def admin_give_coins(msg: types.Message, db, bot: Bot):
     
     admin_name = msg.from_user.full_name or msg.from_user.username or "Unknown"
     await log_admin_action(bot, msg.from_user.id, admin_name, f"💰 Выдача эпикоинов", f"<code>{target_id}</code>", f"Количество: {amount} 🪙")
-
-# ==================== ОБНОВЛЕННАЯ КОМАНДА: ВЫДАТЬ КЕЙС (С ЛОГАМИ) ====================
-@cases_router.message(F.text.lower().contains("выдать кейс"))
-async def admin_give_case(msg: types.Message, db, bot: Bot):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
-    args = msg.text.split()
-    target_id = None
-    case_type = 1
-    amount = 1
-
-    if msg.reply_to_message:
-        target_id = msg.reply_to_message.from_user.id
-        digits = [int(arg) for arg in args if arg.isdigit()]
-        if len(digits) >= 2:
-            case_type, amount = digits[0], digits[1]
-        elif len(digits) == 1:
-            amount = digits[0]
-    else:
-        digits = [int(arg) for arg in args if arg.isdigit()]
-        if len(digits) >= 3:
-            target_id, case_type, amount = digits[0], digits[1], digits[2]
-
-    if not target_id or case_type not in (1, 2) or amount <= 0:
-        await msg.reply("❌ Ошибка формата!\nПример реплаем: <code>!выдать кейс 1 3</code> (тип, кол-во)\nПример по ID: <code>!выдать кейс 123456789 1 3</code>")
-        return
-
-    col = "case1" if case_type == 1 else "case2"
-    await db.execute(f"UPDATE Lab SET {col} = {col} + %s WHERE lab_id = %s;", (amount, target_id))
-    await msg.reply(f"✅ Успешно выдано <b>{amount} шт. Кейсов {case_type}</b> пользователю <code>{target_id}</code>!")
-    
-    admin_name = msg.from_user.full_name or msg.from_user.username or "Unknown"
-    await log_admin_action(bot, msg.from_user.id, admin_name, f"✅ Выдача кейсов (тип {case_type})", f"<code>{target_id}</code>", f"Количество: {amount} шт.")
-
-# ==================== ВЫДАТЬ PTS (АДМИН-КОМАНДА) ====================
-@cases_router.message(F.text.lower().contains("выдать птс"))
-async def admin_give_pts(msg: types.Message, db):
-    if msg.from_user.id not in [7972320837]: return
-    args = msg.text.split()
-    target_id = None
-    amount = 0
-
-    if msg.reply_to_message:
-        target_id = msg.reply_to_message.from_user.id
-        for arg in args:
-            if arg.isdigit():
-                amount = int(arg)
-                break
-    else:
-        if len(args) >= 3:
-            try:
-                target_id = int(args[2])
-                amount = int(args[3])
-            except ValueError:
-                pass
-
-    if not target_id or amount <= 0:
-        await msg.reply("❌ Ошибка формата!\nПример реплаем: <code>!выдать птс 50</code>\nПример по ID: <code>!выдать птс 123456789 50</code>")
-        return
-
-    await db.execute("UPDATE Lab SET pts = pts + %s WHERE lab_id = %s;", (amount, target_id))
-    await msg.reply(f"✅ Успешно выдано <b>{amount} PTS</b> пользователю <code>{target_id}</code>!")
-    
-    # Логируем в чат админов
-    try:
-        from core.handlers.biowar.donates.cases import log_admin_action
-        admin_name = msg.from_user.full_name or msg.from_user.username or "Unknown"
-        await log_admin_action(
-            msg.bot,
-            msg.from_user.id,
-            admin_name,
-            f"💰 Выдача PTS",
-            target_id,
-            f"Количество: {amount} PTS"
-        )
-    except:
-        pass
-
-# ==================== ПЕРЕДАТЬ КЕЙС (ОБМЕН МЕЖДУ ИГРОКАМИ) ====================
-@cases_router.message(F.text.lower().contains("передать кейс"))
-async def cmd_transfer_case(msg: types.Message, db):
-    user_id = msg.from_user.id
-    args = msg.text.split()
-    
-    # Проверяем формат: передать кейс @username 1 5 (тип, кол-во)
-    if len(args) < 4:
-        await msg.reply("❌ Формат: <code>передать кейс @username 1 5</code>\nГде 1 - тип кейса (1 или 2), 5 - количество")
-        return
-    
-    target_username = args[2].replace('@', '')
-    try:
-        case_type = int(args[3])
-        amount = int(args[4]) if len(args) > 4 else 1
-    except ValueError:
-        await msg.reply("❌ Укажите тип и количество цифрами!\nПример: <code>передать кейс @username 1 5</code>")
-        return
-    
-    if case_type not in (1, 2):
-        await msg.reply("❌ Тип кейса: 1 - обычный, 2 - донат")
-        return
-    
-    if amount <= 0:
-        await msg.reply("❌ Количество должно быть больше 0")
-        return
-    
-    # Получаем ID получателя по username
-    target_id = None
-    try:
-        # Ищем пользователя по username
-        result = await db.execute("SELECT lab_id FROM Lab WHERE lab_id IN (SELECT id FROM Users WHERE username = %s);", (target_username,))
-        target_data = await db.fetchone()
-        if target_data:
-            target_id = target_data[0] if isinstance(target_data, (tuple, list)) else target_data.get('lab_id')
-    except:
-        pass
-    
-    if not target_id:
-        await msg.reply(f"❌ Пользователь @{target_username} не найден в базе!")
-        return
-    
-    if target_id == user_id:
-        await msg.reply("❌ Нельзя передать кейсы самому себе!")
-        return
-    
-    # Проверяем наличие кейсов у отправителя
-    col = "case1" if case_type == 1 else "case2"
-    result = await db.execute(f"SELECT {col} FROM Lab WHERE lab_id = %s;", (user_id,))
-    lab = await db.fetchone()
-    
-    if not lab:
-        await msg.reply("❌ У вас нет лаборатории!")
-        return
-    
-    current_cases = lab[0] if isinstance(lab, (tuple, list)) else lab.get(col, 0) or 0
-    
-    if current_cases < amount:
-        await msg.reply(f"❌ У вас недостаточно кейсов! Доступно: {current_cases} шт.")
-        return
-    
-    # Передаём кейсы
-    await db.execute(f"UPDATE Lab SET {col} = {col} - %s WHERE lab_id = %s;", (amount, user_id))
-    await db.execute(f"UPDATE Lab SET {col} = {col} + %s WHERE lab_id = %s;", (amount, target_id))
-    
-    await msg.reply(
-        f"✅ Передано <b>{amount} шт.</b> Кейсов {case_type}\n"
-        f"📤 От: <code>{user_id}</code>\n"
-        f"📥 Кому: <code>{target_id}</code> (@{target_username})"
-    )
-    
-    # Логируем
-    try:
-        admin_name = msg.from_user.full_name or msg.from_user.username or "Unknown"
-        await log_admin_action(
-            msg.bot,
-            msg.from_user.id,
-            admin_name,
-            f"🔄 Передача кейсов (тип {case_type})",
-            target_id,
-            f"Количество: {amount} шт. от {user_id}"
-        )
-    except:
-        pass

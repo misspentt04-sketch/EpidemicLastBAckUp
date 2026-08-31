@@ -353,7 +353,7 @@ async def cmd_send_text(msg: Message):
         else:
             await client.send_message(msg.chat.id, send_text)
         
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
         # Не удаляем сообщения
     except Exception as e:
         await msg.answer(f"❌ Ошибка отправки: {e}")
@@ -524,7 +524,7 @@ async def cmd_alleb(msg: Message):
             for i in range(start, end + 1):
                 await msg.answer(f"заразить {i}")
                 sent += 1
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.3)
 
             await msg.answer(f"✅ Отправлено {sent} команд 'заразить'")
         else:
@@ -532,78 +532,3 @@ async def cmd_alleb(msg: Message):
     except Exception as e:
         await msg.answer(f"❌ Ошибка: {e}")
 
-
-# ===== ПОДКЛЮЧАЕМ РОУТЕР ИЗ CHK_HANDLER =====
-router.include_router(chk_router)
-
-# ===== АЛЛСТОП - ЖЕСТКАЯ ОСТАНОВКА =====
-async def cmd_all_stop_hard(msg: Message):
-    if not is_admin(msg.from_user.id):
-        return
-    
-    try:
-        # Останавливаем флаги
-        set_stop_flag(False)
-        STOP_EVENT.set()
-        INFECTION_RUNNING = False
-        
-        # Отключаем ВСЕ клиенты
-        await disconnect_all_clients()
-        
-        # Чистим клиенты из chk_handler
-        try:
-            from core.userbot.chk_handler import GLOBAL_CLIENTS
-            GLOBAL_CLIENTS.clear()
-        except:
-            pass
-        
-        await msg.answer("⏹️ Жесткая остановка! Все отключено.")
-        
-    except Exception as e:
-        await msg.answer(f"❌ Ошибка: {e}")
-
-# ===== АЛЛСТОП - ПОЛНЫЙ СБРОС =====
-async def cmd_all_stop_full(msg: Message):
-    if not is_admin(msg.from_user.id):
-        return
-    
-    try:
-        # 1. Сбрасываем флаги
-        set_stop_flag(False)
-        STOP_EVENT.set()
-        INFECTION_RUNNING = False
-        
-        # 2. Отключаем всех клиентов
-        await disconnect_all_clients()
-        
-        # 3. Чистим глобальные клиенты из chk_handler
-        try:
-            from core.userbot.chk_handler import GLOBAL_CLIENTS
-            GLOBAL_CLIENTS.clear()
-        except:
-            pass
-        
-        # 4. Отменяем все активные задачи с заражением
-        import asyncio
-        for task in asyncio.all_tasks():
-            task_name = task.get_name()
-            if "cmd_chk" in task_name or "send_chk" in task_name or "cmd_all_heal" in task_name:
-                task.cancel()
-                logger.info(f"Отменена задача: {task_name}")
-        
-        await msg.answer("⏹️ Полный сброс! Все процессы остановлены.")
-        
-    except Exception as e:
-        await msg.answer(f"❌ Ошибка: {e}")
-
-# ===== ГЛОБАЛЬНЫЙ ФЛАГ ОСТАНОВКИ ЗАДАЧ =====
-
-# ===== ПОЛУЧЕНИЕ ЭКЗЕМПЛЯРА БОТА =====
-_bot_instance = None
-
-def set_bot(bot):
-    global _bot_instance
-    _bot_instance = bot
-
-def get_bot():
-    return _bot_instance

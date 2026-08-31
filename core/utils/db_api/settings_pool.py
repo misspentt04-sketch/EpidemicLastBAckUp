@@ -23,6 +23,8 @@ class DatabasePool:
             password=settings.db.password,
             db=settings.db.db,
             autocommit=True,
+            minsize=5,
+            maxsize=100,
         )
 
     async def get_pool(self) -> asyncmy.Pool:

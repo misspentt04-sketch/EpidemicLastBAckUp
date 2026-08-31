@@ -624,6 +624,160 @@ async def start_victim_listener():
     pass
 
 # ===== Команда АЛЛСТОП (полная остановка) =====
+@router.message(F.text.lower().startswith("аллстоп"))
+async def cmd_all_stop(msg: Message):
+    """Полная остановка всех процессов"""
+    if not is_admin(msg.from_user.id):
+        return
+    
+    try:
+        from core.userbot.userbot_manager import INFECTION_RUNNING, set_stop_flag, STOP_EVENT, disconnect_all_clients
+        
+        set_stop_flag(False)
+        STOP_EVENT.set()
+        INFECTION_RUNNING = False
+        
+        await disconnect_all_clients()
+        
+        await msg.answer("⏹️ Заражение остановлено! Все юзерботы отключены.")
+    except Exception as e:
+        await msg.answer(f"⚠️ Ошибка при остановке: {e}")
+
+    if not is_admin(msg.from_user.id):
+        return
+
+    # Проверяем флаг
+    try:
+        from core.userbot.userbot_manager import INFECTION_RUNNING as INF_FLAG, get_stop_flag
+        if INF_FLAG:
+            await msg.answer("⚠️ Заражение уже запущено! Дождитесь окончания.")
+            return
+        if get_stop_flag():
+            await msg.answer("⏹️ Команды остановлены! Используйте аллстоп для сброса.")
+            return
+    except:
+        pass
+
+    chat_id = str(msg.chat.id)
+    target_username = None
+    target_id = None
+
+    text_cmd = msg.text.lower().replace("аллчк", "").strip()
+
+    if text_cmd.startswith('@'):
+        target_username = text_cmd[1:]
+    elif text_cmd.isdigit():
+        target_id = int(text_cmd)
+    elif 't.me/' in text_cmd:
+        target_username = text_cmd.split('/')[-1]
+    elif 'tg://openmessage' in text_cmd:
+        id_match = re.search(r'user_id=(\d+)', text_cmd)
+        if id_match:
+            target_id = int(id_match.group(1))
+
+    if msg.reply_to_message and msg.reply_to_message.from_user:
+        target_id = msg.reply_to_message.from_user.id
+        target_username = msg.reply_to_message.from_user.username
+
+    sessions = get_ordered_sessions()
+    if not sessions:
+        await msg.answer("❌ Нет доступных сессий")
+        return
+
+    sent_count = 0
+    await asyncio.sleep(1)
+
+    async def send_chk(username, target_username_param=None, target_id_param=None):
+        nonlocal sent_count
+        try:
+            target_username = target_username_param
+            target_id = target_id_param
+            display_username = target_username if target_username else username
+
+            client = await get_or_create_client(username)
+            if not client:
+                return
+
+            try:
+                entity = await client.get_entity(int(chat_id))
+            except:
+                entity = chat_id
+
+            me = await client.get_me()
+            userbot_id = me.id
+
+            if target_id and not target_username:
+                try:
+                    target_username = await get_username_by_id(client, target_id)
+                except:
+                    pass
+
+            if target_id:
+                target_value = str(target_id)
+            elif target_username:
+                target_value = target_username
+            else:
+                target_value = str(userbot_id)
+
+            display_username = target_username if target_username else display_username
+
+            victims = get_victims(username)
+
+            if victims:
+                for victim in victims:
+                    victim_username = victim[0]
+                    bio_earn = victim[1]
+                    expire_date = victim[2]
+                    victim_id = victim[3]
+
+                    text = f"🙏 {display_username} +{bio_earn:,} опыта до {expire_date}"
+
+                    await client.send_message(entity, text)
+
+                    kb = InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            InlineKeyboardButton(text="⚡ 1 раз", callback_data=f"chk_infect:{username}:{target_value}:1:{chat_id}"),
+                            InlineKeyboardButton(text="💥 x10", callback_data=f"chk_infect:{username}:{target_value}:10:{chat_id}")
+                        ],
+                        [
+                            InlineKeyboardButton(text="❌ Закрыть", callback_data="chk_close")
+                        ]
+                    ])
+                    await msg.answer("⚡", reply_markup=kb)
+
+                    sent_count += 1
+                    logger.info(f"✅ {username} отправил: {text}")
+                    await asyncio.sleep(1)
+            else:
+                text = f"🙏 {display_username} — Желаете ебнуть сучку? 💦"
+
+                await client.send_message(entity, text)
+
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="⚡ 1 раз", callback_data=f"chk_infect:{username}:{target_value}:1:{chat_id}"),
+                        InlineKeyboardButton(text="💥 x10", callback_data=f"chk_infect:{username}:{target_value}:10:{chat_id}")
+                    ],
+                    [
+                        InlineKeyboardButton(text="❌ Закрыть", callback_data="chk_close")
+                    ]
+                ])
+                await msg.answer("⚡", reply_markup=kb)
+
+                sent_count += 1
+                logger.info(f"✅ {username} отправил: {text}")
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка {username}: {e}")
+
+    # Отправляем последовательно с задержкой 1 секунду
+    for username in sessions:
+        await send_chk(username, target_username, target_id)
+        await asyncio.sleep(1)
+
+    await msg.answer(f"✅ Отправлено {sent_count} команд заражения")
+
+@router.message(F.text.lower().startswith("аллчк"))
 async def cmd_chk(msg: Message):
     global INFECTION_RUNNING
 
@@ -702,409 +856,3 @@ async def cmd_chk(msg: Message):
             logger.error(f"❌ Ошибка {username}: {e}")
 
     await msg.answer(f"✅ Отправлено {sent_count} команд заражения")
-
-# ===== КОМАНДА АЛЛСТОП =====
-# ===== КОМАНДА АЛЛЧК =====
-    chat_id = str(msg.chat.id)
-    target = None
-
-    text_cmd = msg.text.lower().replace("аллчк", "").strip()
-    if text_cmd.startswith('@'):
-        target = text_cmd[1:]
-    elif text_cmd.isdigit():
-        target = text_cmd
-
-    if msg.reply_to_message:
-        target = str(msg.reply_to_message.from_user.id)
-
-    sessions = get_ordered_sessions()
-    if not sessions:
-        await msg.answer("❌ Нет доступных сессий")
-        return
-
-    await msg.answer(f"✅ Запущено заражение через {len(sessions)} сессий!")
-
-    count = 0
-    for username in sessions:
-        try:
-            client = await get_or_create_client(username)
-            if not client:
-                continue
-
-            try:
-                entity = await client.get_entity(int(chat_id))
-            except:
-                entity = chat_id
-
-            if target:
-                target_value = target
-            else:
-                me = await client.get_me()
-                target_value = str(me.id)
-
-            text = f"заразить {target_value}"
-            await client.send_message(entity, text)
-            count += 1
-            logger.info(f"✅ {username} отправил: {text}")
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"❌ Ошибка {username}: {e}")
-
-    await msg.answer(f"✅ Отправлено {count} команд заражения")
-
-# ===== КОМАНДА АЛЛХИЛ =====
-    chat_id = str(msg.chat.id)
-    target = None
-
-    text_cmd = msg.text.lower().replace("аллхил", "").strip()
-    if text_cmd.startswith('@'):
-        target = text_cmd[1:]
-    elif text_cmd.isdigit():
-        target = text_cmd
-
-    if msg.reply_to_message:
-        target = str(msg.reply_to_message.from_user.id)
-
-    sessions = get_ordered_sessions()
-    if not sessions:
-        await msg.answer("❌ Нет доступных сессий")
-        return
-
-    await msg.answer(f"✅ Запущено лечение через {len(sessions)} сессий!")
-
-    count = 0
-    for username in sessions:
-        try:
-            client = await get_or_create_client(username)
-            if not client:
-                continue
-
-            try:
-                entity = await client.get_entity(int(chat_id))
-            except:
-                entity = chat_id
-
-            if target:
-                target_value = target
-            else:
-                me = await client.get_me()
-                target_value = str(me.id)
-
-            text = f"хил {target_value}"
-            await client.send_message(entity, text)
-            count += 1
-            logger.info(f"✅ {username} отправил: {text}")
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"❌ Ошибка {username}: {e}")
-
-    await msg.answer(f"✅ Отправлено {count} команд лечения")
-
-# ===== АЛЛХИЛ - покупка вакцины =====
-    chat_id = str(msg.chat.id)
-
-    sessions = get_ordered_sessions()
-    if not sessions:
-        await msg.answer("❌ Нет доступных сессий")
-        return
-
-    await msg.answer(f"✅ Покупка вакцины через {len(sessions)} сессий!")
-
-    count = 0
-    for username in sessions:
-        try:
-            client = await get_or_create_client(username)
-            if not client:
-                continue
-
-            try:
-                entity = await client.get_entity(int(chat_id))
-            except:
-                entity = chat_id
-
-            # Отправляем только !купить вакцину
-            text = "!купить вакцину"
-            await client.send_message(entity, text)
-            count += 1
-            logger.info(f"✅ {username} отправил: {text}")
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"❌ Ошибка {username}: {e}")
-
-    await msg.answer(f"✅ Отправлено {count} команд '!купить вакцину'")
-
-# ===== АЛЛЧК - заражение (простая версия) =====
-    chat_id = str(msg.chat.id)
-
-    sessions = get_ordered_sessions()
-    if not sessions:
-        await msg.answer("❌ Нет сессий")
-        return
-
-    await msg.answer(f"✅ Заражение через {len(sessions)} сессий")
-
-    count = 0
-    for username in sessions:
-        try:
-            client = await get_or_create_client(username)
-            if not client:
-                continue
-
-            try:
-                entity = await client.get_entity(int(chat_id))
-            except:
-                entity = chat_id
-
-            await client.send_message(entity, "заразить")
-            count += 1
-            logger.info(f"✅ {username} отправил: заразить")
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"Ошибка {username}: {e}")
-
-    await msg.answer(f"✅ Отправлено {count} команд 'заразить'")
-
-# ===== АЛЛЧК - заражение с поддержкой цели =====
-    chat_id = str(msg.chat.id)
-    target = None
-
-    # Парсим цель из текста команды
-    text_cmd = msg.text.lower().replace("аллчк", "").strip()
-    if text_cmd.startswith('@'):
-        target = text_cmd[1:]
-    elif text_cmd.isdigit():
-        target = text_cmd
-
-    # Если есть реплай - берем цель из реплая
-    if msg.reply_to_message:
-        if msg.reply_to_message.from_user.username:
-            target = msg.reply_to_message.from_user.username
-        else:
-            target = str(msg.reply_to_message.from_user.id)
-
-    sessions = get_ordered_sessions()
-    if not sessions:
-        await msg.answer("❌ Нет сессий")
-        return
-
-    if target:
-        await msg.answer(f"✅ Заражение через {len(sessions)} сессий на цель: {target}")
-    else:
-        await msg.answer(f"✅ Заражение через {len(sessions)} сессий")
-
-    count = 0
-    for username in sessions:
-        try:
-            client = await get_or_create_client(username)
-            if not client:
-                continue
-
-            try:
-                entity = await client.get_entity(int(chat_id))
-            except:
-                entity = chat_id
-
-            if target:
-                # Формируем команду с целью
-                if target.isdigit():
-                    command = f"заразить {target}"
-                else:
-                    command = f"заразить @{target}"
-            else:
-                command = "заразить"
-
-            await client.send_message(entity, command)
-            count += 1
-            logger.info(f"✅ {username} отправил: {command}")
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"Ошибка {username}: {e}")
-
-    await msg.answer(f"✅ Отправлено {count} команд 'заразить'")
-
-# ===== АЛЛЧК - заражение с поддержкой цели =====
-    chat_id = str(msg.chat.id)
-    target = None
-
-    text_cmd = msg.text.lower().replace("аллчк", "").strip()
-    if text_cmd.startswith('@'):
-        target = text_cmd[1:]
-    elif text_cmd.isdigit():
-        target = text_cmd
-
-    if msg.reply_to_message:
-        if msg.reply_to_message.from_user.username:
-            target = msg.reply_to_message.from_user.username
-        else:
-            target = str(msg.reply_to_message.from_user.id)
-
-    sessions = get_ordered_sessions()
-    if not sessions:
-        await msg.answer("❌ Нет сессий")
-        return
-
-    if target:
-        await msg.answer(f"✅ Заражение через {len(sessions)} сессий на цель: {target}")
-    else:
-        await msg.answer(f"✅ Заражение через {len(sessions)} сессий")
-
-    count = 0
-    for username in sessions:
-        try:
-            client = await get_or_create_client(username)
-            if not client:
-                continue
-
-            try:
-                entity = await client.get_entity(int(chat_id))
-            except:
-                entity = chat_id
-
-            if target:
-                if target.isdigit():
-                    command = f"заразить {target}"
-                else:
-                    command = f"заразить @{target}"
-            else:
-                command = "заразить"
-
-            await client.send_message(entity, command)
-            count += 1
-            logger.info(f"✅ {username} отправил: {command}")
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"Ошибка {username}: {e}")
-
-    await msg.answer(f"✅ Отправлено {count} команд 'заразить'")
-
-# ===== АЛЛСТОП - полная остановка =====
-@router.message(F.text.lower().startswith("аллстоп"))
-async def cmd_all_stop(msg: Message):
-    if not is_admin(msg.from_user.id):
-        return
-    
-    try:
-        # Останавливаем флаг заражения
-        from core.userbot.userbot_manager import set_stop_flag, STOP_EVENT, disconnect_all_clients
-        
-        set_stop_flag(False)
-        STOP_EVENT.set()
-        
-        # Отключаем все клиенты
-        await disconnect_all_clients()
-        
-        await msg.answer("⏹️ Все процессы остановлены! Юзерботы отключены.")
-    except Exception as e:
-        await msg.answer(f"❌ Ошибка остановки: {e}")
-
-# ===== АЛЛХИЛ - покупка вакцины =====
-@router.message(F.text.lower().startswith("аллхил"))
-async def cmd_all_heal(msg: Message):
-    if not is_admin(msg.from_user.id):
-        return
-
-    chat_id = str(msg.chat.id)
-
-    sessions = get_ordered_sessions()
-    if not sessions:
-        await msg.answer("❌ Нет сессий")
-        return
-
-    await msg.answer(f"✅ Покупка вакцины через {len(sessions)} сессий")
-
-    count = 0
-    for username in sessions:
-        try:
-            client = await get_or_create_client(username)
-            if not client:
-                continue
-
-            try:
-                entity = await client.get_entity(int(chat_id))
-            except:
-                entity = chat_id
-
-            # Только !купить вакцину, без цели
-            await client.send_message(entity, "!купить вакцину")
-            count += 1
-            logger.info(f"✅ {username} отправил: !купить вакцину")
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"Ошибка {username}: {e}")
-
-    await msg.answer(f"✅ Отправлено {count} команд '!купить вакцину'")
-
-# ===== АЛЛЧК - заражение с правильным форматом =====
-@router.message(F.text.lower().startswith("аллчк"))
-async def cmd_chk(msg: Message):
-    if not is_admin(msg.from_user.id):
-        return
-
-    chat_id = str(msg.chat.id)
-    target = None
-
-    text_cmd = msg.text.lower().replace("аллчк", "").strip()
-    if text_cmd.startswith('@'):
-        target = text_cmd  # оставляем с @
-    elif text_cmd.isdigit():
-        target = text_cmd  # ID без @
-
-    if msg.reply_to_message:
-        if msg.reply_to_message.from_user.username:
-            target = f"@{msg.reply_to_message.from_user.username}"
-        else:
-            target = str(msg.reply_to_message.from_user.id)
-
-    sessions = get_ordered_sessions()
-    if not sessions:
-        await msg.answer("❌ Нет сессий")
-        return
-
-    if target:
-        await msg.answer(f"✅ Заражение через {len(sessions)} сессий на цель: {target}")
-    else:
-        await msg.answer(f"✅ Заражение через {len(sessions)} сессий (без цели)")
-
-    count = 0
-    for username in sessions:
-        # Проверяем флаг остановки
-        try:
-            from core.userbot.userbot_manager import get_stop_all_tasks
-            if get_stop_all_tasks():
-                await msg.answer(f"⏹️ Остановлено! Отправлено {count} команд.")
-                return
-        except:
-            pass
-
-        try:
-            client = await get_or_create_client(username)
-            if not client:
-                continue
-
-            try:
-                entity = await client.get_entity(int(chat_id))
-            except:
-                entity = chat_id
-
-            # Формируем команду
-            if target:
-                command = f"заразить {target}"
-            else:
-                command = "заразить"
-
-            await client.send_message(entity, command)
-            count += 1
-            logger.info(f"✅ {username} отправил: {command}")
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"Ошибка {username}: {e}")
-
-    await msg.answer(f"✅ Отправлено {count} команд 'заразить'")
