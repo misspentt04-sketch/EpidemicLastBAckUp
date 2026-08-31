@@ -74,8 +74,8 @@ async def cmd_rebirth(message: types.Message, db):
     if not user_data:
         return await message.reply("❌ У вас еще нет Лаборатории!")
 
-    bio_res = user_data.get("bio_resource") or 0
-    rebirth_lvl = user_data.get("rebirth_level") or 0
+    bio_res = (user_data.get("bio_resource") if isinstance(user_data, dict) else user_data[0]) or 0
+    rebirth_lvl = (user_data.get("rebirth_level") if isinstance(user_data, dict) else user_data[1]) or 0
 
     curr_ezha = rebirth_lvl * 10
     curr_disc = min(rebirth_lvl * 2.5, 10.0)
@@ -86,7 +86,6 @@ async def cmd_rebirth(message: types.Message, db):
 
     cost = get_rebirth_cost(next_lvl)
 
-    # Расчет суточного дохода на основе базовых тиков с жертв (2 тика в сутки / 12 часов)
     await db.execute(
         "SELECT SUM(victim_bio_resource_earn) FROM Victims WHERE victims_owner_id = %s;",
         (user_id,)
@@ -99,12 +98,10 @@ async def cmd_rebirth(message: types.Message, db):
     else:
         raw_tick = 0
 
-    # Явное приведение Decimal к float
     base_tick = float(raw_tick)
 
-    # Тик раз в 12 часов с учетом бонуса Rebirth (% с ежи)
     single_tick_earn = base_tick * (1.0 + float(curr_ezha) / 100.0)
-    daily_income = single_tick_earn * 2.0  # 24 часа = 2 тика
+    daily_income = single_tick_earn * 2.0
 
     progress_bar = generate_progress_bar(bio_res, cost)
     needed = cost - bio_res
@@ -172,7 +169,12 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
     await db.execute("SELECT bio_resource FROM Lab WHERE lab_id = %s", (owner_id,))
     user_data = await db.fetchone()
 
-    bio_res = (user_data.get("bio_resource") if user_data else 0) or 0
+    if isinstance(user_data, dict):
+        bio_res = user_data.get("bio_resource") or 0
+    elif isinstance(user_data, (list, tuple)):
+        bio_res = user_data[0] or 0
+    else:
+        bio_res = 0
 
     if not user_data or bio_res < cost:
         return await callback.message.edit_text("❌ Недостаточно биоресурсов для выполнения Rebirth!")
@@ -180,7 +182,7 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
     # Удаление зараженных жертв
     await db.execute("DELETE FROM Victims WHERE victims_owner_id = %s;", (owner_id,))
 
-    # Сброс лаборатории с правильным стартовым опытом (1000) и биоресурсами (15000)
+    # Сброс лаборатории (без PTS)
     query_update = """
         UPDATE Lab
         SET bio_resource = 15000,
@@ -195,8 +197,7 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
             epicoins = 0,
             case1 = 0,
             case2 = 0,
-            rebirth_level = %s,
-            pts = pts + %s
+            rebirth_level = %s
         WHERE lab_id = %s;
     """
     await db.execute(query_update, (target_lvl, owner_id))
@@ -217,10 +218,3 @@ async def process_rebirth_cancel(callback: types.CallbackQuery):
         return await callback.answer("❌ Это не ваше меню!", show_alert=True)
 
     await callback.message.edit_text("❌ Перерождение отменено. Ваша Лаборатория в безопасности.")
-
-# ===== РАСЧЁТ ОЧКОВ ЗА ПЕРЕРОЖДЕНИЕ =====
-def calculate_rebirth_pts(rebirth_level: int) -> int:
-    """Очки за перерождение: уровень^2 * 10 + уровень * 5"""
-    if rebirth_level <= 0:
-        return 0
-    return (rebirth_level ** 2) * 10 + (rebirth_level * 5)
