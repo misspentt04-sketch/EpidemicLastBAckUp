@@ -1,3 +1,7 @@
+from aiogram import Router, F
+from aiogram.types import Message
+
+router = Router()
 import logging
 from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, CommandObject
@@ -138,3 +142,64 @@ async def start_cmd(
 
     except Exception as e:
         logger.error(f"❌ Ошибка в start_cmd: {e}", exc_info=True)
+
+
+
+
+
+
+
+
+
+
+
+# ===== МИНИ-ЛАБА (МЛ) =====
+@start_router.message(F.text.lower() == "мл")
+async def cmd_mini_lab(msg: Message, repo_biowar: RequestsRepoBiowar):
+    user_id = msg.from_user.id
+
+    lab = await repo_biowar.get_info_user_lab(user_id)
+    if not lab:
+        await msg.answer("❌ У вас нет лаборатории!")
+        return
+
+    pathogens = lab.get('pathogens', 0)
+    ready_pathogens = lab.get('ready_pathogens', 0)
+    bio_exp = lab.get('bio_experience', 0)
+    bio_res = lab.get('bio_resource', 0)
+    full_name = lab.get('full_name', 'Неизвестно')
+
+    owner_link = f'<a href="tg://openmessage?user_id={user_id}">{full_name}</a>'
+
+    corp_info = await repo_biowar.get_corporation(user_id) if hasattr(repo_biowar, 'get_corporation') else None
+    corp_name = "Нет корпорации"
+    corp_display = corp_name
+
+    if corp_info and isinstance(corp_info, dict):
+        corp_name = corp_info.get('name', 'Нет корпорации')
+        corp_leader_id = corp_info.get('leader_id')
+        if corp_leader_id:
+            corp_leader = await repo_biowar.get_info_user_lab(corp_leader_id)
+            if corp_leader:
+                corp_leader_name = corp_leader.get('full_name', 'Неизвестно')
+                corp_display = f'<a href="tg://openmessage?user_id={corp_leader_id}">{corp_name}</a>'
+            else:
+                corp_display = corp_name
+        else:
+            corp_display = corp_name
+
+    exp_formatted = f"{bio_exp:,}".replace(",", " ")
+    res_formatted = f"{bio_res:,}".replace(",", " ")
+
+    text = (
+        f"👤 Руководитель: {owner_link}\n"
+        f"🏛 В составе Корпорации — «{corp_display}»\n"
+        f"🧪 Готовых патогенов: {ready_pathogens}/{pathogens}\n"
+        f"☣️ Опыт: {exp_formatted}\n"
+        f"🧬 Ресурсы: {res_formatted}"
+    )
+
+    await msg.answer(
+        f"<blockquote>{text}</blockquote>",
+        parse_mode="HTML"
+    )

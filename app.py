@@ -255,7 +255,3 @@ if __name__ == "__main__":
 # register_lab_handlers(app)
 
 
-@dp.error()
-async def global_error_handler(event: ErrorEvent):
-    if isinstance(event.exception, TelegramRetryAfter):
-        return True

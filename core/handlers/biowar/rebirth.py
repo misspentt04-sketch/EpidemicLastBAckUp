@@ -86,6 +86,10 @@ async def cmd_rebirth(message: types.Message, db):
 
     cost = get_rebirth_cost(next_lvl)
 
+    # Прогрессия стартовых бонусов
+    start_exp = 1000 + (next_lvl - 1) * 1000
+    start_bio = 15000 + (next_lvl - 1) * 10000
+
     await db.execute(
         "SELECT SUM(victim_bio_resource_earn) FROM Victims WHERE victims_owner_id = %s;",
         (user_id,)
@@ -143,7 +147,7 @@ async def cmd_rebirth(message: types.Message, db):
         f"{info_text}\n"
         f"🎉 <b>Rebirth #{next_lvl} ДОСТУПЕН К АКТИВАЦИИ!</b>\n\n"
         f"⚠️ <b>ВНИМАНИЕ! БУДЕТ ВЫПОЛНЕН ПОЛНЫЙ СБРОС:</b>\n"
-        f"❌ Биоресурсы (старт: 15,000) и Опыт (старт: 1,000)\n"
+        f"❌ Биоресурсы (старт: {start_bio:,}) и Опыт (старт: {start_exp:,})\n"
         f"❌ Все патогены (до 4 шт.)\n"
         f"❌ Вся наука, заражаемость, иммунитет, летальность и СБ (до 1)\n"
         f"❌ Все ваши зараженные жертвы и кейсы\n\n"
@@ -179,14 +183,18 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
     if not user_data or bio_res < cost:
         return await callback.message.edit_text("❌ Недостаточно биоресурсов для выполнения Rebirth!")
 
+    # Динамический расчет бонусов
+    start_exp = 1000 + (target_lvl - 1) * 1000
+    start_bio = 15000 + (target_lvl - 1) * 10000
+
     # Удаление зараженных жертв
     await db.execute("DELETE FROM Victims WHERE victims_owner_id = %s;", (owner_id,))
 
-    # Сброс лаборатории (без PTS)
+    # Сброс лаборатории с новыми стартовыми ресурсами
     query_update = """
         UPDATE Lab
-        SET bio_resource = 15000,
-            bio_experience = 1000,
+        SET bio_resource = %s,
+            bio_experience = %s,
             pathogens = 4,
             ready_pathogens = 4,
             science = 1,
@@ -200,12 +208,12 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
             rebirth_level = %s
         WHERE lab_id = %s;
     """
-    await db.execute(query_update, (target_lvl, owner_id))
+    await db.execute(query_update, (start_bio, start_exp, target_lvl, owner_id))
 
     await callback.message.edit_text(
         f"🎉 <b>ПОЗДРАВЛЯЕМ С REBIRTH #{target_lvl}!</b>\n\n"
         f"🔄 Все показатели Лаборатории и жертвы сброшены.\n"
-        f"🎁 Стартовые ресурсы: <b>15,000</b> биоресурсов и <b>1,000</b> опыта.\n"
+        f"🎁 Стартовые ресурсы: <b>{start_bio:,}</b> биоресурсов и <b>{start_exp:,}</b> опыта.\n"
         f"✨ Новые перманентные бонусы активированы!",
         parse_mode="HTML"
     )

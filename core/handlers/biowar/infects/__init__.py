@@ -20,6 +20,7 @@ infect_router.message.register(
 
 # Infect Addons
 infect_router.message.register(buy_vaccine, F.text.regexp(trg.re_buy_vaccine, mode='fullmatch'))
+infect_router.message.register(buy_vaccine, F.text.lower() == "кв")
 
 infect_router.message.register(victims_list, F.text.regexp(trg.re_victims_list, mode='fullmatch'))
 infect_router.message.register(illnesses_list, F.text.regexp(trg.re_illnesses_list, mode='fullmatch'))
