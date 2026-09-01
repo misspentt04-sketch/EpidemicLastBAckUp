@@ -55,7 +55,7 @@ async def handle_text_upgrade(msg: types.Message, db: Cursor, repo_biowar: Reque
         lvl = int(args[1])
         if lvl < 1:
             lvl = 1
-        if lvl > 5:
+        if lvl > 50:
             lvl = 5
 
     from_lvl = lab_info[skill]
@@ -131,7 +131,7 @@ async def handle_upgrade(msg: types.Message, db: Cursor, repo_biowar: RequestsRe
         lvl = int(parts[1])
         if lvl < 1:
             lvl = 1
-        if lvl > 5:
+        if lvl > 50:
             lvl = 5
 
     from_lvl = lab_info[skill]
@@ -188,4 +188,62 @@ async def cmd_upgrade_pathogens_full(msg: types.Message, db: Cursor, repo_biowar
 
 @text_upgrade_router.message(F.text.lower().startswith("+разработка"))
 async def cmd_upgrade_science_full(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "science")
+
+@text_upgrade_router.message(F.text.lower().startswith("++зз"))
+async def cmd_upgrade_infect_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "infect")
+
+@text_upgrade_router.message(F.text.lower().startswith("++заразность"))
+async def cmd_upgrade_infect_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "infect")
+
+# ===== ДВОЙНЫЕ ПЛЮСЫ ДЛЯ ВСЕХ КОМАНД =====
+@text_upgrade_router.message(F.text.lower().startswith("++зз"))
+async def cmd_upgrade_infect_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "infect")
+
+@text_upgrade_router.message(F.text.lower().startswith("++иммун"))
+async def cmd_upgrade_immunity_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "immunity")
+
+@text_upgrade_router.message(F.text.lower().startswith("++летал"))
+async def cmd_upgrade_lethality_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "lethality")
+
+@text_upgrade_router.message(F.text.lower().startswith("++сб"))
+async def cmd_upgrade_security_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "security_service")
+
+@text_upgrade_router.message(F.text.lower().startswith("++пат"))
+async def cmd_upgrade_pathogens_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "pathogens")
+
+@text_upgrade_router.message(F.text.lower().startswith("++квала"))
+async def cmd_upgrade_science_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "science")
+
+# ===== ДВОЙНЫЕ ПЛЮСЫ ДЛЯ ПОЛНЫХ КОМАНД =====
+@text_upgrade_router.message(F.text.lower().startswith("++заразность"))
+async def cmd_upgrade_infect_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "infect")
+
+@text_upgrade_router.message(F.text.lower().startswith("++иммунитет"))
+async def cmd_upgrade_immunity_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "immunity")
+
+@text_upgrade_router.message(F.text.lower().startswith("++летальность"))
+async def cmd_upgrade_lethality_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "lethality")
+
+@text_upgrade_router.message(F.text.lower().startswith("++безопасность"))
+async def cmd_upgrade_security_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "security_service")
+
+@text_upgrade_router.message(F.text.lower().startswith("++патоген"))
+async def cmd_upgrade_pathogens_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "pathogens")
+
+@text_upgrade_router.message(F.text.lower().startswith("++разработка"))
+async def cmd_upgrade_science_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
     await handle_upgrade(msg, db, repo_biowar, "science")

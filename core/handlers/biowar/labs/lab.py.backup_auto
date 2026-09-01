@@ -1,6 +1,3 @@
-from aiogram import F
-from core.data import texttriggers as trg
-from core.handlers.biowar.labs.lab_upgrade_display import get_upgrade_display
 from core.data.tricks.themes_data import get_theme_text
 from asyncmy.cursors import Cursor
 from redis.asyncio import Redis
@@ -20,7 +17,7 @@ from humanize import intcomma
 
 lab_main_router = Router()
 
-@lab_main_router.message(F.text.regexp(trg.re_lab, mode="fullmatch")) # или ваш декоратор команды, если он здесь задается
+@lab_main_router.message() # или ваш декоратор команды, если он здесь задается
 async def get_lab(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar, redis: Redis):
     
     id = msg.from_user.id # not for using
@@ -95,15 +92,15 @@ async def get_lab(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoB
         f'{corp_text}'
         
         f'{LabIco.label.value} <b>Имя патогена:</b> {pathogen_name}\n'
-        f'{LabIco.pathogens.value} <b>Готовых патогенов:</b> {lab_info["ready_pathogens"]}/{lab_info["pathogens"]}{get_upgrade_display(lab_info, "pathogens")}\n'
-        f'{LabIco.science.value} <b>Квалификация учёных:</b> {lab_info["science"]} ур ({61 - lab_info["science"]} мин.){get_upgrade_display(lab_info, "science")}\n'
+        f'{LabIco.pathogens.value} <b>Готовых патогенов:</b> {lab_info["ready_pathogens"]}/{lab_info["pathogens"]}\n'
+        f'{LabIco.science.value} <b>Квалификация учёных:</b> {lab_info["science"]} ур ({61 - lab_info["science"]} мин.)\n'
         f'{refresh_pathogen_time}'
         
         f'<blockquote><b>——[ Характеристика]——</b>\n'
-        f'{LabIco.infect.value} Заразность: {lab_info["infect"]} ур{get_upgrade_display(lab_info, "infect")}\n'
-        f'{LabIco.immunity.value} Иммунитет: {lab_info["immunity"]} ур{get_upgrade_display(lab_info, "immunity")}\n'
-        f'{LabIco.lethality.value} Летальность: {lab_info["lethality"]} ур ({fever_time} мин | {lab_info["lethality"]} дн){get_upgrade_display(lab_info, "lethality")}\n'
-        f'{LabIco.security_service.value} Служба безопасности: {lab_info["security_service"]} ур{get_upgrade_display(lab_info, "security_service")}</blockquote>\n'
+        f'{LabIco.infect.value} Заразность: {lab_info["infect"]} ур\n'
+        f'{LabIco.immunity.value} Иммунитет: {lab_info["immunity"]} ур\n'
+        f'{LabIco.lethality.value} Летальность: {lab_info["lethality"]} ур ({fever_time} мин | {lab_info["lethality"]} дн)\n'
+        f'{LabIco.security_service.value} Служба безопасности: {lab_info["security_service"]} ур</blockquote>\n'
         
         f'<b>——————————————</b>\n'
         f'ID лаборатории: <code>{lab_info["id"]}</code>\n'

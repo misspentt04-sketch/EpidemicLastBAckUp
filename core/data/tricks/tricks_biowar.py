@@ -500,7 +500,7 @@ tricks_biowar = {
         
         'not_enough_resources': f'{OtherIco.memo} У вас нет столько био-ресурсов',
         
-        'max_reached_skill_lvl': '%(memo_ico)s За один раз можно произвести улучшение не более, чем на 5 уровней' % \
+        'max_reached_skill_lvl': '%(memo_ico)s За один раз можно произвести улучшение не более, чем на 50 уровней' % \
             {'memo_ico': OtherIco.memo},
         
         'victim_expire_yes': '%(infected_ico)s Недавно Вы уже подвергали заражению выбранный объект.\n%(stopwatch)s Следующая возможность появится через {}' % \
