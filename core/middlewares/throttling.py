@@ -5,7 +5,7 @@ from typing import Awaitable, Callable, Dict, Any
 
 class ThrottlingMiddleware(BaseMiddleware):
     def __init__(self, time_limit: float = 0.3) -> None:
-        # Задержка 0.3 сек позволит нормально отправлять сообщения раз в 1 сек
+        # Задержка 0.3 сек между сообщениями
         self.rate_limit = TTLCache(maxsize=10_000, ttl=time_limit)
 
     async def __call__(
@@ -14,15 +14,18 @@ class ThrottlingMiddleware(BaseMiddleware):
         event: Update,
         data: Dict[str, Any]
     ) -> Any:
-        chat = data.get('event_chat')
         user = data.get('event_from_user')
+        chat = data.get('event_chat')
 
-        # Работает только в ЛС
-        if not user or not chat or chat.type != 'private':
+        # Работает во всех чатах (не только в ЛС)
+        if not user:
             return await handler(event, data)
 
-        if user.id in self.rate_limit:
-            return  # Сбрасывает только если сообщения идут чаще, чем раз в 0.3 сек
+        # Ключ = user_id + chat_id (разные чаты — разные задержки)
+        key = f"{user.id}:{chat.id if chat else 'global'}"
 
-        self.rate_limit[user.id] = True
+        if key in self.rate_limit:
+            return  # Пропускаем если сообщение чаще чем раз в 0.3 сек
+
+        self.rate_limit[key] = True
         return await handler(event, data)

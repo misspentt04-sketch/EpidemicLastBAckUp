@@ -1,8 +1,10 @@
+import asyncio
 import math
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.utils.text_decorations import html_decoration as hd
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 rebirth_router = Router()
 
@@ -19,35 +21,50 @@ def generate_progress_bar(current: int, target: int, length: int = 15) -> str:
     bar = "█" * filled_length + "░" * (length - filled_length)
     return f"[{bar}] {percent * 100:.1f}%"
 
+# ============================================
+# ТОП РЕБИРТ С ПАГИНАЦИЕЙ
+# ============================================
+
 @rebirth_router.message(Command("top_rb", "toprb"))
 @rebirth_router.message(F.text.regexp(r"(?i)^(топ\s+(рб|перерождений|перерождения))$"))
 async def cmd_top_rb(message: types.Message, db):
-    query = """
-        SELECT lab_id, lab_name, rebirth_level
-        FROM Lab
-        WHERE rebirth_level > 0
-        ORDER BY rebirth_level DESC
-        LIMIT 10;
-    """
+    await show_top_rb(message, db, page=1, per_page=10)
 
-    await db.execute(query)
-    rows = await db.fetchall()
+async def show_top_rb(message: types.Message, db, page: int, per_page: int):
+    offset = (page - 1) * per_page
 
-    if not rows:
+    await db.execute("SELECT COUNT(*) FROM Lab WHERE rebirth_level > 0;")
+    total_count_result = await db.fetchone()
+    total_count = list(total_count_result.values())[0] if total_count_result else 0
+
+    if total_count == 0:
         return await message.answer("🔄 <b>ТОП ПО ПЕРЕРОЖДЕНИЯМ</b>\n\n<i>Пока никто не совершил перерождение.</i>", parse_mode="HTML")
 
-    medals = ["🥇", "🥈", "🥉"]
-    lines = ["🔄 <b>ТОП ПО ПЕРЕРОЖДЕНИЯМ</b>\n"]
+    query = """
+        SELECT lab_id, lab_name, rebirth_level, last_farm
+        FROM Lab
+        WHERE rebirth_level > 0
+        ORDER BY rebirth_level DESC, last_farm ASC
+        LIMIT %s OFFSET %s;
+    """
+    await db.execute(query, (per_page, offset))
+    rows = await db.fetchall()
 
-    for idx, row in enumerate(rows, 1):
+    medals = ["🥇", "🥈", "🥉"]
+    total_pages = (total_count + per_page - 1) // per_page
+    lines = [f"🔄 <b>ТОП ПО ПЕРЕРОЖДЕНИЯМ</b>\n<i>Страница {page} из {total_pages}</i>\n"]
+
+    for idx, row in enumerate(rows, start=offset + 1):
         if isinstance(row, dict):
             user_id = row.get("lab_id")
             name = row.get("lab_name")
             rb_lvl = row.get("rebirth_level", 0) or 0
+            last_farm = row.get("last_farm", 0) or 0
         else:
             user_id = row[0]
             name = row[1]
             rb_lvl = row[2] if len(row) > 2 and row[2] is not None else 0
+            last_farm = row[3] if len(row) > 3 and row[3] is not None else 0
 
         if not name:
             name = f"Лаборатория {user_id}"
@@ -56,9 +73,34 @@ async def cmd_top_rb(message: types.Message, db):
         user_display = f'<a href="tg://openmessage?user_id={user_id}">{escaped_name}</a>'
         prefix = medals[idx - 1] if idx <= 3 else f"<b>{idx}.</b>"
 
-        lines.append(f"{prefix} {user_display} — <code>{rb_lvl}</code> перерождение(й)")
+        from datetime import datetime
+        date_str = datetime.fromtimestamp(last_farm).strftime("%d.%m.%Y %H:%M") if last_farm else "—"
 
-    await message.answer("\n".join(lines), parse_mode="HTML")
+        lines.append(f"{prefix} {user_display} — <code>{rb_lvl}</code> уровень (с {date_str})")
+
+    builder = InlineKeyboardBuilder()
+    for p in [1, 2, 10]:
+        if p <= total_pages:
+            builder.button(text=str(p), callback_data=f"top_rb_page:{p}:{per_page}")
+    builder.adjust(3)
+
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"top_rb_page:{page - 1}:{per_page}"))
+    if page < total_pages:
+        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"top_rb_page:{page + 1}:{per_page}"))
+    if nav_buttons:
+        builder.row(*nav_buttons)
+
+    await message.answer("\n".join(lines), reply_markup=builder.as_markup(), parse_mode="HTML")
+
+    await asyncio.sleep(0.4)
+    await show_top_rb(callback.message, db, page, per_page)
+    await callback.answer()
+
+# ============================================
+# REBIRTH
+# ============================================
 
 @rebirth_router.message(Command("rebirth", "rb", "рб", "ребитх"))
 @rebirth_router.message(F.text.in_({"/rebirth", "/rb", "/рб", "/ребитх"}))
@@ -74,8 +116,8 @@ async def cmd_rebirth(message: types.Message, db):
     if not user_data:
         return await message.reply("❌ У вас еще нет Лаборатории!")
 
-    bio_res = (user_data.get("bio_resource") if isinstance(user_data, dict) else user_data[0]) or 0
-    rebirth_lvl = (user_data.get("rebirth_level") if isinstance(user_data, dict) else user_data[1]) or 0
+    bio_res = user_data.get("bio_resource") or 0
+    rebirth_lvl = user_data.get("rebirth_level") or 0
 
     curr_ezha = rebirth_lvl * 10
     curr_disc = min(rebirth_lvl * 2.5, 10.0)
@@ -103,7 +145,6 @@ async def cmd_rebirth(message: types.Message, db):
         raw_tick = 0
 
     base_tick = float(raw_tick)
-
     single_tick_earn = base_tick * (1.0 + float(curr_ezha) / 100.0)
     daily_income = single_tick_earn * 2.0
 
@@ -183,14 +224,11 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
     if not user_data or bio_res < cost:
         return await callback.message.edit_text("❌ Недостаточно биоресурсов для выполнения Rebirth!")
 
-    # Динамический расчет бонусов
     start_exp = 1000 + (target_lvl - 1) * 1000
     start_bio = 15000 + (target_lvl - 1) * 10000
 
-    # Удаление зараженных жертв
     await db.execute("DELETE FROM Victims WHERE victims_owner_id = %s;", (owner_id,))
 
-    # Сброс лаборатории с новыми стартовыми ресурсами
     query_update = """
         UPDATE Lab
         SET bio_resource = %s,
@@ -226,3 +264,16 @@ async def process_rebirth_cancel(callback: types.CallbackQuery):
         return await callback.answer("❌ Это не ваше меню!", show_alert=True)
 
     await callback.message.edit_text("❌ Перерождение отменено. Ваша Лаборатория в безопасности.")
+
+@rebirth_router.callback_query(F.data.startswith("top_rb_page:"))
+async def top_rb_page(callback: types.CallbackQuery, db):
+    if callback.from_user.id != callback.message.chat.id:
+        return await callback.answer("❌ Это не ваше меню!", show_alert=True)
+
+    _, page_str, per_page_str = callback.data.split(":")
+    page = int(page_str)
+    per_page = int(per_page_str)
+
+    await callback.message.delete()
+    await show_top_rb(callback.message, db, page, per_page)
+    await callback.answer()

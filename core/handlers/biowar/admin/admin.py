@@ -1,3 +1,9 @@
+from aiogram.types import Message
+from aiogram import Bot
+from core.utils.db_api.repo_biowar import RequestsRepoBiowar
+from aiogram.filters import Command
+from aiogram import Router
+admin_router = Router()
 from aiogram import types, Bot
 from aiogram.filters import CommandObject
 
@@ -316,3 +322,138 @@ async def bot_statistics(msg: types.Message, bot: Bot, repo_biowar: RequestsRepo
     
     await msg.answer(text)
     
+
+    chat_id = msg.chat.id
+    await msg.answer("🔍 Сканирую участников чата...")
+
+    count = 0
+    async for member in bot.get_chat_members(chat_id):
+        user = member.user
+        if not user.is_bot:
+            try:
+                await repo_biowar.add_data_user(
+                    user.id,
+                    user.full_name or "Без имени",
+                    user.username
+                )
+                count += 1
+            except Exception:
+                pass
+
+    await msg.answer(f"✅ Зарегистрировано {count} пользователей из этого чата!")
+
+
+    total_chats = 0
+    total_users = 0
+    report = []
+
+    try:
+        # Получаем все чаты, где есть бот
+        async for dialog in bot.get_dialogs():
+            chat = dialog.chat
+            chat_id = chat.id
+            chat_title = chat.title or chat.full_name or str(chat_id)
+
+            try:
+                # Пропускаем личные сообщения
+                if chat.type == "private":
+                    continue
+
+                total_chats += 1
+                users_in_chat = 0
+
+                # Сканируем участников чата
+                async for member in bot.get_chat_members(chat_id):
+                    user = member.user
+                    if not user.is_bot:
+                        try:
+                            await repo_biowar.add_data_user(
+                                user.id,
+                                user.full_name or "Без имени",
+                                user.username
+                            )
+                            users_in_chat += 1
+                            total_users += 1
+                        except Exception:
+                            pass
+
+                report.append(f"✅ {chat_title}: {users_in_chat} пользователей")
+                await asyncio.sleep(0.5)  # небольшая задержка чтобы не спамить Telegram
+
+            except Exception as e:
+                report.append(f"❌ {chat_title}: ошибка - {str(e)[:50]}")
+
+    except Exception as e:
+        await msg.answer(f"❌ Ошибка сканирования: {e}")
+        return
+
+    # Отправляем отчёт
+    report_text = (
+        f"📊 <b>ИТОГИ СКАНИРОВАНИЯ</b>\n\n"
+        f"📁 Проверено чатов: <b>{total_chats}</b>\n"
+        f"👤 Всего записано пользователей: <b>{total_users}</b>\n\n"
+        f"<b>Детали по чатам:</b>\n"
+        f"{chr(10).join(report[-20:])}"  # показываем последние 20 чатов
+    )
+
+    if len(report) > 20:
+        report_text += f"\n\n<i>...и ещё {len(report) - 20} чатов</i>"
+
+    await msg.answer(report_text, parse_mode="HTML")
+
+@admin_router.message(Command("scan_all_chats"))
+async def scan_all_chats(msg: Message, bot: Bot, repo_biowar: RequestsRepoBiowar):
+    if msg.from_user.id not in [7972320837]:
+        return
+
+    await msg.answer("🔍 Сканирую ВСЕ чаты, где есть бот... Это может занять время.")
+
+    total_chats = 0
+    total_users = 0
+    report = []
+
+    try:
+        async for dialog in bot.get_dialogs():
+            chat = dialog.chat
+            chat_id = chat.id
+            chat_title = chat.title or chat.full_name or str(chat_id)
+
+            if chat.type == "private":
+                continue
+
+            total_chats += 1
+            users_in_chat = 0
+
+            async for member in bot.get_chat_members(chat_id):
+                user = member.user
+                if not user.is_bot:
+                    try:
+                        await repo_biowar.add_data_user(
+                            user.id,
+                            user.full_name or "Без имени",
+                            user.username
+                        )
+                        users_in_chat += 1
+                        total_users += 1
+                    except Exception:
+                        pass
+
+            report.append(f"✅ {chat_title}: {users_in_chat} пользователей")
+            await asyncio.sleep(0.5)
+
+    except Exception as e:
+        await msg.answer(f"❌ Ошибка: {e}")
+        return
+
+    report_text = (
+        f"📊 <b>ИТОГИ СКАНИРОВАНИЯ</b>\n\n"
+        f"📁 Проверено чатов: <b>{total_chats}</b>\n"
+        f"👤 Всего записано пользователей: <b>{total_users}</b>\n\n"
+        f"<b>Детали по чатам:</b>\n"
+        f"{chr(10).join(report[-20:])}"
+    )
+
+    if len(report) > 20:
+        report_text += f"\n\n<i>...и ещё {len(report) - 20} чатов</i>"
+
+    await msg.answer(report_text, parse_mode="HTML")

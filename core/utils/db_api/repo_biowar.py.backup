@@ -1039,14 +1039,14 @@ class RequestsRepoBiowar:
     async def game_mute_add(self, user_id: int, admin_id: int, reason: str, expire_ts: int):
         """Добавляет игровой мут (АС)"""
         query = """
-            INSERT INTO GameMute (user_id, admin, reason, time_expire)
+            INSERT INTO GameMute (user_id, admin_id, reason, time_expire)
             VALUES (%s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
-                admin = VALUES(admin),
+                admin_id = VALUES(admin_id),
                 reason = VALUES(reason),
                 time_expire = VALUES(time_expire)
         """
-        await self.execute(query, user_id, admin_id, reason, expire_ts)
+        await self.execute(query, (user_id, admin_id, reason, expire_ts))
 
     async def game_mute_cancel(self, user_id: int):
         """Снимает игровой мут (АС)"""
@@ -1056,14 +1056,14 @@ class RequestsRepoBiowar:
     async def bio_mute_add(self, user_id: int, admin_id: int, reason: str, expire_ts: int):
         """Добавляет запрет на смену имени/патогена"""
         query = """
-            INSERT INTO BioMute (user_id, admin, reason, time_expire)
+            INSERT INTO BioMute (user_id, admin_id, reason, time_expire)
             VALUES (%s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
-                admin = VALUES(admin),
+                admin_id = VALUES(admin_id),
                 reason = VALUES(reason),
                 time_expire = VALUES(time_expire)
         """
-        await self.execute(query, user_id, admin_id, reason, expire_ts)
+        await self.execute(query, (user_id, admin_id, reason, expire_ts))
 
     async def bio_mute_cancel(self, user_id: int):
         """Снимает запрет на смену имени/патогена"""

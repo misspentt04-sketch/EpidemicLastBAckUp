@@ -41,6 +41,7 @@ class DatabasePool:
 db_pool = DatabasePool()
 
 async def loop_tasks(pool, redis, bot):
+    print("[DEBUG] loop_tasks started")
     tasks = [
         weekly_exp_grant(pool),
         victim_expire_check(pool),

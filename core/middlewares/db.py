@@ -101,3 +101,28 @@ class DBPoolMiddleware(BaseMiddleware):
                 result = await handler(event, data)
                 await conn.commit()
                 return result
+
+async def register_all_chat_members(bot: Bot, chat_id: int, repo_biowar: RequestsRepoBiowar):
+    """Регистрирует всех участников чата в БД"""
+    try:
+        # Получаем всех участников чата
+        async for member in bot.get_chat_members(chat_id):
+            user = member.user
+            if not user.is_bot:
+                try:
+                    clear_name = html.quote(user.full_name) if user.full_name else "Без имени"
+                    await repo_biowar.add_data_user(
+                        user.id,
+                        clear_name,
+                        user.username
+                    )
+                    await repo_biowar.add_data_user_lower(
+                        user.id,
+                        clear_name,
+                        user.username
+                    )
+                except Exception as e:
+                    print(f"[REGISTER_ALL] Ошибка регистрации {user.id}: {e}")
+        print(f"[REGISTER_ALL] Зарегистрированы все участники чата {chat_id}")
+    except Exception as e:
+        print(f"[REGISTER_ALL] Ошибка: {e}")

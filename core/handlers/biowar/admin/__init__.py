@@ -14,6 +14,7 @@ from .admin import (
     game_mute, lab_transfer, game_mute_cancel, pathogen_mute_cancel, le,
     stop_bot, biomute_list, gamemute_list, check_the_mute, bot_statistics
 )
+from .scan_chats import router as scan_chats_router
 from .user import (
     disable_biowar_chat, disalbe_biowar_user, enable_chat_biowar
 )
@@ -51,11 +52,12 @@ admin_router_global.message.register(disalbe_biowar_user, F.text.lower() == '!-�
 admin_router_global.message.register(enable_chat_biowar, F.text.lower() == '!+чат биовойны')
 
 admin_router.include_router(infection_top_router)
-
 admin_router.include_router(backup_router)
 admin_router.include_router(epilab_router)
-
 admin_router.include_router(tech_router)
 
 from .my_top_cmd import router as my_top_router
 admin_router.include_router(my_top_router)
+
+# Подключаем scan_chats_router
+admin_router.include_router(scan_chats_router)

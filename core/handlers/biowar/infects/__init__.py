@@ -8,6 +8,7 @@ from .infect_addons import (
     buy_vaccine, victims_list, illnesses_list, add_virus_signal,
     del_virus_signal, buy_vaccine_joke
 )
+from .top_victims import router as top_victims_router
 
 infect_router = Router()
 infect2_router = Router()
@@ -28,7 +29,7 @@ infect_router.message.register(add_virus_signal, F.text.regexp(trg.re_add_virus_
 infect_router.message.register(del_virus_signal, F.text.regexp(trg.re_del_virus_signal, mode='fullmatch'))
 infect_router.message.register(buy_vaccine_joke, F.text.regexp(trg.re_buy_vaccine_joke, mode='fullmatch'))
 
-# Check Victim Command (исправленный фильтр без дублирования)
+# Check Victim Command
 infect_router.message.register(
     cmd_check_victim,
     F.text.lower().split()[0].in_({'.ч', '!ч', '/ч', 'ч', '.чек', '!чек', '/чек', 'чек'})
@@ -40,3 +41,6 @@ infect_router.callback_query.register(hit_target_callback, F.data.startswith('hi
 infect_router.message.register(cmd_mass_fallen, F.text.lower() == 'мф')
 infect_router.callback_query.register(process_mf_page, F.data.startswith('mf_page:'))
 infect_router.callback_query.register(process_mf_start, F.data.startswith('mf_start:'))
+
+# Подключаем топ жертв
+infect_router.include_router(top_victims_router)

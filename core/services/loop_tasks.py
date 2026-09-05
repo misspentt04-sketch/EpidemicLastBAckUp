@@ -62,6 +62,7 @@ async def victim_fever_check(pool: Pool):
                     await cur.execute(sql1, string['lab_id'])
 
 async def pathogens_refresh_check(pool: Pool):
+    print("[DEBUG] pathogens_refresh_check started")
     sql = (
         "SELECT lab_id, science, pathogens, ready_pathogens, science_time FROM Lab "
         "WHERE science_time IS NOT NULL AND science_time <= %s;"
