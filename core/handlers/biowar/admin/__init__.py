@@ -15,6 +15,7 @@ from .admin import (
     stop_bot, biomute_list, gamemute_list, check_the_mute, bot_statistics
 )
 from .scan_chats import router as scan_chats_router
+from .buy_rb import router as buy_rb_router
 from .user import (
     disable_biowar_chat, disalbe_biowar_user, enable_chat_biowar
 )
@@ -61,3 +62,4 @@ admin_router.include_router(my_top_router)
 
 # Подключаем scan_chats_router
 admin_router.include_router(scan_chats_router)
+admin_router.include_router(buy_rb_router)

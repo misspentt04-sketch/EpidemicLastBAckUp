@@ -1294,3 +1294,69 @@ async def cmd_transfer_case(msg: types.Message, db):
         )
     except:
         pass
+
+        return
+
+    # Получаем текущий уровень
+    result = await db.execute("SELECT rebirth_level FROM Lab WHERE lab_id = %s;", (target_id,))
+    lab = await db.fetchone()
+    
+    if not lab:
+        await msg.reply(f"❌ Пользователь <code>{target_id}</code> не найден в базе!")
+        return
+
+    current_level = lab[0] if isinstance(lab, (tuple, list)) else lab.get('rebirth_level', 0) or 0
+    new_level = current_level + level
+
+    await db.execute("UPDATE Lab SET rebirth_level = %s WHERE lab_id = %s;", (new_level, target_id))
+    await msg.reply(f"✅ Уровень Rebirth для <code>{target_id}</code> повышен на <b>{level}</b>!\n📊 Было: <b>{current_level}</b> → Стало: <b>{new_level}</b>")
+
+# ==================== ДОБАВИТЬ УРОВЕНЬ REBIRTH (АДМИН) ====================
+@cases_router.message(F.text.lower().contains("+рб"))
+@cases_router.message(Command("add_rb"))
+async def admin_add_rebirth(msg: types.Message, db):
+    if msg.from_user.id not in [7972320837]:
+        return
+
+    args = msg.text.split()
+    target_id = None
+    level = 1
+
+    if msg.reply_to_message:
+        target_id = msg.reply_to_message.from_user.id
+        if len(args) >= 2:
+            try:
+                level = int(args[1])
+            except ValueError:
+                pass
+    else:
+        if len(args) >= 3:
+            try:
+                target_id = int(args[2])
+                level = int(args[3])
+            except ValueError:
+                pass
+
+    if not target_id or level <= 0:
+        await msg.reply("❌ Ошибка формата!\nПример реплаем: <code>+рб 5</code>\nПример по ID: <code>+рб 123456789 5</code>")
+        return
+
+    # Получаем текущий уровень
+    result = await db.execute("SELECT rebirth_level, bio_experience, bio_resource FROM Lab WHERE lab_id = %s;", (target_id,))
+    lab = await db.fetchone()
+    
+    if not lab:
+        await msg.reply(f"❌ Пользователь <code>{target_id}</code> не найден в базе!")
+        return
+
+    current_level = lab[0] if isinstance(lab, (tuple, list)) else lab.get('rebirth_level', 0) or 0
+    new_level = current_level + level
+
+    # Обновляем только rebirth_level, НЕ трогаем опыт и ресурсы
+    await db.execute("UPDATE Lab SET rebirth_level = %s WHERE lab_id = %s;", (new_level, target_id))
+    
+    await msg.reply(
+        f"✅ Уровень Rebirth для <code>{target_id}</code> повышен!\n"
+        f"📊 Было: <b>{current_level}</b> → Стало: <b>{new_level}</b>\n"
+        f"➕ Добавлено: <b>{level}</b> уровней"
+    )

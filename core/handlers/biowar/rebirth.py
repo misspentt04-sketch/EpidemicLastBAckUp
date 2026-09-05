@@ -81,14 +81,14 @@ async def show_top_rb(message: types.Message, db, page: int, per_page: int):
     builder = InlineKeyboardBuilder()
     for p in [1, 2, 10]:
         if p <= total_pages:
-            builder.button(text=str(p), callback_data=f"top_rb_page:{p}:{per_page}")
+            builder.button(text=str(p), callback_data=f"top_rb_page:{message.from_user.id}:{p}:{per_page}")
     builder.adjust(3)
 
     nav_buttons = []
     if page > 1:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"top_rb_page:{page - 1}:{per_page}"))
+        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"top_rb_page:{message.from_user.id}:{page - 1}:{per_page}"))
     if page < total_pages:
-        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"top_rb_page:{page + 1}:{per_page}"))
+        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"top_rb_page:{message.from_user.id}:{page + 1}:{per_page}"))
     if nav_buttons:
         builder.row(*nav_buttons)
 
@@ -265,14 +265,18 @@ async def process_rebirth_cancel(callback: types.CallbackQuery):
 
     await callback.message.edit_text("❌ Перерождение отменено. Ваша Лаборатория в безопасности.")
 
+
+
+
 @rebirth_router.callback_query(F.data.startswith("top_rb_page:"))
 async def top_rb_page(callback: types.CallbackQuery, db):
-    if callback.from_user.id != callback.message.chat.id:
-        return await callback.answer("❌ Это не ваше меню!", show_alert=True)
+    parts = callback.data.split(":")
+    owner_id = int(parts[1])
+    page = int(parts[2])
+    per_page = int(parts[3])
 
-    _, page_str, per_page_str = callback.data.split(":")
-    page = int(page_str)
-    per_page = int(per_page_str)
+    if callback.from_user.id != owner_id:
+        return await callback.answer("❌ Это не ваше меню!", show_alert=True)
 
     await callback.message.delete()
     await show_top_rb(callback.message, db, page, per_page)

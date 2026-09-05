@@ -119,12 +119,10 @@ async def cmd_top_zar(message: Message):
 async def top_callback(callback: CallbackQuery, callback_data: TopCallback):
     user_id = callback.from_user.id
 
-    # 1. Проверка владельца кнопки
     if user_id != callback_data.owner_id:
         await callback.answer("❌ Вы не можете переключать чужое меню!", show_alert=True)
         return
 
-    # 2. Ограничение в 1 секунду (Кулдаун)
     now = time.time()
     last_time = _user_cooldowns.get(user_id, 0)
     if now - last_time < 1.0:
@@ -138,20 +136,19 @@ async def top_callback(callback: CallbackQuery, callback_data: TopCallback):
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_keyboard(callback_data.owner_id))
         await callback.answer()
     except TelegramBadRequest:
-        # Подавляем ошибку "message is not modified" при клике по активной вкладке
         await callback.answer()
     except Exception:
         await callback.answer()
 
-
 @router.message(Command("top_bio"))
-@router.message(F.text.regexp(r"(?i)^(топ\s+(био|биовойн[аы]))$"))
+@router.message(F.text.regexp(r"(?i)^(топ\s+био)$"))
 async def cmd_top_bio_tick(message: Message, **kwargs):
     query = """
-        SELECT victims_owner_id, SUM(victim_bio_resource_earn) AS total_tick
-        FROM Victims
-        WHERE victims_owner_id != 8236324289
-        GROUP BY victims_owner_id
+        SELECT v.victims_owner_id, SUM(v.victim_bio_resource_earn) * (1 + COALESCE(l.rebirth_level, 0) * 0.10) AS total_tick
+        FROM Victims v
+        LEFT JOIN Lab l ON l.lab_id = v.victims_owner_id
+        WHERE v.victims_owner_id != 8236324289
+        GROUP BY v.victims_owner_id
         ORDER BY total_tick DESC
         LIMIT 10;
     """
@@ -162,11 +159,11 @@ async def cmd_top_bio_tick(message: Message, **kwargs):
             rows = await cur.fetchall()
 
     if not rows:
-        await message.answer("🧪 <b>ТОП ЛАБОРАТОРИЙ ПО ТИКУ</b>\n\n<i>Пока нет данных о жертвах.</i>", parse_mode="HTML")
+        await message.answer("🧪 <b>ТОП ПО БИО-ТИКУ</b>\n\n<i>Пока нет данных о жертвах.</i>", parse_mode="HTML")
         return
 
     medals = ["🥇", "🥈", "🥉"]
-    lines = ["🧪 <b>ТОП ЛАБОРАТОРИЙ ПО ТИКУ</b>\n"]
+    lines = ["🧪 <b>ТОП ПО БИО-ТИКУ</b>\n"]
 
     for idx, row in enumerate(rows, 1):
         if isinstance(row, dict):
@@ -176,9 +173,24 @@ async def cmd_top_bio_tick(message: Message, **kwargs):
             owner_id = row[0]
             total_tick = row[1] if len(row) > 1 and row[1] is not None else 0
 
+        name = None
+        try:
+            async with db_pool._pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute('SELECT full_name FROM Users WHERE id = %s;', (owner_id,))
+                    user_row = await cur.fetchone()
+                    if user_row:
+                        name = user_row.get('full_name') if isinstance(user_row, dict) else user_row[0]
+        except:
+            pass
+
+        if not name:
+            name = f"ID {owner_id}"
+
         prefix = medals[idx - 1] if idx <= 3 else f"{idx}."
         formatted_tick = f"{int(total_tick):,}".replace(",", " ")
 
-        lines.append(f"{prefix} @{owner_id} — <code>+{formatted_tick}</code>/тик")
+        user_display = f'<a href="tg://openmessage?user_id={owner_id}">{name}</a>'
+        lines.append(f"{prefix} {user_display} — <code>+{formatted_tick}</code>/тик")
 
     await message.answer("\n".join(lines), parse_mode="HTML")
