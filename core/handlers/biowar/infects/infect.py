@@ -34,7 +34,7 @@ import time
 async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar, redis: Redis, lock: Lock):
     if await redis.get(f"epidemic_infect_cooldown:{msg.from_user.id}"):
         return
-    await redis.set(f"epidemic_infect_cooldown:{msg.from_user.id}", "1", px=200)
+    await redis.set(f"epidemic_infect_cooldown:{msg.from_user.id}", "1", px=100)
     async with lock:
         id = msg.from_user.id
         chat_id = msg.chat.id
@@ -85,6 +85,12 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         infecter = await repo_biowar.get_info_user_lab(attacker_id)
         victimer = await repo_biowar.get_info_user_lab(victimer_id)
 
+    # Блокировка на жертву (0.2 сек)
+    victim_lock_key = f"epidemic_victim_lock:{victimer_id}"
+    if await redis.get(victim_lock_key):
+        await msg.answer("⏳ Эту жертву уже заражают! Подождите.")
+        return
+    await redis.set(victim_lock_key, "1", px=100)
     if victimer_id == settings.bots.bot_id:
         return await msg.answer(tricks_biowar['infect']['impossible_to_infect_bot'])
     if victimer is None:
