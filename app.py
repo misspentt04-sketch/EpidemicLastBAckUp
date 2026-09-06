@@ -110,8 +110,8 @@ async def main():
 
     # Middlewares
     dp.update.outer_middleware.register(DBPoolMiddleware(pool, redis_db, lock, bot, crypto))
-    dp.message.middleware.register(ThrottlingMiddleware(0.6))
-    dp.callback_query.middleware.register(ThrottlingMiddlewareInline(0.8))
+    dp.message.middleware.register(ThrottlingMiddleware(0.3))
+    dp.callback_query.middleware.register(ThrottlingMiddlewareInline(0.5))
     dp.chat_member.middleware.register(ChatMemberUpdateMiddleware())
     dp.message.outer_middleware.register(MaintenanceMiddleware())
     dp.callback_query.outer_middleware.register(MaintenanceMiddleware())

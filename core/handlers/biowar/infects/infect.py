@@ -34,7 +34,7 @@ import time
 async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar, redis: Redis, lock: Lock):
     if await redis.get(f"epidemic_infect_cooldown:{msg.from_user.id}"):
         return
-    await redis.set(f"epidemic_infect_cooldown:{msg.from_user.id}", "1", px=500)
+    await redis.set(f"epidemic_infect_cooldown:{msg.from_user.id}", "1", px=200)
     async with lock:
         id = msg.from_user.id
         chat_id = msg.chat.id
@@ -319,6 +319,17 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     # Сохраняем предыдущий опыт в Redis перед обновлением
     await redis.set(f"last_earn:{infecter['id']}:{victimer['id']}", earn_exp)
     
+    # Блокировка от дупа
+    lock_key = f"epidemic_infect_lock:{victimer_id}"
+    if await redis.get(lock_key):
+        return await msg.answer("⏳ Жертва уже заражена другим игроком! Попробуйте позже.")
+    await redis.set(lock_key, "1", ex=2)  # Блокировка на 2 секунды
+    
+    # Проверяем, не заражена ли жертва уже кем-то другим
+    
+    
+    # Если всё ок — закрепляем блокировку
+    await redis.set(lock_key, "1", ex=2)
     await repo_biowar.infect_setup(
         infecter['id'], victimer['id'], earn_exp, vic_exp,
         vic_expire_kd, inf_ready_pathogens_left,
