@@ -162,6 +162,12 @@ async def cmd_top_bio_tick(message: Message, **kwargs):
     if not rows:
         await message.answer("🧪 <b>ТОП ПО БИО-ТИКУ</b>\n\n<i>Пока нет данных о жертвах.</i>", parse_mode="HTML")
         return
+            await cur.execute(query)
+            rows = await cur.fetchall()
+
+    if not rows:
+        await message.answer("🧪 <b>ТОП ПО БИО-ТИКУ</b>\n\n<i>Пока нет данных о жертвах.</i>", parse_mode="HTML")
+        return
 
     medals = ["🥇", "🥈", "🥉"]
     lines = ["🧪 <b>ТОП ПО БИО-ТИКУ</b>\n"]

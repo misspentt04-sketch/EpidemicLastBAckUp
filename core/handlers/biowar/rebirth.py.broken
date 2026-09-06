@@ -1,11 +1,10 @@
-import math
 import asyncio
+import math
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.utils.text_decorations import html_decoration as hd
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from datetime import datetime
 
 rebirth_router = Router()
 
@@ -22,12 +21,16 @@ def generate_progress_bar(current: int, target: int, length: int = 15) -> str:
     bar = "█" * filled_length + "░" * (length - filled_length)
     return f"[{bar}] {percent * 100:.1f}%"
 
+# ============================================
+# ТОП РЕБИРТ С ПАГИНАЦИЕЙ
+# ============================================
+
 @rebirth_router.message(Command("top_rb", "toprb"))
 @rebirth_router.message(F.text.regexp(r"(?i)^(топ\s+(рб|перерождений|перерождения))$"))
 async def cmd_top_rb(message: types.Message, db):
-    await show_top_rb(message, db, page=1, per_page=10, is_callback=False)
+    await show_top_rb(message, db, page=1, per_page=10)
 
-async def show_top_rb(message: types.Message, db, page: int, per_page: int, is_callback: bool = False):
+async def show_top_rb(message: types.Message, db, page: int, per_page: int):
     offset = (page - 1) * per_page
 
     await db.execute("SELECT COUNT(*) FROM Lab WHERE rebirth_level > 0;")
@@ -35,19 +38,16 @@ async def show_top_rb(message: types.Message, db, page: int, per_page: int, is_c
     total_count = list(total_count_result.values())[0] if total_count_result else 0
 
     if total_count == 0:
-        text = "🔄 <b>ТОП ПО ПЕРЕРОЖДЕНИЯМ</b>\n\n<i>Пока никто не совершил перерождение.</i>"
-        if is_callback:
-            await message.edit_text(text, parse_mode="HTML")
-        else:
-            await message.answer(text, parse_mode="HTML")
-        return
+        return await message.answer("🔄 <b>ТОП ПО ПЕРЕРОЖДЕНИЯМ</b>\n\n<i>Пока никто не совершил перерождение.</i>", parse_mode="HTML")
 
     query = """
-        SELECT Lab.lab_id, lab_name, rebirth_level, last_farm
+        SELECT lab_id, lab_name, rebirth_level, last_farm
         FROM Lab
-        WHERE rebirth_level > 0
+        LEFT JOIN HiddenPlayers h ON h.lab_id = Lab.lab_id
+        WHERE Lab.rebirth_level > 0 AND h.lab_id IS NULL
         ORDER BY rebirth_level DESC, last_farm ASC
         LIMIT %s OFFSET %s;
+    """
     """
     await db.execute(query, (per_page, offset))
     rows = await db.fetchall()
@@ -75,6 +75,7 @@ async def show_top_rb(message: types.Message, db, page: int, per_page: int, is_c
         user_display = f'<a href="tg://openmessage?user_id={user_id}">{escaped_name}</a>'
         prefix = medals[idx - 1] if idx <= 3 else f"<b>{idx}.</b>"
 
+        from datetime import datetime
         date_str = datetime.fromtimestamp(last_farm).strftime("%d.%m.%Y %H:%M") if last_farm else "—"
 
         lines.append(f"{prefix} {user_display} — <code>{rb_lvl}</code> уровень (с {date_str})")
@@ -93,20 +94,15 @@ async def show_top_rb(message: types.Message, db, page: int, per_page: int, is_c
     if nav_buttons:
         builder.row(*nav_buttons)
 
-    if is_callback:
-        await message.edit_text("\n".join(lines), reply_markup=builder.as_markup(), parse_mode="HTML")
-    else:
-        await message.answer("\n".join(lines), reply_markup=builder.as_markup(), parse_mode="HTML")
+    await message.answer("\n".join(lines), reply_markup=builder.as_markup(), parse_mode="HTML")
 
-@rebirth_router.callback_query(F.data.startswith("top_rb_page:"))
-async def top_rb_page(callback: types.CallbackQuery, db):
-    parts = callback.data.split(":")
-    owner_id = int(parts[1])
-    page = int(parts[2])
-    per_page = int(parts[3])
-
-    await show_top_rb(callback.message, db, page, per_page, is_callback=True)
+    await asyncio.sleep(0.4)
+    await show_top_rb(callback.message, db, page, per_page)
     await callback.answer()
+
+# ============================================
+# REBIRTH
+# ============================================
 
 @rebirth_router.message(Command("rebirth", "rb", "рб", "ребитх"))
 @rebirth_router.message(F.text.in_({"/rebirth", "/rb", "/рб", "/ребитх"}))
@@ -134,6 +130,7 @@ async def cmd_rebirth(message: types.Message, db):
 
     cost = get_rebirth_cost(next_lvl)
 
+    # Прогрессия стартовых бонусов
     start_exp = 1000 + (next_lvl - 1) * 1000
     start_bio = 15000 + (next_lvl - 1) * 10000
 
@@ -233,22 +230,10 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
     start_bio = 15000 + (target_lvl - 1) * 10000
 
     await db.execute("DELETE FROM Victims WHERE victims_owner_id = %s;", (owner_id,))
-
-    query_update = """
-        UPDATE Lab
-        SET bio_resource = %s,
-            bio_experience = %s,
-            pathogens = 4,
-            ready_pathogens = 4,
-            science = 1,
-            infect = 1,
-            immunity = 1,
-            lethality = 1,
-            security_service = 1,
-            epicoins = 0,
-            case1 = 0,
-            case2 = 0,
-            rebirth_level = %s
+    # Обновляем время последнего обнула для мф
+    await db.execute("UPDATE Lab SET last_reset = UNIX_TIMESTAMP() WHERE lab_id = %s;", (owner_id,))
+    """
+    await db.execute(query_update, (start_bio, start_exp, target_lvl, owner_id))
         WHERE lab_id = %s;
     """
     await db.execute(query_update, (start_bio, start_exp, target_lvl, owner_id))
@@ -269,3 +254,39 @@ async def process_rebirth_cancel(callback: types.CallbackQuery):
         return await callback.answer("❌ Это не ваше меню!", show_alert=True)
 
     await callback.message.edit_text("❌ Перерождение отменено. Ваша Лаборатория в безопасности.")
+
+
+
+
+@rebirth_router.callback_query(F.data.startswith("top_rb_page:"))
+async def top_rb_page(callback: types.CallbackQuery, db):
+    parts = callback.data.split(":")
+    owner_id = int(parts[1])
+    page = int(parts[2])
+    per_page = int(parts[3])
+
+    if callback.from_user.id != owner_id:
+        return await callback.answer("❌ Это не ваше меню!", show_alert=True)
+
+    await callback.message.delete()
+    await show_top_rb(callback.message, db, page, per_page)
+    await callback.answer()
+
+    query_update = """
+        UPDATE Lab
+        SET bio_resource = %s,
+            bio_experience = %s,
+            pathogens = 4,
+            ready_pathogens = 4,
+            science = 1,
+            infect = 1,
+            immunity = 1,
+            lethality = 1,
+            security_service = 1,
+            epicoins = 0,
+            case1 = 0,
+            case2 = 0,
+            rebirth_level = %s
+        WHERE lab_id = %s;
+    """
+    await db.execute(query_update, (start_bio, start_exp, target_lvl, owner_id))

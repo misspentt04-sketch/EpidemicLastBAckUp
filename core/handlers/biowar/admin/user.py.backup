@@ -22,12 +22,14 @@ router = Router()
 
 
 async def disable_biowar_chat(msg: types.Message, bot: Bot, repo_biowar: RequestsRepoBiowar, redis: Redis):
-    if msg.from_user.id != 7972320837:
-        return
 
     chat = await repo_biowar.get_chat_by_id(msg.chat.id)
-    if not chat:
-        return await msg.answer("❌ Чат не найден!")
+
+    result = await func.get_admins_chat(bot, chat['chat_id'])
+    admin_ids = [member.user.id for member in result]
+
+    if msg.from_user.id not in admin_ids:
+        return await msg.answer(tricks_cm['rules']['not_admin'].format(chat['title']))
 
     mention = func.entity_create(chat['chat_id'], chat['title'])
     mute_time = (datetime.utcnow() + timedelta(days=9999)).timestamp()
@@ -110,12 +112,14 @@ async def cancel_exit_biowar(call: types.CallbackQuery):
 
 
 async def enable_chat_biowar(msg: types.Message, bot: Bot, repo_biowar: RequestsRepoBiowar, redis: Redis):
-    if msg.from_user.id != 7972320837:
-        return
 
     chat = await repo_biowar.get_chat_by_id(msg.chat.id)
-    if not chat:
-        return await msg.answer("❌ Чат не найден!")
+
+    result = await func.get_admins_chat(bot, chat['chat_id'])
+    admin_ids = [member.user.id for member in result]
+
+    if msg.from_user.id not in admin_ids:
+        return await msg.answer(tricks_cm['rules']['not_admin'].format(chat['title']))
 
     mention = func.entity_create(chat['chat_id'], chat['title'])
 

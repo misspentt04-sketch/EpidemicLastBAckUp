@@ -183,6 +183,7 @@ class RequestsRepoBiowar:
         return await self.select_all(query, params)
 
     async def get_lab_biotop(self):
+        query = "SELECT * FROM Lab WHERE lab_id NOT IN (SELECT lab_id FROM HiddenPlayers) ORDER BY bio_experience DESC;"
         query = 'SELECT * FROM Lab   ORDER BY bio_experience DESC;'
         return await self.select_all(query, use_index_zero=False)
 
@@ -918,45 +919,43 @@ class RequestsRepoBiowar:
             await self.cur.connection.commit()
 
     async def get_fallen_targets(self, user_id: int):
-        now = int(__import__('time').time())
+        now = int(__import__("time").time())
         query = """
             SELECT DISTINCT
                 target_id AS victim_id,
                 u.username,
                 u.full_name
             FROM (
-                -- 1. Жертвы, у которых истекло время в Victims
                 SELECT victim_id AS target_id
                 FROM Victims
                 WHERE victims_owner_id = %s AND victim_expire < %s
-
                 UNION
-
-                -- 2. Цели из истории, у которых вообще нет записи в Victims
                 SELECT h.victim_id AS target_id
                 FROM biowar_infection_history h
                 LEFT JOIN Victims v ON h.victim_id = v.victim_id AND v.victims_owner_id = %s
-                WHERE h.attacker_id = %s AND v.victim_id IS NULL
+                LEFT JOIN Lab l ON l.lab_id = %s
+                WHERE h.attacker_id = %s 
+                  AND v.victim_id IS NULL
+                  AND (l.last_reset IS NULL OR h.infect_date > FROM_UNIXTIME(l.last_reset))
             ) AS combined
             LEFT JOIN Users u ON combined.target_id = u.id;
         """
-        res = await self.select_all(query, (user_id, now, user_id, user_id), use_index_zero=False)
+        res = await self.select_all(query, (user_id, now, user_id, user_id, user_id), use_index_zero=False)
         if not res:
             return []
-
         result = []
         for row in res:
             if isinstance(row, dict):
                 result.append({
-                    'victim_id': row.get('victim_id'),
-                    'username': row.get('username'),
-                    'full_name': row.get('full_name')
+                    "victim_id": row.get("victim_id"),
+                    "username": row.get("username"),
+                    "full_name": row.get("full_name")
                 })
             elif isinstance(row, (list, tuple)):
                 result.append({
-                    'victim_id': row[0],
-                    'username': row[1] if len(row) > 1 else None,
-                    'full_name': row[2] if len(row) > 2 else None
+                    "victim_id": row[0],
+                    "username": row[1] if len(row) > 1 else None,
+                    "full_name": row[2] if len(row) > 2 else None
                 })
         return result
 

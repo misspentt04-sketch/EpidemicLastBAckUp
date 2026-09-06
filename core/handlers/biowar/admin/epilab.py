@@ -644,6 +644,7 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
             
             # Удаляем всех жертв игрока
             await repo_biowar.execute_query("DELETE FROM Victims WHERE victims_owner_id = %s;", target_id)
+            await repo_biowar.execute_query("UPDATE Lab SET last_reset = UNIX_TIMESTAMP() WHERE lab_id = %s;", target_id)
             logger.info(f"Жертвы игрока {target_id} удалены при обнуле")
 
             await notify_owner_action(callback.from_user, "💣 Сброс параметров лаборатории и удаление жертв (Обнул)", target_id, bot=callback.bot)

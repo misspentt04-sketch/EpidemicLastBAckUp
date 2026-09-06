@@ -69,7 +69,10 @@ async def process_mf_page(call: CallbackQuery, repo_biowar):
     text = format_mf_text(fallen_list, page, total_pages)
     kb = get_mf_keyboard(page, total_pages)
 
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    try:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await call.answer("❌ Сообщение устарело, откройте мф заново", show_alert=True)
 
 
 async def process_mf_start(call: CallbackQuery, repo_biowar, redis=None):
@@ -272,4 +275,8 @@ async def process_mf_start(call: CallbackQuery, repo_biowar, redis=None):
         f"📈 <b>Получено опыта:</b>\n"
         f"🧬 <b>+{total_exp:,} XP</b>"
     )
-    await status_msg.edit_text(report, parse_mode="HTML")
+    try:
+        await status_msg.edit_text(report, parse_mode="HTML")
+    except Exception as e:
+        logging.error(f"[MF] Ошибка при редактировании финального сообщения: {e}")
+        await call.message.answer(report, parse_mode="HTML")
