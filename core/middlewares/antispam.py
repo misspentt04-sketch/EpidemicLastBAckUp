@@ -6,9 +6,9 @@ from aiogram.types import Message
 user_timestamps = defaultdict(list)
 banned_users = {}
 
-MAX_MESSAGES = 8
-TIME_WINDOW = 1.0
-BAN_TIME = 86400  # 24 часа
+MAX_MESSAGES = 20
+TIME_WINDOW = 5.0
+BAN_TIME = 300  # 24 часа
 ADMIN_CHAT_ID = -1003688648228
 
 class AntiSpamMiddleware(BaseMiddleware):

@@ -25,7 +25,7 @@ SKILL_MAP = {
 
 async def handle_text_upgrade(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
     text = msg.text.strip()
-
+    
     plus_count = 0
     for char in text:
         if char == '+':
@@ -35,7 +35,7 @@ async def handle_text_upgrade(msg: types.Message, db: Cursor, repo_biowar: Reque
 
     clean_text = text[plus_count:].strip().lower()
     args = clean_text.split()
-
+    
     if not args:
         return
 
@@ -49,14 +49,14 @@ async def handle_text_upgrade(msg: types.Message, db: Cursor, repo_biowar: Reque
         return
 
     skill = SKILL_MAP[raw_skill]
-
+    
     lvl = 1
     if len(args) > 1 and args[1].isdigit():
         lvl = int(args[1])
         if lvl < 1:
             lvl = 1
         if lvl > 50:
-            lvl = 50
+            lvl = 5
 
     from_lvl = lab_info[skill]
     to_lvl = from_lvl + lvl
@@ -79,13 +79,13 @@ async def handle_text_upgrade(msg: types.Message, db: Cursor, repo_biowar: Reque
         await msg.reply(text_resp, reply_markup=lab_confirm_upgrade(skill, lvl, user_id))
         return
 
-    # 2 плюса (++) — моментальная прокачка
+    # 2 плюса (++) — моментальная прокачка с кнопками 1x/3x/5x
     bio_resource_remainder = lab_info['bio_resource'] - price
 
     if bio_resource_remainder >= 0:
         if skill == 'pathogens':
             await repo_biowar.update_lab_skill_val(user_id, "ready_pathogens", lab_info["ready_pathogens"] + lvl)
-            await repo_biowar.update_lab_skill_val(user_id, 'pathogens', lab_info['pathogens'] + lvl)
+            await repo_biowar.update_lab_skill_val(user_id, 'ready_pathogens', lab_info['ready_pathogens'] + lvl)
 
         await repo_biowar.update_lab_lvlup(user_id, skill, to_lvl, bio_resource_remainder)
         text_resp = tricks_biowar['skills_lvl'][f'{skill}_complete'].format(lvl, science_minutes, intcomma(price))
@@ -93,7 +93,7 @@ async def handle_text_upgrade(msg: types.Message, db: Cursor, repo_biowar: Reque
     else:
         await msg.reply(tricks_biowar['text']['not_enough_resources'])
 
-# ===== КОРОТКИЕ КОМАНДЫ =====
+# ===== КОРОТКИЕ КОМАНДЫ ДЛЯ ПРОКАЧКИ =====
 @text_upgrade_router.message(F.text.lower().startswith("+зз"))
 async def cmd_upgrade_infect(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
     await handle_upgrade(msg, db, repo_biowar, "infect")
@@ -124,6 +124,7 @@ async def handle_upgrade(msg: types.Message, db: Cursor, repo_biowar: RequestsRe
     if not lab_info:
         return
 
+    # Парсим количество уровней
     text = msg.text.lower()
     parts = text.split()
     lvl = 1
@@ -132,7 +133,7 @@ async def handle_upgrade(msg: types.Message, db: Cursor, repo_biowar: RequestsRe
         if lvl < 1:
             lvl = 1
         if lvl > 50:
-            lvl = 50
+            lvl = 5
 
     from_lvl = lab_info[skill]
     to_lvl = from_lvl + lvl
@@ -151,24 +152,20 @@ async def handle_upgrade(msg: types.Message, db: Cursor, repo_biowar: RequestsRe
 
     # Если 2 плюса (++зз) — моментальная прокачка
     if text.startswith("++"):
-        bio_resource_remainder = lab_info["bio_resource"] - price
+        bio_resource_remainder = lab_info['bio_resource'] - price
         if bio_resource_remainder >= 0:
-            if skill == "pathogens":
-                await repo_biowar.update_lab_skill_val(user_id, "ready_pathogens", lab_info["ready_pathogens"] + lvl)
-                await repo_biowar.update_lab_skill_val(user_id, "pathogens", lab_info["pathogens"] + lvl)
-            else:
-                await repo_biowar.update_lab_skill_val(user_id, skill, to_lvl)
+            if skill == 'pathogens':
+        await repo_biowar.update_lab_skill_val(user_id, "ready_pathogens", lab_info["ready_pathogens"] + lvl)
+                await repo_biowar.update_lab_skill_val(user_id, 'ready_pathogens', lab_info['ready_pathogens'] + lvl)
             await repo_biowar.update_lab_lvlup(user_id, skill, to_lvl, bio_resource_remainder)
-            text_resp = tricks_biowar["skills_lvl"][f"{skill}_complete"].format(lvl, science_minutes, intcomma(price))
+            text_resp = tricks_biowar['skills_lvl'][f'{skill}_complete'].format(lvl, science_minutes, intcomma(price))
             await msg.reply(text_resp, reply_markup=lab_confirm_upgrade_extend(skill, user_id))
-            return
         else:
-            await msg.reply(tricks_biowar["text"]["not_enough_resources"])
-            return
-
-    # 1 плюс — превью и кнопка подтверждения
-    text_resp = tricks_biowar['skills_lvl'][skill].format(lvl, science_minutes, intcomma(price), lvl)
-    await msg.reply(text_resp, reply_markup=lab_confirm_upgrade(skill, lvl, user_id))
+            await msg.reply(tricks_biowar['text']['not_enough_resources'])
+    else:
+        # 1 плюс — превью и кнопка подтверждения
+        text_resp = tricks_biowar['skills_lvl'][skill].format(lvl, science_minutes, intcomma(price), lvl)
+        await msg.reply(text_resp, reply_markup=lab_confirm_upgrade(skill, lvl, user_id))
 
 # ===== ПОЛНЫЕ КОМАНДЫ =====
 @text_upgrade_router.message(F.text.lower().startswith("+заразность"))
@@ -195,7 +192,15 @@ async def cmd_upgrade_pathogens_full(msg: types.Message, db: Cursor, repo_biowar
 async def cmd_upgrade_science_full(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
     await handle_upgrade(msg, db, repo_biowar, "science")
 
-# ===== ДВОЙНЫЕ ПЛЮСЫ =====
+@text_upgrade_router.message(F.text.lower().startswith("++зз"))
+async def cmd_upgrade_infect_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "infect")
+
+@text_upgrade_router.message(F.text.lower().startswith("++заразность"))
+async def cmd_upgrade_infect_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_upgrade(msg, db, repo_biowar, "infect")
+
+# ===== ДВОЙНЫЕ ПЛЮСЫ ДЛЯ ВСЕХ КОМАНД =====
 @text_upgrade_router.message(F.text.lower().startswith("++зз"))
 async def cmd_upgrade_infect_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
     await handle_upgrade(msg, db, repo_biowar, "infect")

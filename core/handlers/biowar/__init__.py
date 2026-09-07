@@ -10,6 +10,7 @@ from .event import event_router
 from .infects import infect_router, infect2_router
 from .missions import missions_router
 from .donates import promos_router, cases_router
+from .boss import router as boss_router
 
 biowar_router = Router()
 biowar_router2 = Router()

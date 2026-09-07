@@ -68,3 +68,5 @@ admin_router.include_router(my_top_router)
 admin_router.include_router(scan_chats_router)
 admin_router.include_router(hide_player_router)
 admin_router.include_router(buy_rb_router)
+from .force_tick import router as force_tick_router
+admin_router.include_router(force_tick_router)

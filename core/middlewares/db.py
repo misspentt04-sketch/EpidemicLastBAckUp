@@ -92,6 +92,7 @@ class DBPoolMiddleware(BaseMiddleware):
                     await self.redis.set(f'epidemic_help_admin_status:{user.id}', 'online', ex=15*60)
 
                 data['redis'] = self.redis
+                data['pool'] = self.pool
                 data['db'] = cur
                 data['repo_biowar'] = repo_biowar
                 data['repo_cm'] = repo_chat_manage

@@ -6,7 +6,7 @@ from asyncmy.pool import Pool
 from asyncmy.cursors import DictCursor
 from redis.asyncio import Redis
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 
 from core import func
@@ -315,3 +315,22 @@ async def weekly_exp_grant(pool: Pool):
             print("[Weekly EXP] Успешно начислено 100 EXP всем игрокам (Воскресенье 00:00)!")
         except Exception as e:
             print(f"[Weekly EXP Error] {e}")
+
+async def force_tick(pool: Pool):
+    """Принудительная выдача тика (ручной запуск)"""
+    sql_update_lab = (
+        "UPDATE Lab l JOIN ("
+        " SELECT v.victims_owner_id, SUM(v.victim_bio_resource_earn) * (1 + COALESCE(l2.rebirth_level, 0) * 0.10) AS bio_resource"
+        " FROM Victims v"
+        " LEFT JOIN Lab l2 ON l2.lab_id = v.victims_owner_id"
+        " GROUP BY v.victims_owner_id"
+        ") v ON l.lab_id = v.victims_owner_id "
+        "SET l.bio_resource = l.bio_resource + v.bio_resource;"
+    )
+    sql_del_victims = "DELETE FROM Victims WHERE victim_expire < %s;"
+
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(sql_update_lab)
+            now_ts = int(datetime.now(timezone.utc).timestamp())
+            await cur.execute(sql_del_victims, (now_ts,))

@@ -1415,7 +1415,7 @@ async def admin_remove_rebirth(msg: types.Message, db):
         f"➖ Забрано: <b>{removed}</b> уровней"
     )
 
-# ==================== ПЕРЕДАЧА КЕЙСОВ/КОИНОВ (ЧЕРЕЗ КНОПКУ) ====================
+# ==================== ПЕРЕДАЧА КЕЙСОВ/КОИНОВ ====================
 
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -1423,286 +1423,9 @@ from aiogram.fsm.context import FSMContext
 class TransferStates(StatesGroup):
     waiting_target = State()
     waiting_amount = State()
-    waiting_type = State()
 
-@cases_router.callback_query(F.data == "transfer_menu")
-async def cmd_transfer_menu(call: CallbackQuery):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="📦 Передать Кейсы", callback_data="transfer_cases"),
-            InlineKeyboardButton(text="🪙 Передать Коины", callback_data="transfer_coins")
-        ],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="close_cases_menu")]
-    ])
-    await call.message.edit_text(
-        "🔄 <b>Выберите что хотите передать:</b>\n\n"
-        "⚠️ Комиссия за передачу: <b>500 🪙</b>",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-    await call.answer()
-
-# ==================== ПЕРЕДАЧА КЕЙСОВ ====================
-@cases_router.callback_query(F.data == "transfer_cases")
-async def transfer_cases_start(call: CallbackQuery, state: FSMContext):
-    await state.set_state(TransferStates.waiting_target)
-    await state.update_data(transfer_type="cases")
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]
-    ])
-    
-    await call.message.edit_text(
-        "📦 <b>Передача Кейсов</b>\n\n"
-        "Введите <b>username</b> или <b>ID</b> получателя:\n"
-        "Пример: <code>@username</code> или <code>123456789</code>\n\n"
-        "⚠️ Комиссия: <b>500 🪙</b>",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-    await call.answer()
-
-# ==================== ПЕРЕДАЧА КОИНОВ ====================
-@cases_router.callback_query(F.data == "transfer_coins")
-async def transfer_coins_start(call: CallbackQuery, state: FSMContext):
-    await state.set_state(TransferStates.waiting_target)
-    await state.update_data(transfer_type="coins")
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]
-    ])
-    
-    await call.message.edit_text(
-        "🪙 <b>Передача Коинов</b>\n\n"
-        "Введите <b>username</b> или <b>ID</b> получателя:\n"
-        "Пример: <code>@username</code> или <code>123456789</code>\n\n"
-        "⚠️ Комиссия: <b>500 🪙</b>",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-    await call.answer()
-
-# ==================== ОБРАБОТЧИК ВВОДА ПОЛУЧАТЕЛЯ ====================
-@cases_router.message(TransferStates.waiting_target)
-async def transfer_get_target(msg: Message, state: FSMContext, db):
-    text = msg.text.strip()
-    user_id = msg.from_user.id
-    
-    target_id = None
-    target_username = None
-    
-    # Парсим username или ID
-    if text.startswith('@'):
-        target_username = text[1:]
-        # Ищем по username
-        result = await db.execute("SELECT id FROM Users WHERE username = %s;", (target_username,))
-        row = await db.fetchone()
-        if row:
-            target_id = row[0] if isinstance(row, (tuple, list)) else row.get('id')
-    elif text.isdigit():
-        target_id = int(text)
-        # Проверяем существует ли пользователь
-        result = await db.execute("SELECT id, username FROM Users WHERE id = %s;", (target_id,))
-        row = await db.fetchone()
-        if row:
-            target_username = row[1] if isinstance(row, (tuple, list)) else row.get('username')
-    
-    if not target_id:
-        await msg.reply("❌ Пользователь не найден! Попробуйте ещё раз.")
-        return
-    
-    if target_id == user_id:
-        await msg.reply("❌ Нельзя передать самому себе!")
-        return
-    
-    # Проверяем есть ли у отправителя лаборатория
-    lab_check = await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (user_id,))
-    if not await lab_check.fetchone():
-        await msg.reply("❌ У вас нет лаборатории!")
-        return
-    
-    # Проверяем есть ли у получателя лаборатория
-    lab_check2 = await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (target_id,))
-    if not await lab_check2.fetchone():
-        await msg.reply(f"❌ У пользователя <code>{target_id}</code> нет лаборатории!", parse_mode="HTML")
-        return
-    
-    await state.update_data(target_id=target_id, target_username=target_username)
-    await state.set_state(TransferStates.waiting_amount)
-    
-    transfer_type = (await state.get_data()).get("transfer_type", "cases")
-    type_name = "Кейсов" if transfer_type == "cases" else "Коинов"
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]
-    ])
-    
-    await msg.reply(
-        f"📦 <b>Передача {type_name}</b>\n\n"
-        f"👤 Получатель: <code>{target_id}</code> (@{target_username if target_username else 'нет_username'})\n\n"
-        f"Введите <b>количество</b> для передачи:",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-
-# ==================== ОБРАБОТЧИК ВВОДА КОЛИЧЕСТВА ====================
-@cases_router.message(TransferStates.waiting_amount)
-async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
-    if not msg.text.isdigit():
-        await msg.reply("❌ Введите число!")
-        return
-    
-    amount = int(msg.text)
-    if amount <= 0:
-        await msg.reply("❌ Количество должно быть больше 0!")
-        return
-    
-    data = await state.get_data()
-    user_id = msg.from_user.id
-    target_id = data.get("target_id")
-    target_username = data.get("target_username")
-    transfer_type = data.get("transfer_type", "cases")
-    
-    # Проверяем баланс отправителя
-    if transfer_type == "cases":
-        # Проверяем кейсы (case1 + case2)
-        result = await db.execute("SELECT case1, case2, epicoins FROM Lab WHERE lab_id = %s;", (user_id,))
-        lab = await db.fetchone()
-        if not lab:
-            await msg.reply("❌ У вас нет лаборатории!")
-            return
-        
-        if isinstance(lab, dict):
-            case1 = lab.get("case1", 0) or 0
-            case2 = lab.get("case2", 0) or 0
-            epicoins = lab.get("epicoins", 0) or 0
-        else:
-            case1 = lab[0] or 0
-            case2 = lab[1] or 0
-            epicoins = lab[2] or 0
-        
-        total_cases = case1 + case2
-        
-        if total_cases < amount:
-            await msg.reply(f"❌ У вас недостаточно кейсов!\n📦 Доступно: <b>{total_cases}</b> шт.", parse_mode="HTML")
-            return
-        
-        if epicoins < 500:
-            await msg.reply("❌ Недостаточно эпикоинов для комиссии (нужно <b>500 🪙</b>)!", parse_mode="HTML")
-            return
-        
-        # Проверяем получателя
-        result2 = await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (target_id,))
-        if not await result2.fetchone():
-            await msg.reply(f"❌ У пользователя <code>{target_id}</code> нет лаборатории!", parse_mode="HTML")
-            return
-        
-        # Производим передачу кейсов
-        # Забираем у отправителя (сначала case2, потом case1)
-        if case2 >= amount:
-            await db.execute("UPDATE Lab SET case2 = case2 - %s WHERE lab_id = %s;", (amount, user_id))
-        else:
-            leftover = amount - case2
-            await db.execute("UPDATE Lab SET case2 = 0 WHERE lab_id = %s;", (user_id,))
-            await db.execute("UPDATE Lab SET case1 = case1 - %s WHERE lab_id = %s;", (leftover, user_id))
-        
-        # Прибавляем получателю (сначала case1, потом case2)
-        if leftover:
-            await db.execute("UPDATE Lab SET case1 = case1 + %s WHERE lab_id = %s;", (leftover, target_id))
-            await db.execute("UPDATE Lab SET case2 = case2 + %s WHERE lab_id = %s;", (case2, target_id))
-        else:
-            await db.execute("UPDATE Lab SET case2 = case2 + %s WHERE lab_id = %s;", (amount, target_id))
-        
-        # Комиссия 500
-        await db.execute("UPDATE Lab SET epicoins = epicoins - 500 WHERE lab_id = %s;", (user_id,))
-        
-        type_name = "Кейсов"
-        emoji = "📦"
-        
-    else:  # transfer_type == "coins"
-        result = await db.execute("SELECT epicoins FROM Lab WHERE lab_id = %s;", (user_id,))
-        lab = await db.fetchone()
-        if not lab:
-            await msg.reply("❌ У вас нет лаборатории!")
-            return
-        
-        epicoins = lab[0] if isinstance(lab, (tuple, list)) else lab.get("epicoins", 0) or 0
-        
-        if epicoins < amount + 500:
-            await msg.reply(f"❌ Недостаточно эпикоинов!\n💰 Доступно: <b>{epicoins}</b> 🪙\nНужно: <b>{amount + 500}</b> 🪙 (включая комиссию 500)", parse_mode="HTML")
-            return
-        
-        # Проверяем получателя
-        result2 = await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (target_id,))
-        if not await result2.fetchone():
-            await msg.reply(f"❌ У пользователя <code>{target_id}</code> нет лаборатории!", parse_mode="HTML")
-            return
-        
-        # Производим передачу коинов
-        await db.execute("UPDATE Lab SET epicoins = epicoins - %s WHERE lab_id = %s;", (amount + 500, user_id))
-        await db.execute("UPDATE Lab SET epicoins = epicoins + %s WHERE lab_id = %s;", (amount, target_id))
-        
-        type_name = "Коинов"
-        emoji = "🪙"
-    
-    # ==================== УВЕДОМЛЕНИЯ В ЛС ====================
-    try:
-        sender_name = msg.from_user.full_name or msg.from_user.username or str(user_id)
-        
-        # Уведомление отправителю
-        await msg.reply(
-            f"✅ <b>Передача {type_name} выполнена!</b>\n\n"
-            f"{emoji} Отправлено: <b>{amount}</b> {type_name.lower()}\n"
-            f"📥 Получатель: <code>{target_id}</code> (@{target_username if target_username else 'нет_username'})\n"
-            f"💸 Комиссия: <b>500 🪙</b>",
-            parse_mode="HTML"
-        )
-        
-        # Уведомление получателю в ЛС
-        try:
-            await bot.send_message(
-                target_id,
-                f"📨 <b>Вам передали {type_name}!</b>\n\n"
-                f"{emoji} Количество: <b>{amount}</b> {type_name.lower()}\n"
-                f"📤 Отправитель: <a href='tg://user?id={user_id}'>{sender_name}</a>\n\n"
-                f"📎 <a href='tg://message?id={msg.message_id}&user_id={user_id}'>Ссылка на сообщение</a>",
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            print(f"Не удалось отправить уведомление получателю {target_id}: {e}")
-            await msg.reply(f"⚠️ Не удалось отправить уведомление получателю <code>{target_id}</code> в ЛС. Возможно у него закрыт диалог с ботом.", parse_mode="HTML")
-        
-        # Уведомление отправителю в ЛС (дублируем)
-        try:
-            await bot.send_message(
-                user_id,
-                f"📨 <b>Вы передали {type_name}</b>\n\n"
-                f"{emoji} Передано: <b>{amount}</b> {type_name.lower()}\n"
-                f"📥 Получатель: <code>{target_id}</code> (@{target_username if target_username else 'нет_username'})\n"
-                f"💸 Комиссия: <b>500 🪙</b>\n\n"
-                f"📎 <a href='tg://message?id={msg.message_id}&user_id={user_id}'>Ссылка на сообщение</a>",
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            print(f"Не удалось отправить уведомление отправителю {user_id}: {e}")
-    
-    except Exception as e:
-        print(f"Ошибка отправки уведомлений: {e}")
-    
-    await state.clear()
-
-# ==================== ОТМЕНА ПЕРЕДАЧИ ====================
-@cases_router.callback_query(F.data == "cancel_transfer")
-async def cancel_transfer(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await call.message.delete()
-    await call.answer("✅ Передача отменена")
-
-# ==================== ДОБАВЛЯЕМ КНОПКУ В МЕНЮ КЕЙСОВ ====================
-# Нужно обновить get_cases_keyboard() - добавить кнопку "Передать"
-
-# Замените старую функцию get_cases_keyboard() на эту:
-def get_cases_keyboard_new():
+# Добавляем кнопку "Передать" в меню кейсов
+def get_cases_keyboard_with_transfer():
     kb = [
         [InlineKeyboardButton(text="🛒 Купить Кейс 1", callback_data="buy_case_1")],
         [
@@ -1714,7 +1437,247 @@ def get_cases_keyboard_new():
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-# ==================== ЗАМЕНА СТАРОЙ КЛАВИАТУРЫ НА НОВУЮ ====================
-# В функциях cmd_cases, cb_buy_case1 нужно заменить get_cases_keyboard() на get_cases_keyboard_new()
+# Заменяем старую клавиатуру на новую в cmd_cases
+# Временно переопределяем get_cases_keyboard
+get_cases_keyboard = get_cases_keyboard_with_transfer
 
-# Или переименуйте новую функцию и удалите старую
+@cases_router.callback_query(F.data == "transfer_menu")
+async def cmd_transfer_menu(call: CallbackQuery):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📦 Передать Кейсы", callback_data="transfer_cases"),
+            InlineKeyboardButton(text="🪙 Передать Коины", callback_data="transfer_coins")
+        ],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="close_cases_menu")]
+    ])
+    await call.message.edit_text(
+        "🔄 <b>Выберите что хотите передать:</b>\n\n⚠️ Комиссия за передачу: <b>500 🪙</b>",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await call.answer()
+
+@cases_router.callback_query(F.data == "transfer_cases")
+async def transfer_cases_start(call: CallbackQuery, state: FSMContext):
+    await state.set_state(TransferStates.waiting_target)
+    await state.update_data(transfer_type="cases")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]])
+    await call.message.edit_text(
+        "📦 <b>Передача Кейсов</b>\n\nВведите <b>username</b> или <b>ID</b> получателя:\nПример: <code>@username</code> или <code>123456789</code>\n\n⚠️ Комиссия: <b>500 🪙</b>",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await call.answer()
+
+@cases_router.callback_query(F.data == "transfer_coins")
+async def transfer_coins_start(call: CallbackQuery, state: FSMContext):
+    await state.set_state(TransferStates.waiting_target)
+    await state.update_data(transfer_type="coins")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]])
+    await call.message.edit_text(
+        "🪙 <b>Передача Коинов</b>\n\nВведите <b>username</b> или <b>ID</b> получателя:\nПример: <code>@username</code> или <code>123456789</code>\n\n⚠️ Комиссия: <b>500 🪙</b>",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await call.answer()
+
+@cases_router.message(TransferStates.waiting_target)
+async def transfer_get_target(msg: Message, state: FSMContext, db, bot: Bot):
+    text = msg.text.strip()
+    user_id = msg.from_user.id
+    target_id = None
+    target_username = None
+
+    if text.startswith('@'):
+        username = text[1:]
+        try:
+            chat = await bot.get_chat(text)
+            if chat:
+                target_id = chat.id
+                target_username = chat.username
+        except Exception:
+            await db.execute("SELECT id FROM Users WHERE username = %s;", (username,))
+            row = await db.fetchone()
+            if row:
+                target_id = row[0] if isinstance(row, (tuple, list)) else row.get('id')
+    elif text.isdigit():
+        target_id = int(text)
+        try:
+            chat = await bot.get_chat(target_id)
+            if chat:
+                target_username = chat.username
+        except Exception:
+            pass
+
+    if not target_id:
+        try:
+            chat = await bot.get_chat(f"@{text}")
+            if chat:
+                target_id = chat.id
+                target_username = chat.username
+        except Exception:
+            pass
+
+    if not target_id:
+        await msg.reply("❌ Пользователь не найден! Попробуйте @username или ID.")
+        return
+
+    if target_id == user_id:
+        await msg.reply("❌ Нельзя передать самому себе!")
+        return
+
+    await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (user_id,))
+    lab_check = await db.fetchone()
+    if not lab_check:
+        await msg.reply("❌ У вас нет лаборатории!")
+        return
+
+    await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (target_id,))
+    lab_check2 = await db.fetchone()
+    if not lab_check2:
+        await msg.reply(f"❌ У пользователя <code>{target_id}</code> нет лаборатории!", parse_mode="HTML")
+        return
+
+    await state.update_data(target_id=target_id, target_username=target_username)
+    await state.set_state(TransferStates.waiting_amount)
+
+    transfer_type = (await state.get_data()).get("transfer_type", "cases")
+    type_name = "Кейсов" if transfer_type == "cases" else "Коинов"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]])
+
+    await msg.reply(
+        f"📦 <b>Передача {type_name}</b>\n\n"
+        f"👤 Получатель: <code>{target_id}</code> (@{target_username if target_username else 'нет_username'})\n\n"
+        f"Введите <b>количество</b> для передачи:",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+
+
+@cases_router.callback_query(F.data == "cancel_transfer")
+async def cancel_transfer(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.delete()
+    await call.answer("✅ Передача отменена")
+
+# ==================== ПЕРЕДАЧА КЕЙСОВ/КОИНОВ (ИСПРАВЛЕННАЯ) ====================
+
+class TransferStates(StatesGroup):
+    waiting_target = State()
+    waiting_case_type = State()  # Какой кейс передавать
+    waiting_amount = State()
+
+# ==================== ВЫБОР ТИПА КЕЙСА ====================
+@cases_router.callback_query(F.data == "transfer_cases")
+async def transfer_cases_start(call: CallbackQuery, state: FSMContext):
+    await state.set_state(TransferStates.waiting_target)
+    await state.update_data(transfer_type="cases")
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]])
+    await call.message.edit_text(
+        "📦 <b>Передача Кейсов</b>\n\nВведите <b>username</b> или <b>ID</b> получателя:\nПример: <code>@username</code> или <code>123456789</code>\n\n⚠️ Комиссия: <b>500 🪙</b>",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await call.answer()
+
+@cases_router.message(TransferStates.waiting_target)
+async def transfer_get_target(msg: Message, state: FSMContext, db, bot: Bot):
+    text = msg.text.strip()
+    user_id = msg.from_user.id
+    target_id = None
+    target_username = None
+
+    if text.startswith('@'):
+        username = text[1:]
+        try:
+            chat = await bot.get_chat(text)
+            if chat:
+                target_id = chat.id
+                target_username = chat.username
+        except Exception:
+            await db.execute("SELECT id FROM Users WHERE username = %s;", (username,))
+            row = await db.fetchone()
+            if row:
+                target_id = row[0] if isinstance(row, (tuple, list)) else row.get('id')
+    elif text.isdigit():
+        target_id = int(text)
+        try:
+            chat = await bot.get_chat(target_id)
+            if chat:
+                target_username = chat.username
+        except Exception:
+            pass
+
+    if not target_id:
+        try:
+            chat = await bot.get_chat(f"@{text}")
+            if chat:
+                target_id = chat.id
+                target_username = chat.username
+        except Exception:
+            pass
+
+    if not target_id:
+        await msg.reply("❌ Пользователь не найден! Попробуйте @username или ID.")
+        return
+
+    if target_id == user_id:
+        await msg.reply("❌ Нельзя передать самому себе!")
+        return
+
+    await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (user_id,))
+    lab_check = await db.fetchone()
+    if not lab_check:
+        await msg.reply("❌ У вас нет лаборатории!")
+        return
+
+    await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (target_id,))
+    lab_check2 = await db.fetchone()
+    if not lab_check2:
+        await msg.reply(f"❌ У пользователя <code>{target_id}</code> нет лаборатории!", parse_mode="HTML")
+        return
+
+    await state.update_data(target_id=target_id, target_username=target_username)
+
+    # Спрашиваем какой тип кейса передавать
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📦 Кейс 1 (обычный)", callback_data="transfer_case_type_1")],
+        [InlineKeyboardButton(text="💎 Кейс 2 (донат)", callback_data="transfer_case_type_2")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]
+    ])
+
+    await state.set_state(TransferStates.waiting_case_type)
+    await msg.reply(
+        f"📦 <b>Выберите тип кейса для передачи</b>\n\n👤 Получатель: <code>{target_id}</code> (@{target_username if target_username else 'нет_username'})",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+
+# ==================== ВЫБОР ТИПА КЕЙСА (CALLBACK) ====================
+@cases_router.callback_query(F.data.startswith("transfer_case_type_"))
+async def transfer_case_type_selected(call: CallbackQuery, state: FSMContext):
+    case_type = int(call.data.split("_")[-1])
+    await state.update_data(case_type=case_type)
+    await state.set_state(TransferStates.waiting_amount)
+
+    data = await state.get_data()
+    target_id = data.get("target_id")
+    target_username = data.get("target_username")
+
+    type_name = "Кейс 1 (обычный)" if case_type == 1 else "Кейс 2 (донат)"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]
+    ])
+
+    await call.message.edit_text(
+        f"📦 <b>Передача {type_name}</b>\n\n"
+        f"👤 Получатель: <code>{target_id}</code> (@{target_username if target_username else 'нет_username'})\n\n"
+        f"Введите <b>количество</b> для передачи:",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await call.answer()
+
+# ==================== ОБРАБОТЧИК ВВОДА КОЛИЧЕСТВА ====================

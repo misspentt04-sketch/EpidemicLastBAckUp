@@ -54,6 +54,8 @@ from core.handlers import (
     suggestions_router
 )
 from core.handlers.biowar.start_handler import start_router
+from core.handlers.biowar.admin.force_tick import set_pool
+from core.handlers.biowar.boss import router as boss_router
 from points_handler import router as points_router, start_reset_scheduler
 
 from core.settings import settings
@@ -69,10 +71,8 @@ RESTART_FILE = "/tmp/epidemic_restart_chat.txt"
 @restart_router.message(Command("restart"))
 async def restart_cmd(message: types.Message):
     if message.from_user and message.from_user.id in ALLOWED_ADMINS:
-        # Сохраняем ID чата
         with open(RESTART_FILE, "w") as f:
             f.write(str(message.chat.id))
-        
         os._exit(0)
 
 logging.getLogger("asyncmy").setLevel(logging.ERROR)
@@ -83,10 +83,10 @@ async def run_tasks(pool, redis, bot, scheduler):
 
 async def main():
     logging.basicConfig(level=logging.INFO,
-                        format = "%(asctime)s - [%(levelname)s] - %(name)s - "
-                        "(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s")
+                        format="%(asctime)s - [%(levelname)s] - %(name)s - "
+                               "(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s")
 
-    bot = Bot(settings.bots.bot_token, default = DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(settings.bots.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     from core.userbot.userbot_manager import set_bot
     set_bot(bot)
     redis_db = Redis(host=settings.redis.ip, port=6379, db=0, decode_responses=True)
@@ -97,11 +97,12 @@ async def main():
     dp.update.outer_middleware.register(MaintenanceMiddleware())
     dp.message.outer_middleware(AntiSpamMiddleware())
     pool = await db_pool.get_pool()
+    set_pool(pool)
     tz = timezone("Europe/Moscow")
     scheduler = AsyncIOScheduler(timezone=tz)
     lock = asyncio.Lock()
 
-    await bot.delete_webhook(drop_pending_updates = True)
+    await bot.delete_webhook(drop_pending_updates=True)
 
     await del_commands(bot)
     await set_commands(bot)
@@ -116,48 +117,49 @@ async def main():
     dp.message.outer_middleware.register(MaintenanceMiddleware())
     dp.callback_query.outer_middleware.register(MaintenanceMiddleware())
 
-    biowar_router.message.middleware.register(UserRestrictMiddleware(redis_db))
-    biowar_router2.message.middleware.register(UserRestrictMiddleware(redis_db))
+#     biowar_router.message.middleware.register(UserRestrictMiddleware(redis_db))
+#     biowar_router2.message.middleware.register(UserRestrictMiddleware(redis_db))
 
     dp.update.outer_middleware(MaintenanceMiddleware())
-    
+
     # Регистрируем catch_infection ПЕРВЫМ
     from aiogram import F as AiogramF
     from aiogram.types import Message as AiogramMessage
-    
+
     @dp.message(AiogramF.text.contains("подверг заражению"))
     async def catch_infection_global(msg: AiogramMessage):
         import sqlite3 as sql
         from datetime import datetime as dt, timedelta as td
         from pathlib import Path
-        
+
         try:
             text = msg.text
             if not text:
                 return
-            
+
+            import re
             attacker_id_match = re.search(r'user_id=(\d+)', text)
             if not attacker_id_match:
                 return
-            
+
             attacker_id = int(attacker_id_match.group(1))
-            
+
             victim_match = re.search(r'патогеном\s+(.+)', text)
             if not victim_match:
                 return
-            
+
             victim_text = victim_match.group(1)
             victim_id_match = re.search(r'user_id=(\d+)', victim_text)
             victim_id = int(victim_id_match.group(1)) if victim_id_match else None
-            
+
             days_match = re.search(r'🤒\s+Заражение\s+на\s+(\d+)\s+дней', text)
             days = int(days_match.group(1)) if days_match else 0
-            
+
             bio_match = re.search(r'☣️\s+\+([\d,]+)\s+био-опыта', text)
             bio_earn = int(bio_match.group(1).replace(',', '')) if bio_match else 0
-            
+
             from core.userbot.chk_handler import get_or_create_client, get_ordered_sessions
-            
+
             attacker_username = None
             for username in get_ordered_sessions():
                 client = await get_or_create_client(username)
@@ -166,14 +168,14 @@ async def main():
                     if me.id == attacker_id:
                         attacker_username = username
                         break
-            
+
             if not attacker_username:
                 return
-            
+
             db_path = Path("data/victims.db")
             now = dt.now()
             expire_date = now + td(days=days) if days > 0 else now
-            
+
             conn = sql.connect(db_path)
             cursor = conn.cursor()
             cursor.execute("""
@@ -183,14 +185,14 @@ async def main():
             conn.commit()
             conn.close()
             print(f"✅ ЗАПИСАНА ЖЕРТВА: @{attacker_username} -> {victim_id}, +{bio_earn}")
-            
+
         except Exception as e:
             print(f"❌ Ошибка записи жертвы: {e}")
-    
+
     dp.include_routers(
         rebirth_router,
         userbot_router,
-        admin_theme_router, 
+        admin_theme_router,
         themes_router,
         restart_router,
         start_router,
@@ -202,19 +204,18 @@ async def main():
         chat_manage_router,
         suggestions_router,
         points_router,
-)
+        boss_router,
+    )
 
     start_reset_scheduler(dp)
 
     await run_tasks(pool, redis_db, bot, scheduler)
 
     print("Started successfully!")
-    
+
     # Запускаем слушатель заражений
     from core.userbot.chk_handler import start_victim_listener
     await start_victim_listener()
-    
-
 
     # Проверка: если был /restart, отправляем красивый отчёт
     if os.path.exists(RESTART_FILE):
@@ -223,12 +224,10 @@ async def main():
                 chat_id = int(f.read().strip())
             os.remove(RESTART_FILE)
 
-            # Замер пинга до серверов Telegram
             start_ping = time.perf_counter()
             me = await bot.get_me()
             ping_ms = round((time.perf_counter() - start_ping) * 1000, 2)
 
-            # Время запуска
             start_time = datetime.now(tz).strftime("%H:%M:%S (%d.%m.%Y)")
 
             text = (
@@ -247,11 +246,5 @@ async def main():
         scheduler.shutdown()
         await bot.session.close()
 
-
 if __name__ == "__main__":
     asyncio.run(main())
-
-# Регистрация модуля конвертера лаборатории
-# register_lab_handlers(app)
-
-

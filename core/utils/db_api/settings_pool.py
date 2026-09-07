@@ -24,7 +24,7 @@ class DatabasePool:
             password=settings.db.password,
             db=settings.db.db,
             autocommit=True,
-            minsize=5,
+            minsize=10,
             maxsize=100,
         )
 
