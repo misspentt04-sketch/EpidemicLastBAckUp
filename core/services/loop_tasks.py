@@ -22,7 +22,7 @@ import asyncio
 async def victim_expire_check(pool: Pool):
     sql = 'SELECT victims_owner_id, victim_id FROM Victims WHERE victim_expire < %s;'
     sql1 = 'DELETE FROM Victims WHERE victims_owner_id = %s AND victim_id=%s;'
-    
+
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
@@ -37,7 +37,7 @@ async def victim_expire_check(pool: Pool):
 async def victim_expire_kd_check(pool: Pool):
     sql = 'SELECT victims_owner_id, victim_id FROM Victims WHERE victim_expire_kd != 0 AND victim_expire_kd < %s;'
     sql1 = 'UPDATE Victims SET victim_expire_kd = 0 WHERE victims_owner_id=%s AND victim_id=%s;'
-    
+
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
@@ -52,7 +52,7 @@ async def victim_expire_kd_check(pool: Pool):
 async def victim_fever_check(pool: Pool):
     sql = 'SELECT lab_id FROM Lab WHERE fever IS NOT NULL AND fever < %s;'
     sql1 = 'UPDATE Lab SET fever=NULL WHERE lab_id = %s'
-    
+
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
@@ -112,7 +112,7 @@ async def corporation_stats_refresh(pool: Pool):
         ') cm ON c.invitation_code = cm.corporation_code '
         'SET c.bio_experience = cm.exp, c.infected = cm.inf;'
     )
-    
+
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
@@ -128,7 +128,7 @@ async def corporation_stats_refresh(pool: Pool):
 #                 for string in check:
 #                     husband_id, wife_id, time, chat_id = string['husband_id'], string['wife_id'], string['delete_add'], string['chat_id']
 #                     if int(time) != 0 and datetime.utcnow() > datetime.fromtimestamp(time):
-                        
+
 #                         await cur.execute('SELECT full_name FROM Users WHERE id = %s', husband_id)
 #                         husband = await cur.fetchone()
 #                         await cur.execute('SELECT full_name FROM Users WHERE id = %s', wife_id)
@@ -181,13 +181,13 @@ async def refresh_pets_vuln_indicator(redis: Redis):
             all_keys.extend(keys)
             if cursor == 0:
                 break
-        
+
         async with redis.pipeline() as pipe:
             for key in all_keys:
                 pipe.hget(key, 'pet_vuln_indicator')
-            
+
             values = await pipe.execute()
-            
+
             for key, val in zip(all_keys, values):
                 val = float(val)
                 if val+1 <= 100:
@@ -198,7 +198,7 @@ async def refresh_pets_vuln_indicator(redis: Redis):
 
 
 async def game_mute_check(pool: Pool, redis: Redis, bot: Bot):
-    
+
     sql = 'SELECT user_id FROM BioMute WHERE time_expire < %s;'
     sql1 = 'SELECT user_id FROM GameMute WHERE time_expire < %s;'
     sql2 = 'DELETE FROM BioMute WHERE user_id=%s;'
@@ -241,7 +241,7 @@ async def pet_the_pet_time_check(pool: Pool, redis: Redis, bot: Bot):
     sql = 'SELECT DISTINCT(owner_pet_id), current_pet FROM Pets WHERE pet_the_pet_time != 0 AND pet_the_pet_time < %s;'
     sql1 = 'SELECT last_message_id, chat_id FROM user_chat_messages WHERE user_id=%s;'
     sql2 = 'UPDATE Pets SET pet_the_pet_time=0 WHERE owner_pet_id=%s;'
-    
+
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
@@ -273,7 +273,7 @@ async def pet_the_pet_time_check(pool: Pool, redis: Redis, bot: Bot):
 async def pet_happy_check(pool: Pool):
     sql = 'SELECT DISTINCT(owner_pet_id), happy FROM Pets;'
     sql1 = 'UPDATE Pets SET happy=%s WHERE owner_pet_id=%s;'
-    
+
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
@@ -302,11 +302,11 @@ async def weekly_exp_grant(pool: Pool):
         target_time = (now + timedelta(days=days_until_sunday)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
-        
+
         # Если сегодня воскресенье и 00:00 уже прошло, берем следующее воскресенье
         if target_time <= now:
             target_time += timedelta(days=7)
-            
+
         sleep_seconds = (target_time - now).total_seconds()
         await asyncio.sleep(sleep_seconds)
 
@@ -353,52 +353,85 @@ async def loop_tasks(pool: Pool, redis: Redis, bot: Bot):
     except Exception as e:
         print(f"[LOOP] ОШИБКА: {e}")
 
+# ===== АВТОВЫДАЧА ДОХОДА УЧЕНИКА (КАЖДЫЕ 10 МИНУТ) =====
 async def student_income_loop(pool: Pool):
-    """Каждые 10 минут начисляет доход ученика"""
+    """Каждые 10 минут начисляет доход ученика от тика"""
     while True:
         await asyncio.sleep(600)  # 10 минут
 
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                # Получаем всех активных учеников
-                await cur.execute("SELECT lab_id, infect, immunity, lethality, security_service, science, pathogens, total_earned FROM StudentLab WHERE is_active = TRUE")
-                students = await cur.fetchall()
+        try:
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    # Получаем всех активных учеников
+                    await cur.execute("""
+                        SELECT lab_id, infect, immunity, lethality, security_service, science, pathogens, total_earned
+                        FROM StudentLab
+                        WHERE is_active = TRUE
+                    """)
+                    students = await cur.fetchall()
 
-                for student in students:
-                    if isinstance(student, dict):
-                        user_id = student.get('lab_id')
-                        infect = student.get('infect', 0)
-                        immunity = student.get('immunity', 0)
-                        lethality = student.get('lethality', 0)
-                        security = student.get('security_service', 0)
-                        science = student.get('science', 0)
-                        pathogens = student.get('pathogens', 0)
-                        total_earned = student.get('total_earned', 0)
-                    else:
-                        user_id = student[0]
-                        infect = student[1] if len(student) > 1 else 0
-                        immunity = student[2] if len(student) > 2 else 0
-                        lethality = student[3] if len(student) > 3 else 0
-                        security = student[4] if len(student) > 4 else 0
-                        science = student[5] if len(student) > 5 else 0
-                        pathogens = student[6] if len(student) > 6 else 0
-                        total_earned = student[7] if len(student) > 7 else 0
+                    for student in students:
+                        if isinstance(student, dict):
+                            user_id = student.get('lab_id')
+                            infect = student.get('infect', 0)
+                            immunity = student.get('immunity', 0)
+                            lethality = student.get('lethality', 0)
+                            security = student.get('security_service', 0)
+                            science = student.get('science', 0)
+                            pathogens = student.get('pathogens', 0)
+                            total_earned = student.get('total_earned', 0)
+                        else:
+                            user_id = student[0]
+                            infect = student[1] if len(student) > 1 else 0
+                            immunity = student[2] if len(student) > 2 else 0
+                            lethality = student[3] if len(student) > 3 else 0
+                            security = student[4] if len(student) > 4 else 0
+                            science = student[5] if len(student) > 5 else 0
+                            pathogens = student[6] if len(student) > 6 else 0
+                            total_earned = student[7] if len(student) > 7 else 0
 
-                    # Получаем ресурсы владельца
-                    await cur.execute("SELECT bio_resource FROM Lab WHERE lab_id = %s", (user_id,))
-                    row = await cur.fetchone()
-                    owner_resources = row[0] if row else 0
+                        # Получаем доход с жертв за тик
+                        await cur.execute("""
+                            SELECT COALESCE(SUM(victim_bio_resource_earn), 0)
+                            FROM Victims
+                            WHERE victims_owner_id = %s
+                        """, (user_id,))
+                        row = await cur.fetchone()
+                        tick_income = float(row[0]) if row and row[0] is not None else 0.0
 
-                    total_skills = infect + immunity + lethality + security + science + pathogens
-                    income = int(owner_resources * 0.001 * (1 + 0.05 * total_skills))
+                        total_skills = infect + immunity + lethality + security + science + pathogens
+                        income = int(tick_income * 0.00001 * (1 + 0.05 * total_skills))
 
-                    if income > 0:
-                        # Начисляем доход
-                        await cur.execute(
-                            "UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s",
-                            (income, user_id)
-                        )
-                        await cur.execute(
-                            "UPDATE StudentLab SET total_earned = total_earned + %s, last_income_time = %s WHERE lab_id = %s",
-                            (income, int(time.time()), user_id)
-                        )
+                        if income > 0:
+                            # Начисляем доход
+                            await cur.execute(
+                                "UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s",
+                                (income, user_id)
+                            )
+                            await cur.execute(
+                                "UPDATE StudentLab SET total_earned = total_earned + %s, last_income_time = %s WHERE lab_id = %s",
+                                (income, int(time.time()), user_id)
+                            )
+
+                            # Уведомление в ЛС
+                            try:
+                                from aiogram import Bot
+                                from core.settings import settings
+                                bot = Bot(settings.bots.bot_token)
+                                await bot.send_message(
+                                    user_id,
+                                    f"🧪 <b>Ученик принёс доход!</b>\n\n"
+                                    f"📈 Начислено: <b>{income:,} 🧬</b>\n"
+                                    f"📊 Всего заработано: <b>{total_earned + income:,}</b>\n\n"
+                                    f"📊 Доход с жертв за тик: <b>{tick_income:,.0f}</b>\n"
+                                    f"🧮 Сумма навыков: <b>{total_skills}</b>",
+                                    parse_mode="HTML"
+                                )
+                            except Exception as e:
+                                print(f"[STUDENT NOTIFY ERROR] {e}")
+
+                    if students:
+                        print(f"[STUDENT INCOME] Выдано {len(students)} ученикам в {datetime.now().strftime('%H:%M')}")
+
+        except Exception as e:
+            print(f"[STUDENT INCOME ERROR] {e}")

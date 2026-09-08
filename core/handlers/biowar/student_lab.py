@@ -53,7 +53,7 @@ async def get_student_income(user_id: int, lab, pool: Pool):
         lab.get('pathogens', 0)
     )
 
-    income = tick_income * 0.0001 * (1 + 0.05 * total_skills)
+    income = tick_income * 0.00001 * (1 + 0.05 * total_skills)
     return int(income)
 
 async def get_mission_progress(pool: Pool, user_id: int):
@@ -513,5 +513,190 @@ async def activate_student(msg: Message, pool: Pool):
         "🎉 <b>Лаборатория ученика активирована!</b>\n\n"
         "Теперь ученик приносит доход каждые 10 минут.\n"
         "Используйте <code>лаборатория ученика</code> для управления.",
+        parse_mode="HTML"
+    )
+
+# ===== РУЧНАЯ ВЫДАЧА ДОХОДА УЧЕНИКА (АДМИН) =====
+@router.message(F.text.lower() == "/student_income")
+async def cmd_student_income(msg: Message, pool: Pool):
+    user_id = msg.from_user.id
+    if user_id != 7972320837:
+        await msg.reply("❌ У вас нет прав!")
+        return
+
+    from core.services.loop_tasks import student_income_loop
+    # Запускаем одну итерацию вручную
+    try:
+        # Создаём временную функцию для одной выдачи
+        async def force_income():
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("""
+                        SELECT lab_id, infect, immunity, lethality, security_service, science, pathogens, total_earned
+                        FROM StudentLab
+                        WHERE is_active = TRUE
+                    """)
+                    students = await cur.fetchall()
+
+                    for student in students:
+                        if isinstance(student, dict):
+                            user_id2 = student.get('lab_id')
+                            infect = student.get('infect', 0)
+                            immunity = student.get('immunity', 0)
+                            lethality = student.get('lethality', 0)
+                            security = student.get('security_service', 0)
+                            science = student.get('science', 0)
+                            pathogens = student.get('pathogens', 0)
+                            total_earned = student.get('total_earned', 0)
+                        else:
+                            user_id2 = student[0]
+                            infect = student[1] if len(student) > 1 else 0
+                            immunity = student[2] if len(student) > 2 else 0
+                            lethality = student[3] if len(student) > 3 else 0
+                            security = student[4] if len(student) > 4 else 0
+                            science = student[5] if len(student) > 5 else 0
+                            pathogens = student[6] if len(student) > 6 else 0
+                            total_earned = student[7] if len(student) > 7 else 0
+
+                        await cur.execute("""
+                            SELECT COALESCE(SUM(victim_bio_resource_earn), 0)
+                            FROM Victims
+                            WHERE victims_owner_id = %s
+                        """, (user_id2,))
+                        row = await cur.fetchone()
+                        tick_income = float(row[0]) if row and row[0] is not None else 0.0
+
+                        total_skills = infect + immunity + lethality + security + science + pathogens
+                        income = int(tick_income * 0.00001 * (1 + 0.05 * total_skills))
+
+                        if income > 0:
+                            await cur.execute(
+                                "UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s",
+                                (income, user_id2)
+                            )
+                            await cur.execute(
+                                "UPDATE StudentLab SET total_earned = total_earned + %s, last_income_time = %s WHERE lab_id = %s",
+                                (income, int(time.time()), user_id2)
+                            )
+
+        await force_income()
+        await msg.reply("✅ Доход ученика успешно выдан всем активным игрокам!")
+
+    except Exception as e:
+        await msg.reply(f"❌ Ошибка: {e}")
+
+# ===== ПРОКАЧКА УЧЕНИКА КОМАНДАМИ (++ученик зз 5) =====
+@router.message(F.text.lower().startswith("++ученик"))
+async def student_upgrade_cmd(msg: Message, pool: Pool, repo_biowar):
+    user_id = msg.from_user.id
+    text = msg.text.lower()
+    parts = text.split()
+
+    # Формат: ++ученик зз 5
+    if len(parts) < 3:
+        await msg.reply("❌ Формат: <code>++ученик зз 5</code>\nДоступно: зз, иммун, летал, сб, пат, разраб", parse_mode="HTML")
+        return
+
+    skill_name = parts[1]
+    try:
+        amount = int(parts[2])
+    except:
+        await msg.reply("❌ Укажите количество (число от 1 до 5)!")
+        return
+
+    if amount < 1 or amount > 5:
+        await msg.reply("❌ Можно прокачать только от 1 до 5 уровней за раз!")
+        return
+
+    # Маппинг названий
+    skill_map = {
+        "зз": "infect",
+        "иммун": "immunity",
+        "летал": "lethality",
+        "сб": "security_service",
+        "пат": "pathogens",
+        "разраб": "science",
+        "заразность": "infect",
+        "иммунитет": "immunity",
+        "летальность": "lethality",
+        "безопасность": "security_service",
+        "патоген": "pathogens",
+        "разработка": "science",
+    }
+
+    skill = skill_map.get(skill_name)
+    if not skill:
+        await msg.reply("❌ Неизвестный навык!\nДоступно: зз, иммун, летал, сб, пат, разраб")
+        return
+
+    lab = await get_student_lab(pool, user_id)
+    if not lab:
+        await create_student_lab(pool, user_id)
+        lab = await get_student_lab(pool, user_id)
+
+    # Проверяем активность
+    if isinstance(lab, tuple):
+        is_active = lab[1] if len(lab) > 1 else False
+        current_lvl = lab[2] if skill == "infect" else (lab[3] if skill == "immunity" else (lab[4] if skill == "lethality" else (lab[5] if skill == "security_service" else (lab[6] if skill == "science" else (lab[7] if skill == "pathogens" else 0)))))
+    else:
+        is_active = lab.get('is_active', False)
+        current_lvl = lab.get(skill, 0)
+
+    if not is_active:
+        # Проверяем миссии
+        total, done = await get_mission_progress(pool, user_id)
+        all_missions = await get_all_missions(pool)
+        if done < len(all_missions):
+            await msg.reply("❌ Сначала выполните все миссии через <code>миссии ученика</code>!")
+            return
+        # Активируем
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "UPDATE StudentLab SET is_active = TRUE, last_income_time = %s WHERE lab_id = %s",
+                    (int(time.time()), user_id)
+                )
+        is_active = True
+
+    from core import func
+    from core.data.tricks.tricks_biowar import tricks_biowar
+
+    to_lvl = current_lvl + amount
+    price = int(func.lvl_up_calc(skill, current_lvl, to_lvl))
+
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT bio_resource FROM Lab WHERE lab_id = %s", (user_id,))
+            row = await cur.fetchone()
+            owner_resources = row[0] if row else 0
+
+    if owner_resources < price:
+        await msg.reply(f"❌ Недостаточно ресурсов! Нужно {price:,} 🧬")
+        return
+
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s",
+                (price, user_id)
+            )
+            await cur.execute(
+                f"UPDATE StudentLab SET {skill} = {skill} + %s WHERE lab_id = %s",
+                (amount, user_id)
+            )
+
+    skill_names = {
+        "infect": "Заразность",
+        "immunity": "Иммунитет",
+        "lethality": "Летальность",
+        "security_service": "Безопасность",
+        "science": "Разработка",
+        "pathogens": "Патогены",
+    }
+
+    await msg.reply(
+        f"✅ <b>{skill_names.get(skill, skill)}</b> повышена на {amount} уровней!\n"
+        f"📊 Было: <b>{current_lvl}</b> → Стало: <b>{to_lvl}</b>\n"
+        f"💰 Потрачено: <b>{price:,} 🧬</b>",
         parse_mode="HTML"
     )

@@ -9,6 +9,7 @@ from core.services.loop_tasks import (
     pathogens_refresh_check, corporation_stats_refresh, gave_victims_food,
     refresh_pets_vuln_indicator, game_mute_check, pet_the_pet_time_check,
     pet_happy_check,
+    student_income_loop,
     weekly_exp_grant
 )
 from core.services.top_reports import send_weekly_top_report, send_monthly_top_report
@@ -53,7 +54,8 @@ async def loop_tasks(pool, redis, bot):
         refresh_pets_vuln_indicator(redis),
         game_mute_check(pool, redis, bot),
         pet_the_pet_time_check(pool, redis, bot),
-        pet_happy_check(pool)
+        pet_happy_check(pool),
+        student_income_loop(pool),
     ]
     await asyncio.gather(*tasks)
 
