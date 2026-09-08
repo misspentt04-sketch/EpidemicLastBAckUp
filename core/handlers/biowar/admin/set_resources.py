@@ -1,5 +1,4 @@
 from aiogram import types, F
-from aiogram.types import Message
 from core.handlers.biowar import biowar_global_router
 
 @biowar_global_router.message(F.text.lower().startswith("!установить ресы"))
@@ -38,7 +37,6 @@ async def set_resources_cmd(msg: types.Message, db):
         return
 
     await db.execute("UPDATE Lab SET bio_resource = %s WHERE lab_id = %s", (amount, target_id))
-
     await db.execute("SELECT bio_resource FROM Lab WHERE lab_id = %s", (target_id,))
     row = await db.fetchone()
     new_balance = row[0] if row else 0
