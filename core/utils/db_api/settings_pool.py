@@ -44,27 +44,34 @@ db_pool = DatabasePool()
 
 async def loop_tasks(pool, redis, bot):
     logging.info("DEBUG loop_tasks started")
-    tasks = [
-        weekly_exp_grant(pool),
-        victim_expire_check(pool),
-        victim_expire_kd_check(pool),
-        victim_fever_check(pool),
-        pathogens_refresh_check(pool),
-        corporation_stats_refresh(pool),
-        refresh_pets_vuln_indicator(redis),
-        game_mute_check(pool, redis, bot),
-        pet_the_pet_time_check(pool, redis, bot),
-        pet_happy_check(pool),
-        student_income_loop(pool),
-    ]
-    await asyncio.gather(*tasks)
+    
+    # Запускаем все задачи через create_task, чтобы они не блокировали друг друга
+    try:
+        asyncio.create_task(weekly_exp_grant(pool))
+        asyncio.create_task(victim_expire_check(pool))
+        asyncio.create_task(victim_expire_kd_check(pool))
+        asyncio.create_task(victim_fever_check(pool))
+        asyncio.create_task(pathogens_refresh_check(pool))
+        asyncio.create_task(corporation_stats_refresh(pool))
+        asyncio.create_task(refresh_pets_vuln_indicator(redis))
+        asyncio.create_task(game_mute_check(pool, redis, bot))
+        asyncio.create_task(pet_the_pet_time_check(pool, redis, bot))
+        asyncio.create_task(pet_happy_check(pool))
+        asyncio.create_task(student_income_loop(pool))
+        print("✅ [SETTINGS_POOL] Все задачи запущены, включая student_income_loop!")
+    except Exception as e:
+        print(f"[LOOP] ОШИБКА: {e}")
+    
+    # Держим функцию активной, чтобы задачи не завершились
+    while True:
+        await asyncio.sleep(3600)
 
 async def scheduler_tasks(pool, redis, bot, scheduler):
     # Кормление жертв
     scheduler.add_job(gave_victims_food, 'cron', hour='12,0', minute=0, args=(pool,))
-    
+
     # Еженедельный отчет в воскресенье в 23:59
     scheduler.add_job(send_weekly_top_report, 'cron', day_of_week='sun', hour=23, minute=59, args=(bot,))
-    
-    # Ежемесячный отчет в последний день любого месяца в 23:59 (выражение 'last' для cron в APScheduler)
+
+    # Ежемесячный отчет в последний день любого месяца в 23:59
     scheduler.add_job(send_monthly_top_report, 'cron', day='last sun,last mon,last tue,last wed,last thu,last fri,last sat', hour=23, minute=59, args=(bot,))

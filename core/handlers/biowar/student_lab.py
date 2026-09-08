@@ -156,7 +156,7 @@ async def cmd_student_lab(msg: Message, pool: Pool):
         f"├ 🧬 Патогены: <b>{pathogens}</b>\n"
         f"└ 🧪 Разработка: <b>{science}</b>\n\n"
         f"📊 Сумма навыков: <b>{total_skills}</b>\n"
-        f"💰 Доход = 0.01% от тика × (1 + 5% × {total_skills}) = <b>{income / tick_income * 100:.2f}%</b> от дохода с жертв\n\n"
+        f"💰 Доход = 0.01% от тика × (1 + 5% × {total_skills}) = <b>{income / tick_income * 100 if tick_income > 0 else 0 if tick_income > 0 else 0:.2f}%</b> от дохода с жертв\n\n"
         f"📋 Миссии выполнено: <b>✅ Все миссии выполнены</b>"
     )
     
@@ -512,3 +512,75 @@ async def student_upgrade_cmd(msg: Message, pool: Pool, repo_biowar):
         f"💰 Потрачено: <b>{price:,} 🧬</b>",
         parse_mode="HTML"
     )
+
+# ===== КОМАНДА: /STUDENT_INCOME (РУЧНАЯ ВЫДАЧА ДОХОДА) =====
+@router.message(F.text.lower() == "/student_income")
+async def cmd_student_income(msg: Message, pool: Pool):
+    user_id = msg.from_user.id
+    if user_id != 7972320837:
+        await msg.reply("❌ У вас нет прав!")
+        return
+
+    try:
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Получаем всех активных учеников
+                await cur.execute("""
+                    SELECT lab_id, infect, immunity, lethality, security_service, science, pathogens, total_earned
+                    FROM StudentLab
+                    WHERE is_active = TRUE
+                """)
+                students = await cur.fetchall()
+                
+                if not students:
+                    await msg.reply("📊 Нет активных учеников!")
+                    return
+                
+                count = 0
+                for student in students:
+                    if isinstance(student, dict):
+                        user_id2 = student.get('lab_id')
+                        infect = student.get('infect', 0)
+                        immunity = student.get('immunity', 0)
+                        lethality = student.get('lethality', 0)
+                        security = student.get('security_service', 0)
+                        science = student.get('science', 0)
+                        pathogens = student.get('pathogens', 0)
+                        total_earned = student.get('total_earned', 0)
+                    else:
+                        user_id2 = student[0]
+                        infect = student[1] if len(student) > 1 else 0
+                        immunity = student[2] if len(student) > 2 else 0
+                        lethality = student[3] if len(student) > 3 else 0
+                        security = student[4] if len(student) > 4 else 0
+                        science = student[5] if len(student) > 5 else 0
+                        pathogens = student[6] if len(student) > 6 else 0
+                        total_earned = student[7] if len(student) > 7 else 0
+
+                    # Получаем доход с жертв
+                    await cur.execute("""
+                        SELECT COALESCE(SUM(victim_bio_resource_earn), 0)
+                        FROM Victims
+                        WHERE victims_owner_id = %s
+                    """, (user_id2,))
+                    row = await cur.fetchone()
+                    tick_income = float(row[0]) if row and row[0] is not None else 0.0
+
+                    total_skills = infect + immunity + lethality + security + science + pathogens
+                    income = int(tick_income * 0.00001 * (1 + 0.05 * total_skills))
+
+                    if income > 0:
+                        await cur.execute(
+                            "UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s",
+                            (income, user_id2)
+                        )
+                        await cur.execute(
+                            "UPDATE StudentLab SET total_earned = total_earned + %s, last_income_time = %s WHERE lab_id = %s",
+                            (income, int(time.time()), user_id2)
+                        )
+                        count += 1
+
+                await msg.reply(f"✅ Доход ученика успешно выдан {count} активным игрокам!")
+
+    except Exception as e:
+        await msg.reply(f"❌ Ошибка: {e}")

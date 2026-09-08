@@ -1,23 +1,20 @@
-print("[LOOP] ФАЙЛ ЗАГРУЖЕН!")
 import logging
 import time
+import asyncio
+from datetime import datetime, timedelta, timezone
 from aiogram import Bot
-
 from asyncmy.pool import Pool
 from asyncmy.cursors import DictCursor
 from redis.asyncio import Redis
-
-from datetime import datetime, timedelta, timezone
 from cachetools import TTLCache
 
 from core import func
 from core.data.tricks.tricks_biowar import tricks_biowar
 from core.data.tricks.tricks_genai import tricks_genai
 from core.utils.genai import gpt_thinks
-from core.settings import moscow_tz
+from core.settings import moscow_tz, settings
 
-import asyncio
-
+print("[LOOP] ФАЙЛ ЗАГРУЖЕН!")
 
 async def victim_expire_check(pool: Pool):
     sql = 'SELECT victims_owner_id, victim_id FROM Victims WHERE victim_expire < %s;'
@@ -102,6 +99,7 @@ async def pathogens_refresh_check(pool: Pool):
                         base_time = max(science_time, now_ts)
                         next_expire = base_time + seconds_to_wait
                         await cur.execute(sql_next, (next_expire, lab_id))
+
 async def corporation_stats_refresh(pool: Pool):
     query = (
         'UPDATE Corporation c '
@@ -118,27 +116,6 @@ async def corporation_stats_refresh(pool: Pool):
             while True:
                 await asyncio.sleep(60)
                 await cur.execute(query)
-
-# async def marriges_backups_del(pool: Pool, bot):
-#     async with pool.acquire() as conn:
-#         async with conn.cursor(DictCursor) as cur:
-#             while True:
-#                 await cur.execute('SELECT * FROM MarrigesBackups;')
-#                 check = await cur.fetchall()
-#                 for string in check:
-#                     husband_id, wife_id, time, chat_id = string['husband_id'], string['wife_id'], string['delete_add'], string['chat_id']
-#                     if int(time) != 0 and datetime.utcnow() > datetime.fromtimestamp(time):
-
-#                         await cur.execute('SELECT full_name FROM Users WHERE id = %s', husband_id)
-#                         husband = await cur.fetchone()
-#                         await cur.execute('SELECT full_name FROM Users WHERE id = %s', wife_id)
-#                         wife = await cur.fetchone()
-
-#                         text = await func.devorce_marry(husband_id, wife_id, husband['full_name'], wife['full_name'])
-#                         await bot.send_message(chat_id=chat_id, text=text)
-#                         await cur.execute('DELETE FROM MarriagesBackups WHERE husband_id = %s AND wife_id = %s', (husband_id, wife_id))
-#                     await asyncio.sleep(30)
-
 
 async def gave_victims_food(pool: Pool):
     print("[TICK] gave_victims_food вызвана!")
@@ -168,8 +145,8 @@ async def gave_victims_food(pool: Pool):
                 await cur.execute(sql_del_victims, (now_ts,))
                 await cur.execute(sql_update_service, (int(next_dt.timestamp()),))
     except Exception as e:
-        logger.error(f"Ошибка в gave_victims_food: {e}")
-# изменить логику чтобы измежать фор луп или перенести в mysql
+        print(f"Ошибка в gave_victims_food: {e}")
+
 async def refresh_pets_vuln_indicator(redis: Redis):
     while True:
         await asyncio.sleep(5)
@@ -196,9 +173,7 @@ async def refresh_pets_vuln_indicator(redis: Redis):
                     pipe.hset(key, 'pet_vuln_indicator', 100)
             await pipe.execute()
 
-
 async def game_mute_check(pool: Pool, redis: Redis, bot: Bot):
-
     sql = 'SELECT user_id FROM BioMute WHERE time_expire < %s;'
     sql1 = 'SELECT user_id FROM GameMute WHERE time_expire < %s;'
     sql2 = 'DELETE FROM BioMute WHERE user_id=%s;'
@@ -277,15 +252,13 @@ async def pet_happy_check(pool: Pool):
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
-                await asyncio.sleep(1*60*60) # fixed value, don't touch
+                await asyncio.sleep(1*60*60)
                 await cur.execute(sql)
                 check = await cur.fetchall()
                 for string in check:
                     user_id, happy = string.values()
                     happy_result = func.adjust_value(happy, tricks_biowar['max']['pet_happy_for_hour_percent'], '-')
                     await cur.execute(sql1, (happy_result, user_id))
-
-
 
 async def sanitize_pathogens(pool: Pool):
     async with pool.acquire() as conn:
@@ -294,32 +267,25 @@ async def sanitize_pathogens(pool: Pool):
             await cur.execute("UPDATE Lab SET science_time = NULL WHERE ready_pathogens >= pathogens AND science_time IS NOT NULL;")
 
 async def weekly_exp_grant(pool: Pool):
-    """Каждое воскресенье в 00:00 начисляется 100 EXP всем лабораториям"""
     while True:
         now = datetime.now(moscow_tz)
-        # 6 = Воскресенье (Monday=0 ... Sunday=6)
         days_until_sunday = (6 - now.weekday()) % 7
         target_time = (now + timedelta(days=days_until_sunday)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
-
-        # Если сегодня воскресенье и 00:00 уже прошло, берем следующее воскресенье
         if target_time <= now:
             target_time += timedelta(days=7)
-
         sleep_seconds = (target_time - now).total_seconds()
         await asyncio.sleep(sleep_seconds)
-
         try:
             async with pool.acquire() as conn:
                 async with conn.cursor(DictCursor) as cur:
                     await cur.execute("UPDATE Lab SET bio_experience = bio_experience + 100;")
-            print("[Weekly EXP] Успешно начислено 100 EXP всем игрокам (Воскресенье 00:00)!")
+            print("[Weekly EXP] Успешно начислено 100 EXP всем игрокам!")
         except Exception as e:
             print(f"[Weekly EXP Error] {e}")
 
 async def force_tick(pool: Pool):
-    """Принудительная выдача тика (ручной запуск)"""
     sql_update_lab = (
         "UPDATE Lab l JOIN ("
         " SELECT v.victims_owner_id, SUM(v.victim_bio_resource_earn) * (1 + COALESCE(l2.rebirth_level, 0) * 0.10) AS bio_resource"
@@ -350,19 +316,19 @@ async def loop_tasks(pool: Pool, redis: Redis, bot: Bot):
         asyncio.create_task(pet_the_pet_time_check(pool, redis, bot))
         asyncio.create_task(pet_happy_check(pool))
         asyncio.create_task(sanitize_pathogens(pool))
+        asyncio.create_task(student_income_loop(pool))
     except Exception as e:
         print(f"[LOOP] ОШИБКА: {e}")
 
-# ===== АВТОВЫДАЧА ДОХОДА УЧЕНИКА (КАЖДЫЕ 10 МИНУТ) =====
 async def student_income_loop(pool: Pool):
     """Каждые 10 минут начисляет доход ученика от тика"""
+    print("🟢 [STUDENT_INCOME] Задача student_income_loop ЗАПУЩЕНА!")
     while True:
-        await asyncio.sleep(600)  # 10 минут
-
+        await asyncio.sleep(600)
+        print("🔄 [STUDENT_INCOME] Начинаем выдачу дохода...")
         try:
             async with pool.acquire() as conn:
                 async with conn.cursor() as cur:
-                    # Получаем всех активных учеников
                     await cur.execute("""
                         SELECT lab_id, infect, immunity, lethality, security_service, science, pathogens, total_earned
                         FROM StudentLab
@@ -390,7 +356,6 @@ async def student_income_loop(pool: Pool):
                             pathogens = student[6] if len(student) > 6 else 0
                             total_earned = student[7] if len(student) > 7 else 0
 
-                        # Получаем доход с жертв за тик
                         await cur.execute("""
                             SELECT COALESCE(SUM(victim_bio_resource_earn), 0)
                             FROM Victims
@@ -403,7 +368,6 @@ async def student_income_loop(pool: Pool):
                         income = int(tick_income * 0.00001 * (1 + 0.05 * total_skills))
 
                         if income > 0:
-                            # Начисляем доход
                             await cur.execute(
                                 "UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s",
                                 (income, user_id)
@@ -413,10 +377,7 @@ async def student_income_loop(pool: Pool):
                                 (income, int(time.time()), user_id)
                             )
 
-                            # Уведомление в ЛС
                             try:
-                                from aiogram import Bot
-                                from core.settings import settings
                                 bot = Bot(settings.bots.bot_token)
                                 await bot.send_message(
                                     user_id,
@@ -431,7 +392,7 @@ async def student_income_loop(pool: Pool):
                                 print(f"[STUDENT NOTIFY ERROR] {e}")
 
                     if students:
-                        print(f"[STUDENT INCOME] Выдано {len(students)} ученикам в {datetime.now().strftime('%H:%M')}")
+                        print(f"[STUDENT INCOME] Выдано {len(students)} ученикам")
 
         except Exception as e:
             print(f"[STUDENT INCOME ERROR] {e}")

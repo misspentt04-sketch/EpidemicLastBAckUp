@@ -79,8 +79,11 @@ async def restart_cmd(message: types.Message):
 logging.getLogger("asyncmy").setLevel(logging.ERROR)
 
 async def run_tasks(pool, redis, bot, scheduler):
+    print("🚀 [RUN_TASKS] Запускаем loop_tasks...")
     asyncio.create_task(loop_tasks(pool, redis, bot))
+    print("✅ [RUN_TASKS] loop_tasks запущена!")
     asyncio.create_task(scheduler_tasks(pool, redis, bot, scheduler))
+    print("✅ [RUN_TASKS] scheduler_tasks запущена!")
 
 async def main():
     logging.basicConfig(level=logging.INFO,
@@ -117,9 +120,6 @@ async def main():
     dp.chat_member.middleware.register(ChatMemberUpdateMiddleware())
     dp.message.outer_middleware.register(MaintenanceMiddleware())
     dp.callback_query.outer_middleware.register(MaintenanceMiddleware())
-
-#     biowar_router.message.middleware.register(UserRestrictMiddleware(redis_db))
-#     biowar_router2.message.middleware.register(UserRestrictMiddleware(redis_db))
 
     dp.update.outer_middleware(MaintenanceMiddleware())
 
@@ -211,7 +211,9 @@ async def main():
 
     start_reset_scheduler(dp)
 
+    print("📢 [MAIN] Подготовка к запуску run_tasks...")
     await run_tasks(pool, redis_db, bot, scheduler)
+    print("✅ [MAIN] run_tasks выполнена!")
 
     print("Started successfully!")
 
