@@ -172,6 +172,18 @@ async def send_boss_menu(target, redis: Redis, pool: Pool, is_callback: bool = F
     hp = int(await redis.get("boss:hp") or 0)
     max_hp = int(await redis.get("boss:max_hp") or 1)
     end_time = await redis.get("boss:end_time")
+    # ===== ПРОВЕРКА ВРЕМЕНИ =====
+    if is_active and end_time and int(time.time()) > int(end_time):
+        await redis.delete("boss:active", "boss:hp", "boss:max_hp", "boss:end_time", "boss:id")
+        is_active = False
+        hp = 0
+        boss_id = int(await redis.get("boss:id") or 0)
+        if boss_id:
+            count = await punish_players(pool, boss_id)
+            await target.reply(
+                f"💀 <b>Босс выжил!</b>\n\n⏳ Время истекло!\nНаказано игроков: <b>{count}</b>\nКаждый потерял <b>500,000 🧬</b> био-ресурсов!",
+                parse_mode="HTML"
+            )
 
     if is_active and hp > 0:
         status = "🟢 ЖИВ"
@@ -306,12 +318,12 @@ async def boss_attack(call: CallbackQuery, **kwargs):
     lethality = lab.get("lethality", 0)
 
     base = security * 3 + lethality * 2
-    if base > 500:
-        damage = 500 + (base - 500) ** 0.6 * 10
+    if base > 250:
+        damage = 250 + (base - 250) ** 0.6 * 10
     else:
         damage = base
-    damage = min(damage, 3000)
-    damage = int(damage * random.uniform(0.25, 1.50))
+    damage = min(damage, 2000)
+    damage = int(damage * random.uniform(0.25, 1.0))
     damage = max(1, damage)
     damage = max(1, damage)
 
@@ -404,16 +416,16 @@ async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: i
         pass
 
 # ===== НАКАЗАНИЕ =====
+
+# ===== НАКАЗАНИЕ ЗА ПРОИГРЫШ БОССА =====
 async def punish_players(pool: Pool, boss_id: int):
+    """Отнимает 500,000 ресурсов у ВСЕХ игроков"""
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT DISTINCT user_id FROM BossAttacks WHERE boss_id = %s", (boss_id,))
-            attackers = await cur.fetchall()
-            count = 0
-            for row in attackers:
-                user_id = row[0] if isinstance(row, (tuple, list)) else row.get('user_id')
-                await cur.execute("UPDATE Lab SET bio_resource = GREATEST(0, bio_resource - 500000) WHERE lab_id = %s", (user_id,))
-                count += 1
+            await cur.execute("UPDATE Lab SET bio_resource = GREATEST(0, bio_resource - 500000)")
+            await cur.execute("SELECT COUNT(*) FROM Lab")
+            row = await cur.fetchone()
+            count = row[0] if row else 0
             return count
 
 # ===== ЗАВЕРШЕНИЕ БОССА =====
@@ -432,31 +444,50 @@ async def end_boss(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: int, 
         except:
             pass
 
-# ===== ОСТАЛЬНЫЕ CALLBACK =====
-@router.callback_query(F.data == "boss_refresh")
-async def boss_refresh(call: CallbackQuery, **kwargs):
-    await call.answer("🔄 Обновляю...")
+# ===== ПРИНУДИТЕЛЬНОЕ ЗАВЕРШЕНИЕ БОССА (АДМИН) =====
+@router.message(F.text.lower() == "/end_boss")
+async def end_boss_cmd(msg: Message, **kwargs):
+    user_id = msg.from_user.id
+    if user_id != 7972320837:
+        await msg.reply("❌ У вас нет прав!")
+        return
+
     redis = kwargs.get("redis")
     pool = kwargs.get("pool")
-    if redis and pool:
-        await send_boss_menu(call.message, redis, pool, is_callback=True)
-
-@router.callback_query(F.data == "boss_top_damage")
-async def boss_top_damage(call: CallbackQuery, **kwargs):
-    pool = kwargs.get("pool")
-    if not pool:
-        await call.answer("❌ Ошибка!", show_alert=True)
+    if not redis or not pool:
+        await msg.reply("❌ Ошибка сервисов!")
         return
-    top = await get_top_damage(pool)
-    await call.message.answer(f"🏆 <b>Топ урона</b>\n\n{top}", parse_mode="HTML")
-    await call.answer()
 
-@router.callback_query(F.data == "boss_top_winners")
-async def boss_top_winners(call: CallbackQuery, **kwargs):
-    pool = kwargs.get("pool")
-    if not pool:
-        await call.answer("❌ Ошибка!", show_alert=True)
+    is_active = await redis.get("boss:active")
+    if not is_active:
+        await msg.reply("❌ Босс уже не активен!")
         return
-    top = await get_top_winners(pool)
-    await call.message.answer(f"👑 <b>Топ победителей</b>\n\n{top}", parse_mode="HTML")
-    await call.answer()
+
+    hp = int(await redis.get("boss:hp") or 0)
+    boss_id = int(await redis.get("boss:id") or 0)
+
+    # Очищаем Redis
+    await redis.delete("boss:active", "boss:hp", "boss:max_hp", "boss:end_time", "boss:id")
+
+    # Обновляем БД
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE Boss SET is_active = 0, current_hp = 0 WHERE id = %s", (boss_id,))
+
+    # Наказание (если босс выжил)
+    if hp > 0:
+        count = await punish_players(pool, boss_id)
+        await msg.reply(
+            f"💀 <b>Босс принудительно завершён!</b>\n\n"
+            f"⏳ Время истекло!\n"
+            f"Осталось HP: <b>{hp:,}</b>\n"
+            f"Наказано игроков: <b>{count}</b>\n"
+            f"Каждый потерял <b>500,000 🧬</b> био-ресурсов!",
+            parse_mode="HTML"
+        )
+    else:
+        await msg.reply(
+            f"✅ <b>Босс принудительно завершён!</b>\n\n"
+            f"Босс уже был мёртв, наказание не применялось.",
+            parse_mode="HTML"
+        )

@@ -352,3 +352,53 @@ async def loop_tasks(pool: Pool, redis: Redis, bot: Bot):
         asyncio.create_task(sanitize_pathogens(pool))
     except Exception as e:
         print(f"[LOOP] ОШИБКА: {e}")
+
+async def student_income_loop(pool: Pool):
+    """Каждые 10 минут начисляет доход ученика"""
+    while True:
+        await asyncio.sleep(600)  # 10 минут
+
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                # Получаем всех активных учеников
+                await cur.execute("SELECT lab_id, infect, immunity, lethality, security_service, science, pathogens, total_earned FROM StudentLab WHERE is_active = TRUE")
+                students = await cur.fetchall()
+
+                for student in students:
+                    if isinstance(student, dict):
+                        user_id = student.get('lab_id')
+                        infect = student.get('infect', 0)
+                        immunity = student.get('immunity', 0)
+                        lethality = student.get('lethality', 0)
+                        security = student.get('security_service', 0)
+                        science = student.get('science', 0)
+                        pathogens = student.get('pathogens', 0)
+                        total_earned = student.get('total_earned', 0)
+                    else:
+                        user_id = student[0]
+                        infect = student[1] if len(student) > 1 else 0
+                        immunity = student[2] if len(student) > 2 else 0
+                        lethality = student[3] if len(student) > 3 else 0
+                        security = student[4] if len(student) > 4 else 0
+                        science = student[5] if len(student) > 5 else 0
+                        pathogens = student[6] if len(student) > 6 else 0
+                        total_earned = student[7] if len(student) > 7 else 0
+
+                    # Получаем ресурсы владельца
+                    await cur.execute("SELECT bio_resource FROM Lab WHERE lab_id = %s", (user_id,))
+                    row = await cur.fetchone()
+                    owner_resources = row[0] if row else 0
+
+                    total_skills = infect + immunity + lethality + security + science + pathogens
+                    income = int(owner_resources * 0.001 * (1 + 0.05 * total_skills))
+
+                    if income > 0:
+                        # Начисляем доход
+                        await cur.execute(
+                            "UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s",
+                            (income, user_id)
+                        )
+                        await cur.execute(
+                            "UPDATE StudentLab SET total_earned = total_earned + %s, last_income_time = %s WHERE lab_id = %s",
+                            (income, int(time.time()), user_id)
+                        )
