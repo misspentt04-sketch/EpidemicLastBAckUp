@@ -36,7 +36,7 @@ class AntiSpamMiddleware(BaseMiddleware):
             bot: Bot = data.get("bot")
 
             try:
-                msg_text = "⚠️ <b>Обнаружен спам!</b> Вы заблокированы в боте на 1 день.\nЕсли произошла ошибка, пишите @M_thousand_m"
+                msg_text = "⚠️ <b>Обнаружен спам!</b> Вы заблокированы в боте на 5 минут.\nЕсли произошла ошибка, пишите @M_thousand_m"
                 await event.reply(msg_text)
             except Exception:
                 pass
@@ -49,7 +49,7 @@ class AntiSpamMiddleware(BaseMiddleware):
                         f"Пользователь: <a href=\"tg://user?id={user.id}\">{user.full_name}</a> "
                         f"(<code>{user.id}</code>, {username_str})\n"
                         f"Причина: Спам (>8 сообщ/сек в ЛС)\n"
-                        f"Блокировка: <b>24 часа</b>"
+                        f"Блокировка: <b>5 минут</b>"
                     )
                     await bot.send_message(ADMIN_CHAT_ID, admin_log)
                 except Exception as e:

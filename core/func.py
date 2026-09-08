@@ -634,3 +634,17 @@ def pet_current_happy_emoji(value: int) -> str:
         return emoji[-1]
     
     return emoji[0]
+def student_lvl_up_calc(skill, fromlvl: int, tolvl: int, science_lvl: int) -> int:
+    """
+    Расчет стоимости прокачки для ученика
+    ВСЕ навыки имеют цену как у science (степень 2.6)
+    """
+    price = 0
+    
+    # Для ВСЕХ навыков используем степень 2.6 (как у science)
+    power = 2.6
+    
+    for i in range(fromlvl, tolvl):
+        price += (i + 1) ** power
+    
+    return int(price)

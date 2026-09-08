@@ -1,7 +1,9 @@
-from aiogram import types, F
-from core.handlers.biowar import biowar_global_router
+from aiogram import types, F, Router
+from aiogram.types import Message
 
-@biowar_global_router.message(F.text.lower().startswith("!установить ресы"))
+router = Router()
+
+@router.message(F.text.lower().startswith("!установить ресы"))
 async def set_resources_cmd(msg: types.Message, db):
     if msg.from_user.id != 7972320837:
         await msg.reply("❌ У вас нет прав на эту команду!")
@@ -24,7 +26,11 @@ async def set_resources_cmd(msg: types.Message, db):
                 await db.execute("SELECT id FROM Users WHERE username = %s", (username,))
                 row = await db.fetchone()
                 if row:
-                    target_id = row[0] if isinstance(row, (tuple, list)) else row.get('id')
+                    # Исправлено: проверяем тип row
+                    if isinstance(row, dict):
+                        target_id = row.get('id')
+                    else:
+                        target_id = row[0] if isinstance(row, (tuple, list)) else row.get('id')
                 continue
             elif arg.lstrip('-').isdigit() and len(arg) > 4:
                 if not target_id:
@@ -39,7 +45,17 @@ async def set_resources_cmd(msg: types.Message, db):
     await db.execute("UPDATE Lab SET bio_resource = %s WHERE lab_id = %s", (amount, target_id))
     await db.execute("SELECT bio_resource FROM Lab WHERE lab_id = %s", (target_id,))
     row = await db.fetchone()
-    new_balance = row[0] if row else 0
+    
+    # Исправлено: универсальная проверка row
+    if row:
+        if isinstance(row, dict):
+            new_balance = row.get('bio_resource', 0)
+        elif isinstance(row, (tuple, list)):
+            new_balance = row[0] if len(row) > 0 else 0
+        else:
+            new_balance = 0
+    else:
+        new_balance = 0
 
     await msg.reply(
         f"✅ Установлено <b>{amount:,} 🧬</b>\n"
