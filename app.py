@@ -79,11 +79,13 @@ async def restart_cmd(message: types.Message):
 logging.getLogger("asyncmy").setLevel(logging.ERROR)
 
 async def run_tasks(pool, redis, bot, scheduler):
+    from core.services.loop_tasks import student_income_loop
     print("🚀 [RUN_TASKS] Запускаем loop_tasks...")
     asyncio.create_task(loop_tasks(pool, redis, bot))
     print("✅ [RUN_TASKS] loop_tasks запущена!")
     asyncio.create_task(scheduler_tasks(pool, redis, bot, scheduler))
     print("✅ [RUN_TASKS] scheduler_tasks запущена!")
+    print("✅ [RUN_TASKS] student_income_loop запущена!")
 
 async def main():
     logging.basicConfig(level=logging.INFO,
@@ -242,6 +244,11 @@ async def main():
             await bot.send_message(chat_id, text)
         except Exception as e:
             logging.error(f"Ошибка при отправке уведомления о запуске: {e}")
+
+    # === ПРИНУДИТЕЛЬНЫЙ ЗАПУСК STUDENT_INCOME_LOOP ===
+    from core.services.loop_tasks import student_income_loop
+    asyncio.create_task(student_income_loop(pool))
+    print("🚀 [MAIN] student_income_loop принудительно запущена!")
 
     scheduler.start()
     try:

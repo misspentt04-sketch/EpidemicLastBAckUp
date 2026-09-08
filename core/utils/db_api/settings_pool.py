@@ -57,7 +57,6 @@ async def loop_tasks(pool, redis, bot):
         asyncio.create_task(game_mute_check(pool, redis, bot))
         asyncio.create_task(pet_the_pet_time_check(pool, redis, bot))
         asyncio.create_task(pet_happy_check(pool))
-        asyncio.create_task(student_income_loop(pool))
         print("✅ [SETTINGS_POOL] Все задачи запущены, включая student_income_loop!")
     except Exception as e:
         print(f"[LOOP] ОШИБКА: {e}")

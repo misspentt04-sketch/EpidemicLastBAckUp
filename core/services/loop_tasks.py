@@ -316,7 +316,6 @@ async def loop_tasks(pool: Pool, redis: Redis, bot: Bot):
         asyncio.create_task(pet_the_pet_time_check(pool, redis, bot))
         asyncio.create_task(pet_happy_check(pool))
         asyncio.create_task(sanitize_pathogens(pool))
-        asyncio.create_task(student_income_loop(pool))
     except Exception as e:
         print(f"[LOOP] ОШИБКА: {e}")
 
