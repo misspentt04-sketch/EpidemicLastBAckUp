@@ -1,20 +1,17 @@
 import time
 from datetime import datetime, timezone
 from aiogram import Router, F, types
+from cachetools import TTLCache
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from asyncmy.pool import Pool
 from redis.asyncio import Redis
-
 router = Router()
-
-# ===== ФУНКЦИИ =====
-
+button_cooldown = TTLCache(maxsize=10000, ttl=1)
 async def get_student_lab(pool: Pool, user_id: int):
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT * FROM StudentLab WHERE lab_id = %s", (user_id,))
             return await cur.fetchone()
-
 async def create_student_lab(pool: Pool, user_id: int):
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
@@ -22,7 +19,6 @@ async def create_student_lab(pool: Pool, user_id: int):
                 "INSERT INTO StudentLab (lab_id, is_active, created_at) VALUES (%s, FALSE, NOW())",
                 (user_id,)
             )
-
 async def get_student_income(user_id: int, lab, pool: Pool):
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
@@ -33,7 +29,6 @@ async def get_student_income(user_id: int, lab, pool: Pool):
             """, (user_id,))
             row = await cur.fetchone()
             tick_income = float(row[0]) if row and row[0] is not None else 0.0
-
     if isinstance(lab, tuple):
         lab = {
             "infect": lab[2] if len(lab) > 2 else 0,
@@ -43,7 +38,6 @@ async def get_student_income(user_id: int, lab, pool: Pool):
             "science": lab[6] if len(lab) > 6 else 0,
             "pathogens": lab[7] if len(lab) > 7 else 0,
         }
-
     total_skills = (
         lab.get('infect', 0) +
         lab.get('immunity', 0) +
@@ -52,10 +46,8 @@ async def get_student_income(user_id: int, lab, pool: Pool):
         lab.get('science', 0) +
         lab.get('pathogens', 0)
     )
-
     income = tick_income * 0.00001 * (1 + 0.05 * total_skills)
     return int(income)
-
 async def get_mission_progress(pool: Pool, user_id: int):
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
@@ -67,92 +59,21 @@ async def get_mission_progress(pool: Pool, user_id: int):
             row = await cur.fetchone()
             total = row[0] if row else 0
             done = row[1] if row else 0
+            done = done or 0
             return total, done
-
 async def get_all_missions(pool: Pool):
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT id, name, question, hint FROM StudentMissions WHERE is_active = TRUE ORDER BY id ASC")
             return await cur.fetchall()
-
-# ===== CALLBACK =====
-
-@router.callback_query(F.data == "student_missions")
-async def student_missions(call: CallbackQuery, pool: Pool):
-    user_id = call.from_user.id
-
-    lab = await get_student_lab(pool, user_id)
-    if lab:
-        is_active = lab[1] if isinstance(lab, tuple) and len(lab) > 1 else (lab.get('is_active', False) if isinstance(lab, dict) else False)
-        if is_active:
-            await call.answer("✅ Лаборатория уже активирована!", show_alert=True)
-            return
-
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("""
-                SELECT m.id, m.name, m.question, m.hint
-                FROM StudentMissions m
-                LEFT JOIN StudentMissionProgress p ON p.mission_id = m.id AND p.user_id = %s
-                WHERE (p.completed IS NULL OR p.completed = FALSE)
-                ORDER BY m.id ASC
-                LIMIT 1
-            """, (user_id,))
-            mission = await cur.fetchone()
-
-    if not mission:
-        await call.message.edit_text(
-            "📋 <b>Все миссии выполнены!</b>\n\nТеперь вы можете активировать лабораторию ученика!\nНапишите <code>активировать ученика</code>, чтобы завершить активацию.",
-            parse_mode="HTML"
-        )
-        await call.answer()
-        return
-
-    if isinstance(mission, dict):
-        mission_id = mission.get('id')
-        name = mission.get('name')
-        question = mission.get('question')
-        hint = mission.get('hint')
-    else:
-        mission_id = mission[0]
-        name = mission[1]
-        question = mission[2]
-        hint = mission[3] if len(mission) > 3 else "Нет подсказки"
-
-    text = (
-        f"📋 <b>Миссия #{mission_id}: {name}</b>\n\n"
-        f"📝 <b>Задание:</b>\n{question}\n\n"
-        f"💡 <b>Подсказка:</b> <i>{hint}</i>\n\n"
-        f"✍️ Чтобы ответить:\n"
-        f"<code>ответ ученика {mission_id} &lt;текст&gt;</code>"
-    )
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
-
-    await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    await call.answer()
-
-@router.callback_query(F.data == "student_refresh")
-async def student_refresh(call: CallbackQuery, pool: Pool):
-    await call.answer("🔄 Обновляю...")
-    await cmd_student_lab(call.message, pool)
-
-@router.callback_query(F.data == "student_back")
-async def student_back(call: CallbackQuery, pool: Pool):
-    await call.answer()
-    await cmd_student_lab(call.message, pool)
-
-# ===== КОМАНДА: ЛАБОРАТОРИЯ УЧЕНИКА =====
-
 @router.message(F.text.lower() == "лаборатория ученика")
 async def cmd_student_lab(msg: Message, pool: Pool):
     user_id = msg.from_user.id
-
     lab = await get_student_lab(pool, user_id)
     if not lab:
         await create_student_lab(pool, user_id)
         lab = await get_student_lab(pool, user_id)
-
+    # Принудительная активация из БД
     if isinstance(lab, tuple):
         is_active = lab[1] if len(lab) > 1 else False
         lab = {
@@ -166,8 +87,11 @@ async def cmd_student_lab(msg: Message, pool: Pool):
             'total_earned': lab[10] if len(lab) > 10 else 0,
             'last_income_time': lab[9] if len(lab) > 9 else 0,
         }
-
-    is_active = lab.get('is_active', False)
+    else:
+        is_active = lab.get('is_active', False)
+    # Если в БД активна — сохраняем
+    if is_active:
+        lab['is_active'] = True
     infect = lab.get('infect', 0)
     immunity = lab.get('immunity', 0)
     lethality = lab.get('lethality', 0)
@@ -177,38 +101,16 @@ async def cmd_student_lab(msg: Message, pool: Pool):
     total_earned = lab.get('total_earned', 0)
     last_income = lab.get('last_income_time', 0)
     total_skills = infect + immunity + lethality + security + science + pathogens
-
-    # Проверяем миссии
     total, done = await get_mission_progress(pool, user_id)
     all_missions = await get_all_missions(pool)
-    if is_active and done < len(all_missions):
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "UPDATE StudentLab SET is_active = FALSE WHERE lab_id = %s",
-                    (user_id,)
-                )
-        is_active = False
-        lab['is_active'] = False
-
-    if not is_active:
-        total, done = await get_mission_progress(pool, user_id)
-        text = (
-            f"🧪 <b>Лаборатория ученика</b>\n\n"
-            f"📊 Статус: <b>🔒 НЕ АКТИВИРОВАНА</b>\n"
-            f"📋 Миссии: <b>{done}/{total}</b> выполнено\n"
-            f"💡 Напишите <code>миссии ученика</code>\n"
-            f"чтобы активировать лабораторию ученика!"
-        )
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📋 Список миссий", callback_data="student_missions")],
-        ])
-        await msg.reply(text, reply_markup=kb, parse_mode="HTML")
-        return
-
+    total_missions = len(all_missions) if all_missions else 0
+    # НЕ ДЕАКТИВИРУЕМ, если миссии не выполнены
+    # if is_active and done < total_missions:
+    #     async with pool.acquire() as conn:
+    #         async with conn.cursor() as cur:
+    #             await cur.execute("UPDATE StudentLab SET is_active = FALSE WHERE lab_id = %s", (user_id,))
+    #     is_active = False
     income = await get_student_income(user_id, lab, pool)
-
-    # Получаем доход с жертв для отображения
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -218,8 +120,6 @@ async def cmd_student_lab(msg: Message, pool: Pool):
             """, (user_id,))
             row = await cur.fetchone()
             tick_income = float(row[0]) if row and row[0] is not None else 0.0
-
-    # Время до следующей выдачи
     if last_income:
         next_income = last_income + 600
         time_left = int(next_income - time.time())
@@ -231,7 +131,6 @@ async def cmd_student_lab(msg: Message, pool: Pool):
             next_income_str = "⏳ Скоро будет выдано..."
     else:
         next_income_str = "⏳ Время выдачи не установлено"
-
     text = (
         f"🧪 <b>Лаборатория ученика</b>\n\n"
         f"📊 Статус: <b>✅ АКТИВНА</b>\n"
@@ -247,10 +146,9 @@ async def cmd_student_lab(msg: Message, pool: Pool):
         f"├ 🧬 Патогены: <b>{pathogens}</b>\n"
         f"└ 🧪 Разработка: <b>{science}</b>\n\n"
         f"📊 Сумма навыков: <b>{total_skills}</b>\n"
-        f"💰 Доход = 0.01% от тика × (1 + 5% × {total_skills}) = <b>{income/tick_income*100:.2f}%</b> от дохода с жертв\n\n"
+        f"💰 Доход = 0.01% от тика × (1 + 5% × {total_skills}) = <b>{income / tick_income * 100:.2f}%</b> от дохода с жертв\n\n"
         f"📋 Миссии выполнено: <b>✅ Все миссии выполнены</b>"
     )
-
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🎯 +1 ЗЗ", callback_data="student_upgrade:infect"),
@@ -262,26 +160,17 @@ async def cmd_student_lab(msg: Message, pool: Pool):
             InlineKeyboardButton(text="🧬 +1 Патоген", callback_data="student_upgrade:pathogens"),
             InlineKeyboardButton(text="🧪 +1 Разраб", callback_data="student_upgrade:science")
         ],
-        [
-            InlineKeyboardButton(text="📋 Миссии", callback_data="student_missions"),
-        ]
     ])
-
     await msg.reply(text, reply_markup=kb, parse_mode="HTML")
-
-# ===== ТЕКСТОВАЯ КОМАНДА: МИССИИ УЧЕНИКА =====
-
 @router.message(F.text.lower() == "миссии ученика")
 async def student_missions_text(msg: Message, pool: Pool):
     user_id = msg.from_user.id
-
     lab = await get_student_lab(pool, user_id)
     if lab:
         is_active = lab[1] if isinstance(lab, tuple) and len(lab) > 1 else (lab.get('is_active', False) if isinstance(lab, dict) else False)
         if is_active:
             await msg.reply("✅ Лаборатория уже активирована!")
             return
-
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -293,14 +182,12 @@ async def student_missions_text(msg: Message, pool: Pool):
                 LIMIT 1
             """, (user_id,))
             mission = await cur.fetchone()
-
     if not mission:
         await msg.reply(
             "📋 <b>Все миссии выполнены!</b>\n\nТеперь вы можете активировать лабораторию ученика!\nНапишите <code>активировать ученика</code>, чтобы завершить активацию.",
             parse_mode="HTML"
         )
         return
-
     if isinstance(mission, dict):
         mission_id = mission.get('id')
         name = mission.get('name')
@@ -311,7 +198,6 @@ async def student_missions_text(msg: Message, pool: Pool):
         name = mission[1]
         question = mission[2]
         hint = mission[3] if len(mission) > 3 else "Нет подсказки"
-
     text = (
         f"📋 <b>Миссия #{mission_id}: {name}</b>\n\n"
         f"📝 <b>Задание:</b>\n{question}\n\n"
@@ -319,23 +205,21 @@ async def student_missions_text(msg: Message, pool: Pool):
         f"✍️ Чтобы ответить:\n"
         f"<code>ответ ученика {mission_id} &lt;текст&gt;</code>"
     )
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
-
-    await msg.reply(text, reply_markup=kb, parse_mode="HTML")
-
-# ===== ПРОКАЧКА =====
-
+    await msg.reply(text, parse_mode="HTML")
 @router.callback_query(F.data.startswith("student_upgrade:"))
 async def student_upgrade(call: CallbackQuery, pool: Pool, repo_biowar):
     user_id = call.from_user.id
+    cooldown_key = f"student_upgrade:{user_id}"
+    if cooldown_key in button_cooldown:
+        await call.answer("⏳ Подождите 1 секунду!", show_alert=True)
+        return
+    button_cooldown[cooldown_key] = True
+    print(f"[STUDENT UPGRADE] Пользователь {user_id} нажал {call.data}")
     skill = call.data.split(":")[1]
-
     lab = await get_student_lab(pool, user_id)
     if not lab:
         await call.answer("❌ У вас нет лаборатории ученика!", show_alert=True)
         return
-
     if isinstance(lab, tuple):
         is_active = lab[1] if len(lab) > 1 else False
         idx = {"infect": 2, "immunity": 3, "lethality": 4, "security_service": 5, "science": 6, "pathogens": 7}
@@ -343,34 +227,23 @@ async def student_upgrade(call: CallbackQuery, pool: Pool, repo_biowar):
     else:
         is_active = lab.get('is_active', False)
         current_lvl = lab.get(skill, 0)
-
-    # Проверяем миссии перед прокачкой
     total, done = await get_mission_progress(pool, user_id)
     all_missions = await get_all_missions(pool)
     if not is_active and done < len(all_missions):
         await call.answer("❌ Сначала выполните все миссии!", show_alert=True)
         return
-
-    if not is_active:
-        await call.answer("❌ Лаборатория не активирована!", show_alert=True)
-        return
-
     from core import func
     from core.data.tricks.tricks_biowar import tricks_biowar
-
     to_lvl = current_lvl + 1
     price = int(func.lvl_up_calc(skill, current_lvl, to_lvl))
-
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT bio_resource FROM Lab WHERE lab_id = %s", (user_id,))
             row = await cur.fetchone()
             owner_resources = row[0] if row else 0
-
     if owner_resources < price:
         await call.answer(f"❌ Недостаточно ресурсов! Нужно {price:,} 🧬", show_alert=True)
         return
-
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -381,33 +254,25 @@ async def student_upgrade(call: CallbackQuery, pool: Pool, repo_biowar):
                 f"UPDATE StudentLab SET {skill} = {skill} + 1 WHERE lab_id = %s",
                 (user_id,)
             )
-
-    await call.answer(f"✅ {skill} повышен до {to_lvl}! -{price:,} 🧬", show_alert=False)
+    await call.answer(f"✅ {skill} повышен до {to_lvl}! -{price:,} 🧬", show_alert=True)
     await cmd_student_lab(call.message, pool)
-
-# ===== КОМАНДА: ОТВЕТ УЧЕНИКА =====
-
 @router.message(F.text.lower().startswith("ответ ученика"))
 async def student_answer(msg: Message, pool: Pool):
     user_id = msg.from_user.id
     text = msg.text
-
     import re
     match = re.match(r"ответ ученика\s+(\d+)\s+(.+)", text, re.IGNORECASE)
     if not match:
         await msg.reply("❌ Формат: <code>ответ ученика &lt;id&gt; &lt;текст&gt;</code>", parse_mode="HTML")
         return
-
     mission_id = int(match.group(1))
     answer = match.group(2).strip().lower()
-
     lab = await get_student_lab(pool, user_id)
     if lab:
         is_active = lab[1] if isinstance(lab, tuple) and len(lab) > 1 else (lab.get('is_active', False) if isinstance(lab, dict) else False)
         if is_active:
             await msg.reply("✅ Лаборатория уже активирована!")
             return
-
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -419,25 +284,22 @@ async def student_answer(msg: Message, pool: Pool):
                 LIMIT 1
             """, (user_id,))
             current = await cur.fetchone()
-
     if not current:
         await msg.reply("❌ Все миссии уже выполнены!")
         return
-
     if isinstance(current, dict):
         current_id = current.get('id')
-        correct_answer = current.get('answer', '').lower().strip()
+        correct_answer = current.get('answer', '').strip().lower()
         mission_name = current.get('name', '')
     else:
         current_id = current[0]
-        correct_answer = current[1].lower().strip() if len(current) > 1 else ''
+        correct_answer = current[1].strip().lower() if len(current) > 1 else ''
         mission_name = current[2] if len(current) > 2 else ''
-
     if mission_id != current_id:
         await msg.reply(f"❌ Сейчас нужно выполнить миссию #{current_id} «{mission_name}»!")
         return
-
-    if answer == correct_answer:
+    correct_answers = [ans.strip().lower() for ans in correct_answer.split('|')]
+    if answer in correct_answers:
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
@@ -445,9 +307,7 @@ async def student_answer(msg: Message, pool: Pool):
                     "ON DUPLICATE KEY UPDATE completed = TRUE, completed_at = NOW()",
                     (user_id, mission_id)
                 )
-
         await msg.reply(f"✅ Правильно! Миссия «{mission_name}» выполнена! 🎉")
-
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
@@ -457,11 +317,9 @@ async def student_answer(msg: Message, pool: Pool):
                 """, (user_id,))
                 row = await cur.fetchone()
                 remaining = row[0] if row else 0
-
         if remaining > 0:
             await msg.reply(f"📋 Осталось ещё <b>{remaining}</b> миссий.\nНапишите <code>миссии ученика</code> для продолжения.")
         else:
-            # Активируем после последней миссии
             async with pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(
@@ -476,39 +334,28 @@ async def student_answer(msg: Message, pool: Pool):
             )
     else:
         await msg.reply(f"❌ Неправильно! Попробуйте ещё раз.\n💡 Подсказка: <code>миссии ученика</code>")
-
-# ===== КОМАНДА: АКТИВИРОВАТЬ УЧЕНИКА =====
 @router.message(F.text.lower() == "активировать ученика")
 async def activate_student(msg: Message, pool: Pool):
     user_id = msg.from_user.id
-
     lab = await get_student_lab(pool, user_id)
     if not lab:
         await create_student_lab(pool, user_id)
         lab = await get_student_lab(pool, user_id)
-
     is_active = lab[1] if isinstance(lab, tuple) and len(lab) > 1 else (lab.get('is_active', False) if isinstance(lab, dict) else False)
-
     if is_active:
         await msg.reply("✅ Лаборатория уже активирована!")
         return
-
-    # Проверяем, все ли миссии выполнены
     total, done = await get_mission_progress(pool, user_id)
     all_missions = await get_all_missions(pool)
-
     if done < len(all_missions):
         await msg.reply(f"❌ Выполнено только <b>{done}/{len(all_missions)}</b> миссий.\nЗавершите все миссии через <code>миссии ученика</code>.")
         return
-
-    # Активируем
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
                 "UPDATE StudentLab SET is_active = TRUE, last_income_time = %s WHERE lab_id = %s",
                 (int(time.time()), user_id)
             )
-
     await msg.reply(
         "🎉 <b>Лаборатория ученика активирована!</b>\n\n"
         "Теперь ученик приносит доход каждые 10 минут.\n"
@@ -516,7 +363,7 @@ async def activate_student(msg: Message, pool: Pool):
         parse_mode="HTML"
     )
 
-# ===== РУЧНАЯ ВЫДАЧА ДОХОДА УЧЕНИКА (АДМИН) =====
+# ===== КОМАНДА: /STUDENT_INCOME (РУЧНАЯ ВЫДАЧА ДОХОДА) =====
 @router.message(F.text.lower() == "/student_income")
 async def cmd_student_income(msg: Message, pool: Pool):
     user_id = msg.from_user.id
@@ -524,10 +371,9 @@ async def cmd_student_income(msg: Message, pool: Pool):
         await msg.reply("❌ У вас нет прав!")
         return
 
-    from core.services.loop_tasks import student_income_loop
-    # Запускаем одну итерацию вручную
     try:
-        # Создаём временную функцию для одной выдачи
+        from core.services.loop_tasks import student_income_loop
+        # Запускаем одну итерацию вручную
         async def force_income():
             async with pool.acquire() as conn:
                 async with conn.cursor() as cur:
@@ -585,14 +431,13 @@ async def cmd_student_income(msg: Message, pool: Pool):
     except Exception as e:
         await msg.reply(f"❌ Ошибка: {e}")
 
-# ===== ПРОКАЧКА УЧЕНИКА КОМАНДАМИ (++ученик зз 5) =====
+# ===== КОМАНДА: ++УЧЕНИК (ПРОКАЧКА) =====
 @router.message(F.text.lower().startswith("++ученик"))
 async def student_upgrade_cmd(msg: Message, pool: Pool, repo_biowar):
     user_id = msg.from_user.id
     text = msg.text.lower()
     parts = text.split()
 
-    # Формат: ++ученик зз 5
     if len(parts) < 3:
         await msg.reply("❌ Формат: <code>++ученик зз 5</code>\nДоступно: зз, иммун, летал, сб, пат, разраб", parse_mode="HTML")
         return
@@ -608,7 +453,6 @@ async def student_upgrade_cmd(msg: Message, pool: Pool, repo_biowar):
         await msg.reply("❌ Можно прокачать только от 1 до 5 уровней за раз!")
         return
 
-    # Маппинг названий
     skill_map = {
         "зз": "infect",
         "иммун": "immunity",
@@ -634,22 +478,20 @@ async def student_upgrade_cmd(msg: Message, pool: Pool, repo_biowar):
         await create_student_lab(pool, user_id)
         lab = await get_student_lab(pool, user_id)
 
-    # Проверяем активность
     if isinstance(lab, tuple):
         is_active = lab[1] if len(lab) > 1 else False
-        current_lvl = lab[2] if skill == "infect" else (lab[3] if skill == "immunity" else (lab[4] if skill == "lethality" else (lab[5] if skill == "security_service" else (lab[6] if skill == "science" else (lab[7] if skill == "pathogens" else 0)))))
+        idx = {"infect": 2, "immunity": 3, "lethality": 4, "security_service": 5, "science": 6, "pathogens": 7}
+        current_lvl = lab[idx.get(skill, 2)] if idx.get(skill, 2) < len(lab) else 0
     else:
         is_active = lab.get('is_active', False)
         current_lvl = lab.get(skill, 0)
 
     if not is_active:
-        # Проверяем миссии
         total, done = await get_mission_progress(pool, user_id)
         all_missions = await get_all_missions(pool)
         if done < len(all_missions):
             await msg.reply("❌ Сначала выполните все миссии через <code>миссии ученика</code>!")
             return
-        # Активируем
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
