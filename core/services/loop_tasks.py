@@ -1,3 +1,4 @@
+print("[LOOP] ФАЙЛ ЗАГРУЖЕН!")
 import logging
 import time
 from aiogram import Bot
@@ -140,6 +141,7 @@ async def corporation_stats_refresh(pool: Pool):
 
 
 async def gave_victims_food(pool: Pool):
+    print("[TICK] gave_victims_food вызвана!")
     sql_update_lab = (
         "UPDATE Lab l JOIN ("
         " SELECT v.victims_owner_id, SUM(v.victim_bio_resource_earn) * (1 + COALESCE(l2.rebirth_level, 0) * 0.10) AS bio_resource"
@@ -334,3 +336,19 @@ async def force_tick(pool: Pool):
             await cur.execute(sql_update_lab)
             now_ts = int(datetime.now(timezone.utc).timestamp())
             await cur.execute(sql_del_victims, (now_ts,))
+
+async def loop_tasks(pool: Pool, redis: Redis, bot: Bot):
+    print("[LOOP] loop_tasks запущена!")
+    try:
+        asyncio.create_task(victim_expire_check(pool))
+        asyncio.create_task(victim_expire_kd_check(pool))
+        asyncio.create_task(victim_fever_check(pool))
+        asyncio.create_task(pathogens_refresh_check(pool))
+        asyncio.create_task(corporation_stats_refresh(pool))
+        asyncio.create_task(gave_victims_food(pool))
+        asyncio.create_task(game_mute_check(pool, redis, bot))
+        asyncio.create_task(pet_the_pet_time_check(pool, redis, bot))
+        asyncio.create_task(pet_happy_check(pool))
+        asyncio.create_task(sanitize_pathogens(pool))
+    except Exception as e:
+        print(f"[LOOP] ОШИБКА: {e}")

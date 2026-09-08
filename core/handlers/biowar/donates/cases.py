@@ -1448,7 +1448,7 @@ async def cmd_transfer_menu(call: CallbackQuery):
         [InlineKeyboardButton(text="❌ Отмена", callback_data="close_cases_menu")]
     ])
     await call.message.edit_text(
-        "🔄 <b>Выберите что хотите передать:</b>\n\n⚠️ Комиссия за передачу: <b>500 🪙</b>",
+        "🔄 <b>Выберите что хотите передать:</b>\n\n⚠️ Комиссия за передачу: <b>5,000 🪙</b>",
         reply_markup=kb,
         parse_mode="HTML"
     )
@@ -1460,7 +1460,7 @@ async def transfer_cases_start(call: CallbackQuery, state: FSMContext):
     await state.update_data(transfer_type="cases")
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]])
     await call.message.edit_text(
-        "📦 <b>Передача Кейсов</b>\n\nВведите <b>username</b> или <b>ID</b> получателя:\nПример: <code>@username</code> или <code>123456789</code>\n\n⚠️ Комиссия: <b>500 🪙</b>",
+        "📦 <b>Передача Кейсов</b>\n\nВведите <b>username</b> или <b>ID</b> получателя:\nПример: <code>@username</code> или <code>123456789</code>\n\n⚠️ Комиссия: <b>5,000 🪙</b>",
         reply_markup=kb,
         parse_mode="HTML"
     )
@@ -1472,7 +1472,7 @@ async def transfer_coins_start(call: CallbackQuery, state: FSMContext):
     await state.update_data(transfer_type="coins")
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]])
     await call.message.edit_text(
-        "🪙 <b>Передача Коинов</b>\n\nВведите <b>username</b> или <b>ID</b> получателя:\nПример: <code>@username</code> или <code>123456789</code>\n\n⚠️ Комиссия: <b>500 🪙</b>",
+        "🪙 <b>Передача Коинов</b>\n\nВведите <b>username</b> или <b>ID</b> получателя:\nПример: <code>@username</code> или <code>123456789</code>\n\n⚠️ Комиссия: <b>5,000 🪙</b>",
         reply_markup=kb,
         parse_mode="HTML"
     )
@@ -1625,7 +1625,7 @@ async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
             return
 
         if epicoins < 500:
-            await msg.reply("❌ Недостаточно эпикоинов для комиссии (нужно <b>500 🪙</b>)!", parse_mode="HTML")
+            await msg.reply("❌ Недостаточно эпикоинов для комиссии (нужно <b>5,000 🪙</b>)!", parse_mode="HTML")
             return
 
         await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (target_id,))
@@ -1650,8 +1650,8 @@ async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
 
         epicoins = lab[0] if isinstance(lab, (tuple, list)) else lab.get("epicoins", 0) or 0
 
-        if epicoins < amount + 500:
-            await msg.reply(f"❌ Недостаточно эпикоинов!\n💰 Доступно: <b>{epicoins}</b> 🪙\nНужно: <b>{amount + 500}</b> 🪙 (включая комиссию 500)", parse_mode="HTML")
+        if epicoins < amount + 5000:
+            await msg.reply(f"❌ Недостаточно эпикоинов!\n💰 Доступно: <b>{epicoins}</b> 🪙\nНужно: <b>{amount + 5000}</b> 🪙 (включая комиссию 5,000)", parse_mode="HTML")
             return
 
         await db.execute("SELECT lab_id FROM Lab WHERE lab_id = %s;", (target_id,))
@@ -1660,7 +1660,7 @@ async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
             await msg.reply(f"❌ У пользователя <code>{target_id}</code> нет лаборатории!", parse_mode="HTML")
             return
 
-        await db.execute("UPDATE Lab SET epicoins = epicoins - %s WHERE lab_id = %s;", (amount + 500, user_id))
+        await db.execute("UPDATE Lab SET epicoins = epicoins - %s WHERE lab_id = %s;", (amount + 5000, user_id))
         await db.execute("UPDATE Lab SET epicoins = epicoins + %s WHERE lab_id = %s;", (amount, target_id))
 
     try:
@@ -1674,7 +1674,7 @@ async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
             f"✅ <b>Передача {type_name} выполнена!</b>\n\n"
             f"{emoji} Отправлено: <b>{amount}</b> {type_name.lower()}\n"
             f"📥 Получатель: <code>{target_id}</code> (@{target_username if target_username else 'нет_username'})\n"
-            f"💸 Комиссия: <b>500 🪙</b>\n\n"
+            f"💸 Комиссия: <b>5,000 🪙</b>\n\n"
             f"📎 <a href='{msg_link}'>Ссылка на сообщение</a>",
             parse_mode="HTML",
             disable_web_page_preview=True
@@ -1699,7 +1699,7 @@ async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
                 f"📨 <b>Вы передали {type_name}</b>\n\n"
                 f"{emoji} Передано: <b>{amount}</b> {type_name.lower()}\n"
                 f"📥 Получатель: <code>{target_id}</code> (@{target_username if target_username else 'нет_username'})\n"
-                f"💸 Комиссия: <b>500 🪙</b>\n\n"
+                f"💸 Комиссия: <b>5,000 🪙</b>\n\n"
                 f"📎 <a href='{msg_link}'>Ссылка на сообщение</a>",
                 parse_mode="HTML",
                 disable_web_page_preview=True

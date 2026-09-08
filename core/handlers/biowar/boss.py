@@ -9,7 +9,7 @@ from redis.asyncio import Redis
 router = Router()
 
 BOSS_STICKER = "CAACAgIAAxkBAAER3bRqnrlPKu8usp1KpsKlwSmDa0twSQACNwMAAu7EoQpGEtmG9sGJBz0E"
-LOG_CHAT = -1003688648228
+LOG_CHAT = -1004335676077
 
 REWARDS = {
     1: {"place": "🥇 1 место", "epicoins": 1000, "cases": 3, "exp": 10000},
@@ -95,8 +95,10 @@ async def get_top_winners(pool: Pool):
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
-                SELECT user_id, wins, total_damage
+                SELECT user_id, COUNT(*) as wins, SUM(total_damage) as total_damage
                 FROM BossWinners
+                WHERE place = 1
+                GROUP BY user_id
                 ORDER BY wins DESC
                 LIMIT 5
             """)
@@ -131,18 +133,38 @@ def format_time(seconds: int):
     return f"{secs}с"
 
 async def spawn_boss(pool: Pool, redis: Redis):
-    await redis.set("boss:active", "1")
-    await redis.set("boss:id", 1)
+    # Очистка старых данных
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("DELETE FROM BossAttacks;")
+            await cur.execute("DELETE FROM Boss WHERE is_active = 0;")
+    
+    await redis.delete("boss:active", "boss:hp", "boss:max_hp", "boss:end_time", "boss:id")
+    
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT COUNT(*) FROM Lab")
             count = await cur.fetchone()
             players = count[0] if count else 100
-    max_hp = players * 20
+    
+    max_hp = players * 50
     await redis.set("boss:hp", max_hp)
     await redis.set("boss:max_hp", max_hp)
     end_time = int(time.time()) + 3600
     await redis.set("boss:end_time", end_time)
+    
+    # Создаём босса в БД
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("""
+                INSERT INTO Boss (boss_name, max_hp, current_hp, spawn_time, end_time, is_active)
+                VALUES (%s, %s, %s, NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR), TRUE)
+            """, ("Эпидемический Босс", max_hp, max_hp))
+            boss_id = cur.lastrowid
+    
+    await redis.set("boss:active", "1")
+    await redis.set("boss:id", boss_id)
+    
     return max_hp
 
 async def send_boss_menu(target, redis: Redis, pool: Pool, is_callback: bool = False):
@@ -181,7 +203,13 @@ async def send_boss_menu(target, redis: Redis, pool: Pool, is_callback: bool = F
     ])
 
     if is_callback:
-        await target.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        try:
+            await target.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception as e:
+            if "message is not modified" in str(e):
+                pass
+            else:
+                raise e
     else:
         await target.reply(text, reply_markup=kb, parse_mode="HTML")
 
@@ -218,11 +246,22 @@ async def start_boss(msg: Message, **kwargs):
             await msg.reply("❌ Босс уже активен!")
             return
     max_hp = await spawn_boss(pool, redis)
+    
+    # Уведомление в канал
+    try:
+        await msg.bot.send_message(
+            -1004335676077,
+            f"🧟 <b>Босс создан!</b>\n\n❤️ HP: <b>{max_hp:,}</b>\n⏳ Время: 1 час\n⚔️ Атакуйте через <code>/boss</code>!\n🏆 Топ-3 получат награды!",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"[BOSS CHANNEL ERROR] {e}")
+    
     await msg.reply(
         f"🧟 <b>Босс создан!</b>\n\n❤️ HP: <b>{max_hp:,}</b>\n⏳ Время: 1 час\n⏱️ КД: 1 минута\n\n"
         f"🏆 <b>Награды:</b>\n🥇 1 место — 10 000 опыта + 3 кейса + 1 000 🪙\n"
         f"🥈 2 место — 3 000 опыта + 1 кейс + 500 🪙\n🥉 3 место — 1 000 опыта + 300 🪙\n\n"
-        f"⚔️ <b>Урон:</b> БЕЗОПАСНОСТЬ (×3) + ЗАРАЗНОСТЬ (×1) + ЛЕТАЛЬНОСТЬ (×2)\n🎲 Рандом: ±50%\n\n"
+        f"⚔️ <b>Урон:</b> БЕЗОПАСНОСТЬ (×3) + ЛЕТАЛЬНОСТЬ (×2)\n🎲 Рандом: ±50%\n\n"
         f"Атакуйте через <code>/boss</code>!",
         parse_mode="HTML"
     )
@@ -266,9 +305,14 @@ async def boss_attack(call: CallbackQuery, **kwargs):
     infect = lab.get("infect", 0)
     lethality = lab.get("lethality", 0)
 
-    base_damage = security * 3 + infect * 1 + lethality * 2
-    base_damage = max(5, base_damage)
-    damage = int(base_damage * random.uniform(0.5, 1.5))
+    base = security * 3 + lethality * 2
+    if base > 500:
+        damage = 500 + (base - 500) ** 0.6 * 10
+    else:
+        damage = base
+    damage = min(damage, 3000)
+    damage = int(damage * random.uniform(0.25, 1.50))
+    damage = max(1, damage)
     damage = max(1, damage)
 
     new_hp = max(0, hp - damage)
@@ -280,6 +324,7 @@ async def boss_attack(call: CallbackQuery, **kwargs):
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("INSERT INTO BossAttacks (boss_id, user_id, damage) VALUES (%s, %s, %s)", (boss_id, user_id, damage))
+        print(f"[BOSS_ATTACK] Записано: {user_id} -> {damage} урона")
     except Exception as e:
         print(f"[BOSS ATTACK ERROR] {e}")
     
@@ -308,7 +353,7 @@ async def boss_attack(call: CallbackQuery, **kwargs):
 
     await send_boss_menu(call.message, redis, pool, is_callback=True)
 
-# ===== ВЫДАЧА НАГРАД =====
+# ===== НАГРАДЫ =====
 async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: int):
     all_attackers = await get_all_attackers(pool, boss_id)
     if not all_attackers:
@@ -322,7 +367,11 @@ async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: i
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    UPDATE Lab SET epicoins = epicoins + %s, case1 = case1 + %s, bio_experience = bio_experience + %s WHERE lab_id = %s
+                    UPDATE Lab 
+                    SET epicoins = epicoins + %s, 
+                        case1 = case1 + %s, 
+                        bio_experience = bio_experience + %s 
+                    WHERE lab_id = %s
                 """, (reward["epicoins"], reward["cases"], reward["exp"], user_id))
         try:
             await call.bot.send_message(
@@ -338,8 +387,8 @@ async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: i
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
-                    INSERT INTO BossWinners (user_id, wins, total_damage)
-                    VALUES (%s, 1, %s)
+                    INSERT INTO BossWinners (user_id, wins, total_damage, place)
+                    VALUES (%s, 1, %s, 1)
                     ON DUPLICATE KEY UPDATE wins = wins + 1, total_damage = total_damage + %s
                 """, (user_id, damage, damage))
 
@@ -353,6 +402,35 @@ async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: i
         await call.bot.send_message(LOG_CHAT, log_text, parse_mode="HTML")
     except:
         pass
+
+# ===== НАКАЗАНИЕ =====
+async def punish_players(pool: Pool, boss_id: int):
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT DISTINCT user_id FROM BossAttacks WHERE boss_id = %s", (boss_id,))
+            attackers = await cur.fetchall()
+            count = 0
+            for row in attackers:
+                user_id = row[0] if isinstance(row, (tuple, list)) else row.get('user_id')
+                await cur.execute("UPDATE Lab SET bio_resource = GREATEST(0, bio_resource - 500000) WHERE lab_id = %s", (user_id,))
+                count += 1
+            return count
+
+# ===== ЗАВЕРШЕНИЕ БОССА =====
+async def end_boss(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: int, hp: int):
+    if hp <= 0:
+        await give_rewards(call, pool, redis, boss_id)
+    else:
+        count = await punish_players(pool, boss_id)
+        await call.bot.send_message(
+            -1002547774320,
+            f"💀 <b>Босс выжил!</b>\n\nОсталось HP: {hp:,}\n\nНаказано игроков: <b>{count}</b>\nКаждый потерял <b>500,000 🧬</b> био-ресурсов!",
+            parse_mode="HTML"
+        )
+        try:
+            await call.bot.send_message(LOG_CHAT, f"💀 Босс выжил! Наказано {count} игроков.", parse_mode="HTML")
+        except:
+            pass
 
 # ===== ОСТАЛЬНЫЕ CALLBACK =====
 @router.callback_query(F.data == "boss_refresh")
