@@ -145,7 +145,7 @@ async def cmd_remove_dov(msg: Message):
             break
     
     if not target_username:
-        await msg.answer(f"❌ Юзербот с префиксом <code>{prefix}</code> не найден")
+        pass  # уведомление отключено
         return
     
     # Если реплай - удаляем отправителя
@@ -253,7 +253,7 @@ async def cmd_infect_by_prefix(msg: Message):
             break
     
     if not target_username:
-        await msg.answer(f"❌ Юзербот с префиксом <code>{prefix}</code> не найден")
+        pass  # уведомление отключено
         return
     
     # Отправляем заражение
