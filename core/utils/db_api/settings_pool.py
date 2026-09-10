@@ -79,3 +79,6 @@ async def scheduler_tasks(pool, redis, bot, scheduler):
     from core.services.scheduler_tasks import auto_start_boss
     scheduler.add_job(auto_start_boss, 'cron', hour=20, minute=0, args=(pool, redis, bot))
     print("[SCHEDULER] Автозапуск босса запланирован на 20:00 МСК")
+
+# ===== ПРОВЕРКА КРЕДИТОВ ДОБАВЛЕНА В loop_tasks =====
+# check_expired_credits запускается каждые 24 часа

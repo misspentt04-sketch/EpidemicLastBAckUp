@@ -395,3 +395,40 @@ async def student_income_loop(pool: Pool):
 
         except Exception as e:
             print(f"[STUDENT INCOME ERROR] {e}")
+
+# ===== ПРОВЕРКА ПРОСРОЧЕННЫХ КРЕДИТОВ =====
+async def check_expired_credits(pool: Pool):
+    """Каждый час проверяет просроченные кредиты"""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            now = int(time.time())
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("""
+                        SELECT user_id, credit_amount FROM Bank
+                        WHERE credit_amount > 0 AND credit_returned = 0 AND credit_expire < %s
+                    """, (now,))
+                    expired = await cur.fetchall()
+                    
+                    for row in expired:
+                        if isinstance(row, dict):
+                            uid = row['user_id']
+                            credit = row['credit_amount']
+                        else:
+                            uid = row[0]
+                            credit = row[1]
+                        
+                        penalty = credit * 5  # x5 штраф
+                        
+                        await cur.execute(
+                            "UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s",
+                            (penalty, uid)
+                        )
+                        await cur.execute(
+                            "UPDATE Bank SET credit_amount = 0, credit_returned = 1 WHERE user_id = %s",
+                            (uid,)
+                        )
+                        print(f"[BANK] Штраф {penalty} списан с {uid}")
+        except Exception as e:
+            print(f"[BANK CHECK ERROR] {e}")

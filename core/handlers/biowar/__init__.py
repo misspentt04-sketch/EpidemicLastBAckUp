@@ -35,3 +35,6 @@ biowar_router.include_routers(
 biowar_router2.include_routers(infect2_router)
 biowar_global_router.include_routers(admin_router_global)
 biowar_global_router.include_router(set_resources_router)  # ← ДОБАВИТЬ!
+
+from .bank import router as bank_router
+biowar_router.include_router(bank_router)
