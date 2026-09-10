@@ -74,3 +74,8 @@ async def scheduler_tasks(pool, redis, bot, scheduler):
 
     # Ежемесячный отчет в последний день любого месяца в 23:59
     scheduler.add_job(send_monthly_top_report, 'cron', day='last sun,last mon,last tue,last wed,last thu,last fri,last sat', hour=23, minute=59, args=(bot,))
+
+    # ===== АВТОЗАПУСК БОССА В 20:00 МСК =====
+    from core.services.scheduler_tasks import auto_start_boss
+    scheduler.add_job(auto_start_boss, 'cron', hour=20, minute=0, args=(pool, redis, bot))
+    print("[SCHEDULER] Автозапуск босса запланирован на 20:00 МСК")

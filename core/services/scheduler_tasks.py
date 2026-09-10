@@ -1,5 +1,6 @@
 import logging
 import random
+from redis.asyncio import Redis
 from datetime import datetime, timedelta
 from aiogram import Bot
 from asyncmy.pool import Pool
@@ -51,3 +52,35 @@ async def send_monthly_top_report(bot: Bot):
         print("[SCHEDULER] Ежемесячный отчёт отправлен")
     except Exception as e:
         print(f"[SCHEDULER] Ошибка monthly: {e}")
+
+# ===== АВТОЗАПУСК БОССА В 20:00 МСК =====
+async def auto_start_boss(pool: Pool, redis: Redis, bot: Bot):
+    """Автоматический запуск босса каждый день в 20:00"""
+    try:
+        # Проверяем, активен ли босс
+        is_active = await redis.get("boss:active")
+        if is_active:
+            print("[BOSS] Босс уже активен, пропускаем запуск")
+            return
+        
+        # Импортируем функцию spawn_boss из boss.py
+        from core.handlers.biowar.boss import spawn_boss
+        
+        # Запускаем босса
+        max_hp = await spawn_boss(pool, redis)
+        
+        # Уведомление в канал
+        await bot.send_message(
+            -1004335676077,
+            f"🧟 <b>Босс создан!</b>\n\n"
+            f"❤️ HP: <b>{max_hp:,}</b>\n"
+            f"⏳ Время: 1 час\n"
+            f"⚔️ Атакуйте через <code>/boss</code>!\n"
+            f"🏆 Топ-3 получат награды!",
+            parse_mode="HTML"
+        )
+        
+        print(f"[BOSS] Босс автоматически создан в 20:00! HP: {max_hp:,}")
+        
+    except Exception as e:
+        print(f"[BOSS AUTO START ERROR] {e}")

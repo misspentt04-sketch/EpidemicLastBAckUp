@@ -1006,10 +1006,24 @@ class RequestsRepoBiowar:
             WHERE l1.lab_id = %s AND l2.lab_id = %s;
         """
         await self.cur.execute(swap_sql, (from_id, to_id))
+        # 3. Обмен жертвами между лабораториями
 
-        # 3. Перенос жертв в таблице Victims
-        await self.cur.execute("UPDATE Victims SET victims_owner_id = -999999 WHERE victims_owner_id = %s;", (from_id,))
-        await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = %s;", (from_id, to_id))
+        await self.cur.execute("SET FOREIGN_KEY_CHECKS = 0;")
+
+        try:
+
+            temp_id = -abs(from_id)
+
+            await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = %s;", (temp_id, from_id))
+
+            await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = %s;", (from_id, to_id))
+
+            await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = %s;", (to_id, temp_id))
+
+        finally:
+
+            await self.cur.execute("SET FOREIGN_KEY_CHECKS = 1;")
+
         await self.cur.execute("UPDATE Victims SET victims_owner_id = %s WHERE victims_owner_id = -999999;", (to_id,))
 
         # 4. Обновляем имя патогена в таблице Victims
