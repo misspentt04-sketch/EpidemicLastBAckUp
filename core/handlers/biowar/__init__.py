@@ -38,3 +38,6 @@ biowar_global_router.include_router(set_resources_router)  # ← ДОБАВИТ�
 
 from .bank import router as bank_router
 biowar_router.include_router(bank_router)
+
+from .casino import router as casino_router
+biowar_router.include_router(casino_router)
