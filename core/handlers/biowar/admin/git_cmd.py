@@ -24,22 +24,22 @@ async def cmd_git(msg: Message):
             await msg.reply("✅ Нет изменений для коммита!")
             return
         
-        # Формируем список файлов
         files = []
         for line in changed.split("\n"):
             if line.strip():
                 filename = line.strip().split(maxsplit=1)[-1]
                 files.append(filename)
         
-        # Команды для копирования (без HTML)
         git_commands = "git add " + " ".join(files) + "\n"
         git_commands += 'git commit -m "update: auto commit"\n'
         git_commands += "git push origin main"
         
-        # Отправляем как обычный текст (можно копировать)
         await msg.reply(
-            f"📦 Изменённые файлы:\n{changed}\n\n"
-            f"📋 Команды:\n{git_commands}"
+            f"📦 <b>Изменённые файлы:</b>\n"
+            f"<blockquote>{changed}</blockquote>\n\n"
+            f"📋 <b>Команды:</b>\n"
+            f"<blockquote>{git_commands}</blockquote>",
+            parse_mode="HTML"
         )
         
     except Exception as e:
@@ -50,25 +50,27 @@ async def cmd_git(msg: Message):
 async def cmd_git_push(msg: Message):
     if msg.from_user.id != YOUR_ID:
         return
-    
+
     try:
         subprocess.run(["git", "add", "."], capture_output=True, text=True, cwd=REPO_PATH)
-        
+
         commit = subprocess.run(
             ["git", "commit", "-m", "update: auto commit"],
             capture_output=True, text=True, cwd=REPO_PATH
         )
-        
+
         push = subprocess.run(
             ["git", "push", "origin", "main"],
             capture_output=True, text=True, cwd=REPO_PATH
         )
-        
+
+        result = f"Commit:\n{commit.stdout}\n\nPush:\n{push.stdout or push.stderr}"
+
         await msg.reply(
-            f"✅ Git push выполнен!\n\n"
-            f"Commit:\n{commit.stdout[-500:]}\n\n"
-            f"Push:\n{push.stdout[-500:] or push.stderr[-500:]}"
+            f"✅ <b>Git push выполнен!</b>\n\n"
+            f"<blockquote>{result[-1000:]}</blockquote>",
+            parse_mode="HTML"
         )
-        
+
     except Exception as e:
         await msg.reply(f"❌ Ошибка: {e}")
