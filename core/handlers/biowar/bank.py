@@ -11,9 +11,10 @@ router = Router()
 # ===== НАСТРОЙКИ БАНКА =====
 DEPOSIT_DAILY = 15.0
 DEPOSIT_HOURLY = DEPOSIT_DAILY / 24
+DEPOSIT_MIN_TIME = 3600
 
-CREDIT_BASE = 50.0
-CREDIT_DAILY = 50.0
+CREDIT_BASE = 25.0
+CREDIT_DAILY = 25.0
 CREDIT_HOURLY = CREDIT_DAILY / 24
 
 CREDIT_TERM = 7 * 86400
@@ -111,10 +112,20 @@ async def send_bank_menu(target, pool: Pool, user_id: int, is_callback: bool = F
         days = deposit_time // 86400
         hours = (deposit_time % 86400) // 3600
         income = calculate_deposit_income(deposit_amount, deposit_start)
+        
+        if deposit_time < DEPOSIT_MIN_TIME:
+            time_left = DEPOSIT_MIN_TIME - deposit_time
+            mins = time_left // 60
+            secs = time_left % 60
+            can_withdraw = f"⏳ Снятие через: {mins}м {secs}с"
+        else:
+            can_withdraw = "✅ Можно снять"
+        
         deposit_text = (
             f"💰 <b>Депозит:</b> {format_money(deposit_amount)} 🧬\n"
             f"📈 <b>Доход:</b> +{format_money(income)} 🧬\n"
             f"⏳ <b>Срок:</b> {days}д {hours}ч\n"
+            f"{can_withdraw}\n"
         )
     else:
         deposit_text = "💰 <b>Депозит:</b> пусто\n"
@@ -153,6 +164,7 @@ async def send_bank_menu(target, pool: Pool, user_id: int, is_callback: bool = F
         f"└ Всего взято в кредит: {format_money(total_borrowed)} 🧬\n\n"
         f"📋 <b>Условия:</b>\n"
         f"├ Депозит: +{DEPOSIT_DAILY}% в день ({DEPOSIT_HOURLY:.3f}%/час)\n"
+        f"├ Мин. срок депозита: 1 час\n"
         f"├ Кредит: +{CREDIT_BASE}% + растёт на {CREDIT_HOURLY:.3f}%/час\n"
         f"├ Максимум: ×10 от дохода\n"
         f"├ Лимит: после возврата\n"
@@ -210,7 +222,12 @@ async def bank_deposit_process(msg: Message, state: FSMContext, pool: Pool):
                     WHERE user_id = %s
                 """, (amount, now, amount, msg.from_user.id))
 
-        await msg.reply(f"✅ Депозит {format_money(amount)} 🧬 оформлен!\n📈 Доход: +{DEPOSIT_DAILY}% в день", parse_mode="HTML")
+        await msg.reply(
+            f"✅ Депозит {format_money(amount)} 🧬 оформлен!\n"
+            f"📈 Доход: +{DEPOSIT_DAILY}% в день\n"
+            f"⏳ Снять можно через 1 час",
+            parse_mode="HTML"
+        )
     except ValueError:
         await msg.reply("❌ Введите число!")
 
@@ -332,6 +349,19 @@ async def bank_withdraw(call: CallbackQuery, pool: Pool):
 
     if deposit_amount <= 0:
         await call.answer("❌ У вас нет депозита!", show_alert=True)
+        return
+
+    # Проверка: прошёл ли час
+    now = int(time.time())
+    deposit_time = now - deposit_start
+    if deposit_time < DEPOSIT_MIN_TIME:
+        time_left = DEPOSIT_MIN_TIME - deposit_time
+        minutes = time_left // 60
+        seconds = time_left % 60
+        await call.answer(
+            f"⏳ Депозит можно снять через {minutes} мин {seconds} сек!",
+            show_alert=True
+        )
         return
 
     income = calculate_deposit_income(deposit_amount, deposit_start)
