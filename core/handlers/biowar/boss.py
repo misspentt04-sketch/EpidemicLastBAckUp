@@ -210,8 +210,8 @@ async def send_boss_menu(target, redis: Redis, pool: Pool, is_callback: bool = F
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⚔️ Атаковать", callback_data="boss_attack"), InlineKeyboardButton(text="🏆 Топ урона", callback_data="boss_top_damage")],
-        [InlineKeyboardButton(text="👑 Топ победителей", callback_data="boss_top_winners"), InlineKeyboardButton(text="🔄 Обновить", callback_data="boss_refresh")]
+        [InlineKeyboardButton(text="⚔️ Атаковать", callback_data="boss_attack")],
+        [InlineKeyboardButton(text="🔄 Обновить", callback_data="boss_refresh")]
     ])
 
     if is_callback:
@@ -491,3 +491,20 @@ async def end_boss_cmd(msg: Message, **kwargs):
             f"Босс уже был мёртв, наказание не применялось.",
             parse_mode="HTML"
         )
+
+# ===== ОБНОВИТЬ МЕНЮ БОССА =====
+@router.callback_query(F.data == "boss_refresh")
+async def boss_refresh(call: CallbackQuery, **kwargs):
+    redis = kwargs.get("redis")
+    pool = kwargs.get("pool")
+    if not redis or not pool:
+        await call.answer("❌ Ошибка сервисов!", show_alert=True)
+        return
+    try:
+        await send_boss_menu(call.message, redis, pool, is_callback=True)
+        await call.answer("🔄 Обновлено!")
+    except Exception as e:
+        if "message is not modified" in str(e):
+            await call.answer("🔄 Данные не изменились")
+        else:
+            await call.answer(f"❌ Ошибка: {e}", show_alert=True)
