@@ -44,7 +44,6 @@ from core.utils.commands import set_commands, del_commands
 from core.utils.db_api.create_database import db_settings_up
 from core.utils.db_api.redis_initialize import redis_initialize
 
-from core.userbot import router as userbot_router
 from core.handlers import (
     biowar_router,
     biowar_router2,
@@ -93,8 +92,6 @@ async def main():
                                "(%(filename)s).%(funcName)s(%(lineno)d) - %(message)s")
 
     bot = Bot(settings.bots.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    from core.userbot.userbot_manager import set_bot
-    set_bot(bot)
     redis_db = Redis(host=settings.redis.ip, port=6379, db=0, decode_responses=True)
     storage = RedisStorage(redis=redis_db)
 
@@ -161,18 +158,22 @@ async def main():
             bio_match = re.search(r'☣️\s+\+([\d,]+)\s+био-опыта', text)
             bio_earn = int(bio_match.group(1).replace(',', '')) if bio_match else 0
 
-            from core.userbot.chk_handler import get_or_create_client, get_ordered_sessions
+            # Получаем username из БД
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT username FROM Users WHERE id = %s", (attacker_id,))
+                    row = await cur.fetchone()
+                    attacker_username = row[0] if row and row[0] else str(attacker_id)
 
-            attacker_username = None
-            for username in get_ordered_sessions():
-                client = await get_or_create_client(username)
-                if client:
-                    me = await client.get_me()
-                    if me.id == attacker_id:
-                        attacker_username = username
-                        break
 
-            if not attacker_username:
+
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT username FROM Users WHERE id = %s", (attacker_id,))
+                    row = await cur.fetchone()
+                    attacker_username = row[0] if row and row[0] else str(attacker_id)
+
+
                 return
 
             db_path = Path("data/victims.db")
@@ -194,7 +195,6 @@ async def main():
 
     dp.include_routers(
         rebirth_router,
-        userbot_router,
         admin_theme_router,
         themes_router,
         restart_router,
@@ -220,8 +220,6 @@ async def main():
     print("Started successfully!")
 
     # Запускаем слушатель заражений
-    from core.userbot.chk_handler import start_victim_listener
-    await start_victim_listener()
 
     # Проверка: если был /restart, отправляем красивый отчёт
     if os.path.exists(RESTART_FILE):

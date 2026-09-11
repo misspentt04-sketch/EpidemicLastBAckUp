@@ -208,6 +208,22 @@ async def bank_deposit_process(msg: Message, state: FSMContext, pool: Pool):
             await msg.reply("❌ Сумма должна быть больше 0!")
             return
 
+        # ===== ПРОВЕРКА: ЕСТЬ ЛИ УЖЕ АКТИВНЫЙ ДЕПОЗИТ =====
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT deposit_amount FROM Bank WHERE user_id = %s", (msg.from_user.id,))
+                row = await cur.fetchone()
+                current_deposit = row[0] if row else 0
+        
+        if current_deposit and current_deposit > 0:
+            await msg.reply(
+                f"❌ У вас уже есть активный депозит: <b>{format_money(current_deposit)} 🧬</b>\n"
+                f"📤 Сначала снимите его, потом кладите новый.",
+                parse_mode="HTML"
+            )
+            return
+        # =================================================
+
         balance = await get_balance(pool, msg.from_user.id)
         if balance < amount:
             await msg.reply(f"❌ Недостаточно средств! У вас {format_money(balance)} 🧬")
