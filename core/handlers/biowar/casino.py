@@ -23,14 +23,14 @@ MAX_BET_EPICOINS = 10_000_000
 
 # ===== ШАНСЫ =====
 CHANCES_RESOURCE = [
-    {"chance": 40.0,  "mult": 0,    "name": "💀 Проигрыш",   "emoji": "💀"},
-    {"chance": 5.5,   "mult": 0.25, "name": "💔 Обидно",     "emoji": "💔"},
-    {"chance": 12.0,  "mult": 0.75, "name": "😢 Мало",       "emoji": "😢"},
-    {"chance": 20.0,  "mult": 1,    "name": "💰 Возврат",    "emoji": "💰"},
-    {"chance": 12.0,  "mult": 1.5,  "name": "✨ Хорошо",     "emoji": "✨"},
+    {"chance": 38.0,  "mult": 0,    "name": "💀 Проигрыш",   "emoji": "💀"},
+    {"chance": 7.0,   "mult": 0.25, "name": "💔 Обидно",     "emoji": "💔"},
+    {"chance": 10.0,  "mult": 0.5,  "name": "😢 Мало",       "emoji": "😢"},
+    {"chance": 15.0,  "mult": 1,    "name": "💰 Возврат",    "emoji": "💰"},
+    {"chance": 15.0,  "mult": 1.5,  "name": "✨ Хорошо",     "emoji": "✨"},
     {"chance": 8.0,   "mult": 3,    "name": "⭐ Удача",      "emoji": "⭐"},
-    {"chance": 2.0,   "mult": 5,    "name": "🔥 Огонь",      "emoji": "🔥"},
-    {"chance": 0.5,   "mult": 20,   "name": "🎉 Джекпот",    "emoji": "🎉"},
+    {"chance": 4.0,   "mult": 5,    "name": "🔥 Огонь",      "emoji": "🔥"},
+    {"chance": 3.0,   "mult": 10,   "name": "🎉 Джекпот",    "emoji": "🎉"},
 ]
 
 CHANCES_CASE = [
@@ -121,16 +121,11 @@ async def send_casino_menu(target, pool: Pool, user_id: int, is_callback: bool =
 # ===== КОМАНДА КАЗИНО (ТОЛЬКО ДЛЯ ТЕБЯ) =====
 @router.message(F.text.lower().in_(["казино", "/casino"]))
 async def cmd_casino(msg: Message, pool: Pool):
-    if msg.from_user.id != YOUR_ID:
-        return
     await send_casino_menu(msg, pool, msg.from_user.id, is_callback=False)
 
 # ===== ВЫБОР ТИПА СТАВКИ =====
 @router.callback_query(F.data.startswith("casino_bet:"))
 async def casino_bet_start(call: CallbackQuery, state: FSMContext, pool: Pool):
-    if call.from_user.id != YOUR_ID:
-        await call.answer("❌ Доступ закрыт!", show_alert=True)
-        return
     
     bet_type = call.data.split(":")[1]
     user_id = call.from_user.id
@@ -179,9 +174,6 @@ async def casino_bet_start(call: CallbackQuery, state: FSMContext, pool: Pool):
 # ===== ОБРАБОТКА СТАВКИ =====
 @router.message(CasinoStates.waiting_bet_amount)
 async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
-    if msg.from_user.id != YOUR_ID:
-        await state.clear()
-        return
     
     data = await state.get_data()
     bet_type = data.get('bet_type', 'resource')
@@ -291,17 +283,18 @@ async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
             parse_mode="HTML"
         )
         
-        spin_count = 5
+        from aiogram.exceptions import TelegramRetryAfter, TelegramBadRequest
+
+        spin_count = 4
         for i in range(spin_count):
-            delay = 0.5 + (i / spin_count) * 0.3
-            await asyncio.sleep(delay)
-            
+            await asyncio.sleep(0.6)
+
             e1 = random.choice(SLOT_EMOJIS)
             e2 = random.choice(SLOT_EMOJIS)
             e3 = random.choice(SLOT_EMOJIS)
             e4 = random.choice(SLOT_EMOJIS)
             e5 = random.choice(SLOT_EMOJIS)
-            
+
             try:
                 await anim_msg.edit_text(
                     f"🎰 <b>Крутим барабан...</b>\n\n"
@@ -311,6 +304,10 @@ async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
                     f"💰 Ставка: {format_money(amount)} {unit}",
                     parse_mode="HTML"
                 )
+            except TelegramRetryAfter as e:
+                await asyncio.sleep(e.retry_after)
+            except TelegramBadRequest:
+                pass
             except Exception:
                 pass
         
@@ -364,21 +361,22 @@ async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
             )
         
         await anim_msg.edit_text(
-            result_text + "\n\n🔄 Нажмите «Обновить» чтобы сыграть ещё!",
+            result_text + "\n\n🎰 Нажмите, чтобы сыграть ещё!",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🎰 В казино", callback_data="casino_refresh")],
+                [InlineKeyboardButton(text="🎰 Играть снова", callback_data="casino_again")],
             ])
         )
     
     except ValueError:
         await msg.reply("❌ Введите число!")
-
-# ===== ОБНОВИТЬ =====
-@router.callback_query(F.data == "casino_refresh")
-async def casino_refresh(call: CallbackQuery, pool: Pool):
-    if call.from_user.id != YOUR_ID:
-        await call.answer("❌ Доступ закрыт!", show_alert=True)
         return
-    await send_casino_menu(call.message, pool, call.from_user.id, is_callback=True)
-    await call.answer("🔄 Обновлено!")
+
+    await call.answer("🎰 Готово!")
+
+
+# ===== ИГРАТЬ СНОВА (шлёт НОВОЕ сообщение) =====
+@router.callback_query(F.data == "casino_again")
+async def casino_again(call: CallbackQuery, pool: Pool):
+    await send_casino_menu(call.message, pool, call.from_user.id, is_callback=False)
+    await call.answer("🎰 Новая игра!")

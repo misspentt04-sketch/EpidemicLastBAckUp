@@ -84,3 +84,83 @@ async def auto_start_boss(pool: Pool, redis: Redis, bot: Bot):
         
     except Exception as e:
         print(f"[BOSS AUTO START ERROR] {e}")
+
+
+# ===== ЗАВЕРШЕНИЕ БОССА ПО ВРЕМЕНИ =====
+async def finish_boss(pool: Pool, redis: Redis, bot: Bot):
+    """Завершение босса: награды или наказание"""
+    try:
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    SELECT id, current_hp, max_hp FROM Boss
+                    WHERE is_active = 1 AND end_time < NOW()
+                    ORDER BY id DESC LIMIT 1
+                """)
+                boss = await cur.fetchone()
+                if not boss:
+                    return
+
+                boss_id, current_hp, max_hp = boss
+
+                await cur.execute("""
+                    SELECT user_id, SUM(damage) as total_damage
+                    FROM BossAttacks
+                    WHERE boss_id = %s
+                    GROUP BY user_id
+                    ORDER BY total_damage DESC
+                    LIMIT 3
+                """, (boss_id,))
+                top_3 = await cur.fetchall()
+
+                REWARDS = {
+                    1: {"epicoins": 1000, "cases": 3, "exp": 10000},
+                    2: {"epicoins": 500, "cases": 1, "exp": 3000},
+                    3: {"epicoins": 300, "cases": 0, "exp": 1000},
+                }
+
+                if current_hp <= 0 and top_3:
+                    for i, (user_id, damage) in enumerate(top_3, 1):
+                        reward = REWARDS.get(i)
+                        if not reward:
+                            continue
+                        await cur.execute("""
+                            UPDATE Lab
+                            SET epicoins = epicoins + %s,
+                                case1 = case1 + %s,
+                                bio_experience = bio_experience + %s
+                            WHERE lab_id = %s
+                        """, (reward["epicoins"], reward["cases"], reward["exp"], user_id))
+                        await cur.execute("""
+                            INSERT INTO BossWinners (user_id, wins, total_damage, place)
+                            VALUES (%s, 1, %s, %s)
+                            ON DUPLICATE KEY UPDATE wins = wins + 1, total_damage = total_damage + %s
+                        """, (user_id, damage, i, damage))
+                    text = "🎉 <b>Босс повержен!</b>\n\n"
+                    for i, (uid, dmg) in enumerate(top_3, 1):
+                        text += f"{i}. <code>{uid}</code> — {dmg:,} урона\n"
+                    try:
+                        await bot.send_message(-1004335676077, text, parse_mode="HTML")
+                    except Exception as e:
+                        print(f"[BOSS FINISH SEND ERROR] {e}")
+                else:
+                    await cur.execute("UPDATE Lab SET bio_resource = GREATEST(0, bio_resource - 500000)")
+                    await cur.execute("SELECT COUNT(*) FROM Lab")
+                    row = await cur.fetchone()
+                    count = row[0] if row else 0
+                    text = (
+                        f"💀 <b>Босс выжил!</b>\n\n"
+                        f"Осталось HP: {current_hp:,}/{max_hp:,}\n"
+                        f"Наказано: {count} игроков\n"
+                        f"Каждый потерял 500,000 🧬"
+                    )
+                    try:
+                        await bot.send_message(-1004335676077, text, parse_mode="HTML")
+                    except Exception as e:
+                        print(f"[BOSS FINISH SEND ERROR] {e}")
+
+                await cur.execute("UPDATE Boss SET is_active = 0 WHERE id = %s", (boss_id,))
+                await redis.delete("boss:active", "boss:hp", "boss:max_hp", "boss:end_time", "boss:id")
+                print(f"[BOSS] Босс {boss_id} завершён. HP={current_hp}, top={len(top_3)}")
+    except Exception as e:
+        print(f"[BOSS FINISH ERROR] {e}")

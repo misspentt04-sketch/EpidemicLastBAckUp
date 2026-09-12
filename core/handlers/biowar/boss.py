@@ -336,6 +336,7 @@ async def boss_attack(call: CallbackQuery, **kwargs):
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("INSERT INTO BossAttacks (boss_id, user_id, damage) VALUES (%s, %s, %s)", (boss_id, user_id, damage))
+                await cur.execute("UPDATE Boss SET current_hp = GREATEST(0, current_hp - %s) WHERE id = %s", (damage, boss_id))
         print(f"[BOSS_ATTACK] Записано: {user_id} -> {damage} урона")
     except Exception as e:
         print(f"[BOSS ATTACK ERROR] {e}")
@@ -435,7 +436,7 @@ async def end_boss(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: int, 
     else:
         count = await punish_players(pool, boss_id)
         await call.bot.send_message(
-            -1002547774320,
+            LOG_CHAT,
             f"💀 <b>Босс выжил!</b>\n\nОсталось HP: {hp:,}\n\nНаказано игроков: <b>{count}</b>\nКаждый потерял <b>500,000 🧬</b> био-ресурсов!",
             parse_mode="HTML"
         )
