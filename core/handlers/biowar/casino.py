@@ -174,6 +174,12 @@ async def casino_bet_start(call: CallbackQuery, state: FSMContext, pool: Pool):
 # ===== ОБРАБОТКА СТАВКИ =====
 @router.message(CasinoStates.waiting_bet_amount)
 async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
+    # ===== ОТМЕНА =====
+    if msg.text and msg.text.strip().lower() in ("отмена", "cancel", "стоп", "exit", "выход"):
+        await state.clear()
+        await msg.reply("🚪 <b>Вы вышли из казино.</b>\n\nНапишите <code>казино</code>, чтобы вернуться.", parse_mode="HTML")
+        return
+
     
     data = await state.get_data()
     bet_type = data.get('bet_type', 'resource')
@@ -372,7 +378,7 @@ async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
         await msg.reply("❌ Введите число!")
         return
 
-    await call.answer("🎰 Готово!")
+    # call не определён в casino_process_bet (msg, а не call)
 
 
 # ===== ИГРАТЬ СНОВА (шлёт НОВОЕ сообщение) =====

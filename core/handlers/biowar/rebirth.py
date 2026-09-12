@@ -196,7 +196,8 @@ async def cmd_rebirth(message: types.Message, db):
         f"❌ Биоресурсы (старт: {start_bio:,}) и Опыт (старт: {start_exp:,})\n"
         f"❌ Все патогены (до 4 шт.)\n"
         f"❌ Вся наука, заражаемость, иммунитет, летальность и СБ (до 1)\n"
-        f"❌ Все ваши зараженные жертвы и кейсы\n\n"
+        f"❌ Все ваши зараженные жертвы и кейсы\n"
+        f"❌ Депозит и кредит в банке\n\n"
         f"🦠 <i>Ваши болезни (кто заразил вас) останутся нетронутыми.</i>\n\n"
         f"Списать <b>{cost:,}</b> биоресурсов и сбросить прогресс?",
         reply_markup=builder.as_markup(),
@@ -233,6 +234,18 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
     start_bio = 15000 + (target_lvl - 1) * 10000
 
     await db.execute("DELETE FROM Victims WHERE victims_owner_id = %s;", (owner_id,))
+
+    # Сброс банка (депозит + кредит)
+    await db.execute("""
+        UPDATE Bank
+        SET deposit_amount = 0,
+            deposit_start = 0,
+            credit_amount = 0,
+            credit_start = 0,
+            credit_expire = 0,
+            credit_returned = 0
+        WHERE user_id = %s;
+    """, (owner_id,))
 
     query_update = """
         UPDATE Lab
