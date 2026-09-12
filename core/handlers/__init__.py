@@ -19,3 +19,4 @@ from core.handlers.suggestions.suggestions import router as suggestions_router
 from core.handlers.tricks import themes
 from core.handlers.tricks.themes import router as themes_router
 from core.handlers.tricks.themes import router as themes_router
+from core.handlers.activity import router as activity_router

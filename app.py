@@ -49,6 +49,7 @@ from core.handlers import (
     biowar_router2,
     chat_manage_router,
     story_router,
+    activity_router,
     biowar_global_router,
     suggestions_router
 )
@@ -115,8 +116,10 @@ async def main():
     # Middlewares
     dp.update.outer_middleware.register(DBPoolMiddleware(pool, redis_db, lock, bot, crypto))
     dp.message.middleware.register(ThrottlingMiddleware(0.3))
+    from core.middlewares.activity import ActivityMiddleware
     dp.callback_query.middleware.register(ThrottlingMiddlewareInline(0.5))
     dp.chat_member.middleware.register(ChatMemberUpdateMiddleware())
+    dp.message.middleware.register(ActivityMiddleware(redis_db))
     dp.message.outer_middleware.register(MaintenanceMiddleware())
     dp.callback_query.outer_middleware.register(MaintenanceMiddleware())
 
@@ -209,6 +212,7 @@ async def main():
         points_router,
         boss_router,
         student_lab_router,
+        activity_router,
     )
 
     start_reset_scheduler(dp)

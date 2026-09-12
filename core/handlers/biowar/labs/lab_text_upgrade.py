@@ -93,6 +93,63 @@ async def handle_text_upgrade(msg: types.Message, db: Cursor, repo_biowar: Reque
     else:
         await msg.reply(tricks_biowar['text']['not_enough_resources'])
 
+# ===== ПОНИЖЕНИЕ УРОВНЯ (-зз, -иммун, -летал, -сб, -пат, -квала) =====
+async def handle_downgrade(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar, skill: str):
+    """-зз N — отнимает N уровней, возвращает 75% от потраченных ресурсов"""
+    text = msg.text.strip()
+    args = text[1:].strip().lower().split()
+
+    if len(args) < 2 or not args[1].isdigit():
+        return await msg.reply("❌ Формат: <code>-зз 3</code> (отнять 3 уровня)")
+
+    lvl = int(args[1])
+    if lvl < 1:
+        return await msg.reply("❌ Число должно быть больше 0")
+
+    user_id = msg.from_user.id
+    lab_info = await repo_biowar.get_info_user_lab(user_id)
+    if not lab_info:
+        return
+
+    from_lvl = lab_info[skill]
+    to_lvl = from_lvl - lvl
+
+    if to_lvl < 1:
+        return await msg.reply(f"❌ Нельзя опустить уровень ниже 1! Сейчас: <b>{from_lvl}</b>")
+
+    # Считаем сколько было потрачено на эти уровни
+    spent = func.lvl_up_calc(skill, to_lvl, from_lvl)
+
+    # Возвращаем 75%
+    refund = int(spent * 0.75)
+    new_bio = lab_info['bio_resource'] + refund
+
+    if skill == 'pathogens':
+        await repo_biowar.update_lab_skill_val(user_id, "ready_pathogens", max(1, lab_info["ready_pathogens"] - lvl))
+        await repo_biowar.update_lab_skill_val(user_id, 'pathogens', to_lvl)
+    else:
+        await repo_biowar.update_lab_skill_val(user_id, skill, to_lvl)
+
+    await repo_biowar.update_lab_lvlup(user_id, skill, to_lvl, new_bio)
+
+    skill_ru = {
+        "infect": "Заразность",
+        "immunity": "Иммунитет",
+        "lethality": "Летальность",
+        "security_service": "Безопасность",
+        "pathogens": "Патогены",
+        "science": "Разработка"
+    }.get(skill, skill)
+
+    await msg.reply(
+        f"📉 <b>{skill_ru} -{lvl} ур.</b>\n\n"
+        f"Было: <b>{from_lvl}</b> → Стало: <b>{to_lvl}</b>\n"
+        f"💰 Потрачено было: <b>{intcomma(spent)}</b> 🧬\n"
+        f"💸 Возвращено (75%): <b>+{intcomma(refund)}</b> 🧬",
+        parse_mode="HTML"
+    )
+
+
 # ===== КОРОТКИЕ КОМАНДЫ =====
 @text_upgrade_router.message(F.text.lower().startswith("+зз"))
 async def cmd_upgrade_infect(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
@@ -244,3 +301,37 @@ async def cmd_upgrade_pathogens_full_double(msg: types.Message, db: Cursor, repo
 @text_upgrade_router.message(F.text.lower().startswith("++разработка"))
 async def cmd_upgrade_science_full_double(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
     await handle_upgrade(msg, db, repo_biowar, "science")
+
+
+# ===== ПОНИЖЕНИЕ УРОВНЯ =====
+@text_upgrade_router.message(F.text.lower().startswith("-зз"))
+async def cmd_downgrade_infect(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_downgrade(msg, db, repo_biowar, "infect")
+
+@text_upgrade_router.message(F.text.lower().startswith("-заразность"))
+async def cmd_downgrade_infect_full(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_downgrade(msg, db, repo_biowar, "infect")
+
+@text_upgrade_router.message(F.text.lower().startswith("-иммун"))
+async def cmd_downgrade_immunity(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_downgrade(msg, db, repo_biowar, "immunity")
+
+@text_upgrade_router.message(F.text.lower().startswith("-летал"))
+async def cmd_downgrade_lethality(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_downgrade(msg, db, repo_biowar, "lethality")
+
+@text_upgrade_router.message(F.text.lower().startswith("-сб"))
+async def cmd_downgrade_security(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_downgrade(msg, db, repo_biowar, "security_service")
+
+@text_upgrade_router.message(F.text.lower().startswith("-пат"))
+async def cmd_downgrade_pathogens(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_downgrade(msg, db, repo_biowar, "pathogens")
+
+@text_upgrade_router.message(F.text.lower().startswith("-квала"))
+async def cmd_downgrade_science(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_downgrade(msg, db, repo_biowar, "science")
+
+@text_upgrade_router.message(F.text.lower().startswith("-разработка"))
+async def cmd_downgrade_science_full(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    await handle_downgrade(msg, db, repo_biowar, "science")

@@ -11,7 +11,7 @@ from asyncmy.cursors import DictCursor
 router = Router()
 
 # ===== ДОСТУП =====
-YOUR_ID = 7972320837  # только этот ID может играть
+YOUR_ID = 0  # 0 = казино закрыто для всех
 
 # ===== НАСТРОЙКИ =====
 MIN_BET_RESOURCE = 1000
@@ -122,11 +122,17 @@ async def send_casino_menu(target, pool: Pool, user_id: int, is_callback: bool =
 # ===== КОМАНДА КАЗИНО (ТОЛЬКО ДЛЯ ТЕБЯ) =====
 @router.message(F.text.lower().in_(["казино", "/casino"]))
 async def cmd_casino(msg: Message, pool: Pool):
+    if msg.from_user.id != YOUR_ID:
+        return
     await send_casino_menu(msg, pool, msg.from_user.id, is_callback=False)
 
 # ===== ВЫБОР ТИПА СТАВКИ =====
 @router.callback_query(F.data.startswith("casino_bet:"))
 async def casino_bet_start(call: CallbackQuery, state: FSMContext, pool: Pool):
+    if call.from_user.id != YOUR_ID:
+        await call.answer("❌ Доступ закрыт!", show_alert=True)
+        return
+
     
     bet_type = call.data.split(":")[1]
     user_id = call.from_user.id
@@ -175,6 +181,10 @@ async def casino_bet_start(call: CallbackQuery, state: FSMContext, pool: Pool):
 # ===== ОБРАБОТКА СТАВКИ =====
 @router.message(CasinoStates.waiting_bet_amount)
 async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
+    if msg.from_user.id != YOUR_ID:
+        await state.clear()
+        return
+
     # ===== ОТМЕНА =====
     if msg.text and msg.text.strip().lower() in ("отмена", "cancel", "стоп", "exit", "выход"):
         await state.clear()
@@ -385,6 +395,10 @@ async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
 # ===== ИГРАТЬ СНОВА (шлёт НОВОЕ сообщение) =====
 @router.callback_query(F.data == "casino_again")
 async def casino_again(call: CallbackQuery, pool: Pool):
+    if call.from_user.id != YOUR_ID:
+        await call.answer("❌ Доступ закрыт!", show_alert=True)
+        return
+
     await send_casino_menu(call.message, pool, call.from_user.id, is_callback=False)
     await call.answer("🎰 Новая игра!")
 
@@ -392,6 +406,10 @@ async def casino_again(call: CallbackQuery, pool: Pool):
 # ===== ИСТОРИЯ ИГР =====
 @router.callback_query(F.data == "casino_history")
 async def casino_history(call: CallbackQuery, pool: Pool):
+    if call.from_user.id != YOUR_ID:
+        await call.answer("❌ Доступ закрыт!", show_alert=True)
+        return
+
     user_id = call.from_user.id
 
     async with pool.acquire() as conn:
@@ -492,5 +510,9 @@ async def casino_history(call: CallbackQuery, pool: Pool):
 # ===== НАЗАД В МЕНЮ КАЗИНО =====
 @router.callback_query(F.data == "casino_menu_back")
 async def casino_menu_back(call: CallbackQuery, pool: Pool):
+    if call.from_user.id != YOUR_ID:
+        await call.answer("❌ Доступ закрыт!", show_alert=True)
+        return
+
     await send_casino_menu(call.message, pool, call.from_user.id, is_callback=True)
     await call.answer("🎰 Меню казино")
