@@ -107,6 +107,7 @@ async def send_casino_menu(target, pool: Pool, user_id: int, is_callback: bool =
         [InlineKeyboardButton(text="🪙 Эпикоины", callback_data="casino_bet:epicoins")],
         [InlineKeyboardButton(text="📦 Обычные кейсы", callback_data="casino_bet:case1")],
         [InlineKeyboardButton(text="💎 Донатные кейсы", callback_data="casino_bet:case2")],
+        [InlineKeyboardButton(text="📜 История", callback_data="casino_history")],
         [InlineKeyboardButton(text="🔄 Обновить", callback_data="casino_refresh")],
     ])
     
@@ -386,3 +387,110 @@ async def casino_process_bet(msg: Message, state: FSMContext, pool: Pool):
 async def casino_again(call: CallbackQuery, pool: Pool):
     await send_casino_menu(call.message, pool, call.from_user.id, is_callback=False)
     await call.answer("🎰 Новая игра!")
+
+
+# ===== ИСТОРИЯ ИГР =====
+@router.callback_query(F.data == "casino_history")
+async def casino_history(call: CallbackQuery, pool: Pool):
+    user_id = call.from_user.id
+
+    async with pool.acquire() as conn:
+        async with conn.cursor(DictCursor) as cur:
+            await cur.execute("""
+                SELECT bet_type, bet_amount, game, result, win_amount
+                FROM Casino
+                WHERE user_id = %s
+                ORDER BY id DESC
+                LIMIT 10
+            """, (user_id,))
+            history = await cur.fetchall()
+
+            await cur.execute("""
+                SELECT
+                    COUNT(*) as total_games,
+                    SUM(bet_amount) as total_bet,
+                    SUM(win_amount) as total_win,
+                    SUM(CASE WHEN win_amount > bet_amount THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN win_amount < bet_amount THEN 1 ELSE 0 END) as losses
+                FROM Casino
+                WHERE user_id = %s
+            """, (user_id,))
+            stats = await cur.fetchone()
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="casino_menu_back")]
+    ])
+
+    if not history:
+        await call.message.edit_text(
+            "📜 <b>История игр</b>\n\n<i>Пока нет ни одной игры.</i>",
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+        await call.answer()
+        return
+
+    total_games = stats.get("total_games", 0) or 0
+    total_bet = stats.get("total_bet", 0) or 0
+    total_win = stats.get("total_win", 0) or 0
+    wins = stats.get("wins", 0) or 0
+    losses = stats.get("losses", 0) or 0
+
+    profit = total_win - total_bet
+
+    if profit > 0:
+        profit_str = f"📈 <b>+{format_money(profit)}</b> 🧬"
+    elif profit < 0:
+        profit_str = f"📉 <b>{format_money(profit)}</b> 🧬"
+    else:
+        profit_str = f"➖ <b>0</b> 🧬"
+
+    lines = [
+        "📜 <b>История игр</b>",
+        "",
+        f"🎮 <b>Всего игр:</b> {total_games}",
+        f"✅ <b>Побед:</b> {wins}",
+        f"❌ <b>Проигрышей:</b> {losses}",
+        f"💰 <b>Поставлено:</b> {format_money(total_bet)}",
+        f"🏆 <b>Получено:</b> {format_money(total_win)}",
+        f"📊 <b>Итог:</b> {profit_str}",
+        "",
+        "🕐 <b>Последние 10 игр:</b>"
+    ]
+
+    for i, game in enumerate(history, 1):
+        bet_type = game.get("bet_type", "resource")
+        bet_amount = game.get("bet_amount", 0) or 0
+        result = game.get("result", "") or ""
+        win_amount = game.get("win_amount", 0) or 0
+
+        unit_map = {"resource": "🧬", "epicoins": "🪙", "case1": "📦", "case2": "💎"}
+        unit = unit_map.get(bet_type, "🧬")
+
+        if win_amount > bet_amount:
+            emoji = "🟢"
+            diff = f"+{format_money(win_amount - bet_amount)}"
+        elif win_amount < bet_amount:
+            emoji = "🔴"
+            diff = f"-{format_money(bet_amount - win_amount)}"
+        else:
+            emoji = "🟡"
+            diff = "0"
+
+        lines.append(f"{emoji} {i}. {result} — {format_money(bet_amount)} {unit} → {diff}")
+
+    try:
+        await call.message.edit_text("\n".join(lines), reply_markup=kb, parse_mode="HTML")
+    except Exception as e:
+        if "message is not modified" not in str(e):
+            await call.answer(f"❌ Ошибка: {e}", show_alert=True)
+            return
+
+    await call.answer()
+
+
+# ===== НАЗАД В МЕНЮ КАЗИНО =====
+@router.callback_query(F.data == "casino_menu_back")
+async def casino_menu_back(call: CallbackQuery, pool: Pool):
+    await send_casino_menu(call.message, pool, call.from_user.id, is_callback=True)
+    await call.answer("🎰 Меню казино")
