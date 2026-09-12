@@ -159,7 +159,11 @@ async def finish_boss(pool: Pool, redis: Redis, bot: Bot):
                     except Exception as e:
                         print(f"[BOSS FINISH SEND ERROR] {e}")
 
-                await cur.execute("UPDATE Boss SET is_active = 0 WHERE id = %s", (boss_id,))
+                if top_3:
+                    winner_id = top_3[0][0]
+                    await cur.execute("UPDATE Boss SET winner_id = %s WHERE id = %s", (winner_id, boss_id))
+
+                await cur.execute("UPDATE Boss SET is_active = 0, current_hp = 0 WHERE id = %s", (boss_id,))
                 await redis.delete("boss:active", "boss:hp", "boss:max_hp", "boss:end_time", "boss:id")
                 print(f"[BOSS] Босс {boss_id} завершён. HP={current_hp}, top={len(top_3)}")
     except Exception as e:

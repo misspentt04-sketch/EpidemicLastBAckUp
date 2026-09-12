@@ -147,7 +147,7 @@ async def spawn_boss(pool: Pool, redis: Redis):
             count = await cur.fetchone()
             players = count[0] if count else 100
     
-    max_hp = players * 50
+    max_hp = players * 35
     await redis.set("boss:hp", max_hp)
     await redis.set("boss:max_hp", max_hp)
     end_time = int(time.time()) + 3600
@@ -174,12 +174,15 @@ async def send_boss_menu(target, redis: Redis, pool: Pool, is_callback: bool = F
     end_time = await redis.get("boss:end_time")
     # ===== ПРОВЕРКА ВРЕМЕНИ =====
     if is_active and end_time and int(time.time()) > int(end_time):
+        boss_id = int(await redis.get("boss:id") or 0)
         await redis.delete("boss:active", "boss:hp", "boss:max_hp", "boss:end_time", "boss:id")
         is_active = False
         hp = 0
-        boss_id = int(await redis.get("boss:id") or 0)
         if boss_id:
             count = await punish_players(pool, boss_id)
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("UPDATE Boss SET is_active = 0, current_hp = 0 WHERE id = %s", (boss_id,))
             await target.reply(
                 f"💀 <b>Босс выжил!</b>\n\n⏳ Время истекло!\nНаказано игроков: <b>{count}</b>\nКаждый потерял <b>500,000 🧬</b> био-ресурсов!",
                 parse_mode="HTML"
@@ -325,7 +328,6 @@ async def boss_attack(call: CallbackQuery, **kwargs):
     damage = min(damage, 2000)
     damage = int(damage * random.uniform(0.25, 1.0))
     damage = max(1, damage)
-    damage = max(1, damage)
 
     new_hp = max(0, hp - damage)
     await redis.set("boss:hp", new_hp)
@@ -354,7 +356,7 @@ async def boss_attack(call: CallbackQuery, **kwargs):
         pass
 
     if new_hp <= 0:
-        await redis.delete("boss:active", "boss:hp", "boss:max_hp", "boss:id")
+        await redis.delete("boss:active", "boss:hp", "boss:max_hp", "boss:end_time", "boss:id")
         await call.message.edit_text(
             f"🎉 <b>БОСС ПОВЕРЖЕН!</b>\n\n"
             f"⚔️ Вы нанесли <b>{damage:,}</b> урона!\n"
@@ -396,14 +398,19 @@ async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: i
         except:
             pass
 
-    for user_id, damage in top_3:
+    for i, (user_id, damage) in enumerate(top_3, start=1):
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("""
                     INSERT INTO BossWinners (user_id, wins, total_damage, place)
-                    VALUES (%s, 1, %s, 1)
+                    VALUES (%s, 1, %s, %s)
                     ON DUPLICATE KEY UPDATE wins = wins + 1, total_damage = total_damage + %s
-                """, (user_id, damage, damage))
+                """, (user_id, damage, i, damage))
+
+    # Закрываем босса в БД
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("UPDATE Boss SET is_active = 0, current_hp = 0 WHERE id = %s", (boss_id,))
 
     log_text = f"🧟 <b>Босс повержен!</b>\n\n"
     medals = ["🥇", "🥈", "🥉"]
