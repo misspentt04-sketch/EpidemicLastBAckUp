@@ -1,4 +1,6 @@
 import logging
+import json
+import time
 import random
 from redis.asyncio import Redis
 from datetime import datetime, timedelta
@@ -168,3 +170,66 @@ async def finish_boss(pool: Pool, redis: Redis, bot: Bot):
                 print(f"[BOSS] Босс {boss_id} завершён. HP={current_hp}, top={len(top_3)}")
     except Exception as e:
         print(f"[BOSS FINISH ERROR] {e}")
+
+
+# ===== АВТОЗАВЕРШЕНИЕ РОЗЫГРЫШЕЙ =====
+async def finish_giveaways(pool: Pool, bot: Bot):
+    """Проверяет розыгрыши и завершает их"""
+    try:
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    SELECT id, creator_id, prize_type, winners_count, prizes, channel_msg_id
+                    FROM Giveaways
+                    WHERE is_finished = 0
+                      AND (end_time < %s OR
+                           (SELECT COUNT(*) FROM GiveawayMembers WHERE giveaway_id = Giveaways.id) >= 50)
+                """, (int(time.time()),))
+                giveaways = await cur.fetchall()
+
+                for gw in giveaways:
+                    gw_id, creator_id, prize_type, winners_count, prizes_json, channel_msg_id = gw
+                    prizes = json.loads(prizes_json) if isinstance(prizes_json, str) else prizes_json
+
+                    # Участники
+                    await cur.execute("SELECT user_id FROM GiveawayMembers WHERE giveaway_id = %s", (gw_id,))
+                    members = [row[0] for row in await cur.fetchall()]
+
+                    if len(members) < winners_count:
+                        winners = members[:]
+                    else:
+                        winners = random.sample(members, winners_count)
+
+                    # Выдаём призы
+                    for i, user_id in enumerate(winners):
+                        if i >= len(prizes):
+                            break
+                        p = prizes[i]
+                        await cur.execute("""
+                            UPDATE Lab
+                            SET bio_resource = bio_resource + %s,
+                                epicoins = epicoins + %s,
+                                case1 = case1 + %s,
+                                case2 = case2 + %s
+                            WHERE lab_id = %s
+                        """, (p.get("resource", 0), p.get("epicoins", 0), p.get("case1", 0), p.get("case2", 0), user_id))
+
+                    await cur.execute(
+                        "UPDATE Giveaways SET is_finished = 1, winner_ids = %s WHERE id = %s",
+                        (json.dumps(winners), gw_id)
+                    )
+
+                    # Пост в канал
+                    text = f"🏆 <b>РОЗЫГРЫШ ЗАВЕРШЁН!</b>\n\n"
+                    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+                    for i, uid in enumerate(winners):
+                        text += f"{medals[i] if i < len(medals) else f'{i+1}.'} <code>{uid}</code>\n"
+
+                    try:
+                        await bot.send_message(-1004335676077, text, parse_mode="HTML")
+                    except Exception as e:
+                        print(f"[GW SEND ERROR] {e}")
+
+                    print(f"[GW] Розыгрыш {gw_id} завершён, победителей: {len(winners)}")
+    except Exception as e:
+        print(f"[GW FINISH ERROR] {e}")

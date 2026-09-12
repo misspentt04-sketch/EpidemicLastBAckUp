@@ -50,6 +50,7 @@ from core.handlers import (
     chat_manage_router,
     story_router,
     activity_router,
+    giveaway_router,
     biowar_global_router,
     suggestions_router
 )
@@ -213,6 +214,7 @@ async def main():
         boss_router,
         student_lab_router,
         activity_router,
+        giveaway_router,
     )
 
     start_reset_scheduler(dp)
