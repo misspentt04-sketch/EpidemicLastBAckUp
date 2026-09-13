@@ -60,10 +60,13 @@ async def check_member(bot: Bot, user_id: int) -> tuple[bool, str]:
 
 # ===== МЕНЮ =====
 @router.message(F.text.lower() == "!розыгрыш")
-async def cmd_giveaway(msg: Message, redis: Redis):
+async def cmd_giveaway(msg: Message, redis: Redis, state: FSMContext):
     # ===== ТОЛЬКО АДМИН =====
     if msg.from_user.id != ADMIN_ID:
         return
+
+    # ===== СОХРАНЯЕМ СОЗДАТЕЛЯ =====
+    await state.update_data(creator_id=msg.from_user.id)
 
     # ===== КД 12 ЧАСОВ =====
     cooldown_key = f"giveaway_cooldown:{msg.from_user.id}"
@@ -88,15 +91,19 @@ async def cmd_giveaway(msg: Message, redis: Redis):
         [InlineKeyboardButton(text="🎁 Всё вместе", callback_data="gw:type:mix")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="gw:cancel")],
     ])
-    await msg.reply(
+    sent = await msg.reply(
         "🎁 <b>Создание розыгрыша</b>\n\nВыберите тип приза:",
         reply_markup=kb,
         parse_mode="HTML"
     )
+    await redis.set(f"gw_creator:{sent.message_id}", msg.from_user.id, ex=3600)
 
 
 @router.callback_query(F.data == "gw:cancel")
-async def gw_cancel(call: CallbackQuery, state: FSMContext):
+async def gw_cancel(call: CallbackQuery, state: FSMContext, redis: Redis):
+    creator_id = await redis.get(f"gw_creator:{call.message.message_id}")
+    if creator_id and str(call.from_user.id) != str(creator_id):
+        return await call.answer("❌ Это не ваш розыгрыш!", show_alert=True)
     await state.clear()
     await call.message.edit_text("❌ Розыгрыш отменён.")
     await call.answer()
@@ -104,7 +111,11 @@ async def gw_cancel(call: CallbackQuery, state: FSMContext):
 
 # ===== ВЫБОР ТИПА =====
 @router.callback_query(F.data.startswith("gw:type:"))
-async def gw_type(call: CallbackQuery, state: FSMContext):
+async def gw_type(call: CallbackQuery, state: FSMContext, redis: Redis):
+    creator_id = await redis.get(f"gw_creator:{call.message.message_id}")
+    if creator_id and str(call.from_user.id) != str(creator_id):
+        return await call.answer("❌ Это не ваш розыгрыш!", show_alert=True)
+
     prize_type = call.data.split(":")[2]
     await state.update_data(prize_type=prize_type, creator_id=call.from_user.id)
     await state.set_state(GiveawayStates.waiting_winners)
@@ -121,6 +132,11 @@ async def gw_type(call: CallbackQuery, state: FSMContext):
 # ===== КОЛИЧЕСТВО ПОБЕДИТЕЛЕЙ =====
 @router.message(GiveawayStates.waiting_winners)
 async def gw_winners(msg: Message, state: FSMContext):
+    data = await state.get_data()
+    creator_id = data.get("creator_id")
+    if creator_id and msg.from_user.id != creator_id:
+        return
+
     if msg.text and msg.text.strip().lower() in ("отмена", "cancel", "стоп"):
         await state.clear()
         return await msg.reply("❌ Создание розыгрыша отменено.")
@@ -148,6 +164,11 @@ async def gw_winners(msg: Message, state: FSMContext):
 # ===== ПРИЗЫ ПО МЕСТАМ =====
 @router.message(GiveawayStates.waiting_prizes)
 async def gw_prizes(msg: Message, state: FSMContext, pool: Pool, bot: Bot, redis: Redis):
+    data = await state.get_data()
+    creator_id = data.get("creator_id")
+    if creator_id and msg.from_user.id != creator_id:
+        return
+
     if msg.text and msg.text.strip().lower() in ("отмена", "cancel", "стоп"):
         await state.clear()
         return await msg.reply("❌ Создание розыгрыша отменено.")
@@ -262,8 +283,8 @@ async def gw_prizes(msg: Message, state: FSMContext, pool: Pool, bot: Bot, redis
     lines.append("\n✅ Всё верно? Нажмите «Подтвердить».")
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="gw:confirm")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="gw:cancel_prizes")],
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"gw:confirm:{creator_id}")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"gw:cancel_prizes:{creator_id}")],
     ])
 
     await state.set_state(GiveawayStates.confirming)
@@ -356,6 +377,9 @@ async def create_giveaway(msg: Message, state: FSMContext, pool: Pool, bot: Bot,
         await msg.reply(f"❌ Ошибка поста в канал: {e}")
         return
 
+    # Ставим КД 12 часов
+    await redis.set(f"giveaway_cooldown:{creator_id}", int(time.time()), ex=12 * 3600)
+
     await state.clear()
     await msg.reply(f"✅ Розыгрыш создан! ID: <code>{giveaway_id}</code>", parse_mode="HTML")
 
@@ -405,8 +429,13 @@ async def gw_members_old(call: CallbackQuery):
 
 
 # ===== ПОДТВЕРЖДЕНИЕ РОЗЫГРЫША =====
-@router.callback_query(F.data == "gw:confirm")
+@router.callback_query(F.data.startswith("gw:confirm"))
 async def gw_confirm(call: CallbackQuery, state: FSMContext, pool: Pool, bot: Bot, redis: Redis):
+    parts = call.data.split(":")
+    creator_id = int(parts[2]) if len(parts) > 2 else None
+    if creator_id and call.from_user.id != creator_id:
+        return await call.answer("❌ Это не ваш розыгрыш!", show_alert=True)
+
     data = await state.get_data()
     if not data or "prizes" not in data:
         await call.answer("❌ Данные потеряны", show_alert=True)
@@ -419,8 +448,13 @@ async def gw_confirm(call: CallbackQuery, state: FSMContext, pool: Pool, bot: Bo
 
 
 # ===== ОТМЕНА НА ЭТАПЕ ПОДТВЕРЖДЕНИЯ =====
-@router.callback_query(F.data == "gw:cancel_prizes")
-async def gw_cancel_prizes(call: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data.startswith("gw:cancel_prizes"))
+async def gw_cancel_prizes(call: CallbackQuery, state: FSMContext, redis: Redis):
+    parts = call.data.split(":")
+    creator_id = int(parts[2]) if len(parts) > 2 else None
+    if creator_id and call.from_user.id != creator_id:
+        return await call.answer("❌ Это не ваш розыгрыш!", show_alert=True)
+
     await state.clear()
     await call.message.edit_text("❌ Создание розыгрыша отменено.")
     await call.answer()

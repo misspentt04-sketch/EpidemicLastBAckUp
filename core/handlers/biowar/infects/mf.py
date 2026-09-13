@@ -1,6 +1,7 @@
 import asyncio
 import random
 import logging
+from html import escape
 from datetime import datetime, timedelta
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -34,9 +35,9 @@ def format_mf_text(fallen_list: list, page: int, total_pages: int) -> str:
     for idx, item in enumerate(page_items, start=start_idx + 1):
         if isinstance(item, dict):
             name = item.get('full_name') or item.get('username') or f"ID: {item.get('victim_id')}"
-            lines.append(f"{idx}. {name}")
+            lines.append(f"{idx}. {escape(str(name))}")
         else:
-            lines.append(f"{idx}. ID: {item}")
+            lines.append(f"{idx}. ID: {escape(str(item))}")
 
     return "\n".join(lines)
 
@@ -121,9 +122,10 @@ async def process_mf_start(call: CallbackQuery, repo_biowar, redis=None):
         if isinstance(target, dict):
             victim_id = target.get('victim_id') or target.get('id')
             display_name = target.get('full_name') or target.get('username') or f"ID: {victim_id}"
+            display_name = escape(str(display_name))
         else:
             victim_id = target
-            display_name = f"ID: {victim_id}"
+            display_name = f"ID: {escape(str(victim_id))}"
 
         # 1. Получаем СВЕЖИЕ данные лаборатории атакующего из БД
         infecter = await repo_biowar.get_info_user_lab(user_id)
