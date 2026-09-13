@@ -21,3 +21,4 @@ from core.handlers.tricks.themes import router as themes_router
 from core.handlers.tricks.themes import router as themes_router
 from core.handlers.activity import router as activity_router
 from core.handlers.giveaway import router as giveaway_router
+from core.handlers.ded import router as ded_router
