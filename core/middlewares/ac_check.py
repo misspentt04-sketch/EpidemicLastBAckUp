@@ -36,14 +36,9 @@ class ACMiddleware(BaseMiddleware):
                     reason = game_mute.get('reason', 'Не указана')
                     logger.info(f"AC active for user {user_id}: {reason}")
                     
-                    # Если это сообщение - отвечаем
-                    if isinstance(event, Message):
-                        await event.answer(
-                            f"⛔ У вас активен АС (мут команд)!\n"
-                            f"Причина: {reason}\n"
-                            f"Обратитесь к администратору."
-                        )
-                    return  # Игнорируем
+                    # Молча игнорируем
+                    logger.info(f"[AC] Молчаливый игнор для {user_id}, причина: {reason}")
+                    return
         except Exception as e:
             logger.error(f"AC check error: {e}")
         

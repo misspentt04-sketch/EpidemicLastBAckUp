@@ -122,6 +122,8 @@ async def main():
     dp.callback_query.middleware.register(ThrottlingMiddlewareInline(0.5))
     dp.chat_member.middleware.register(ChatMemberUpdateMiddleware())
     dp.message.middleware.register(ActivityMiddleware(redis_db))
+    dp.message.middleware.register(ACMiddleware())
+    dp.callback_query.middleware.register(ACMiddleware())
     dp.message.outer_middleware.register(MaintenanceMiddleware())
     dp.callback_query.outer_middleware.register(MaintenanceMiddleware())
 

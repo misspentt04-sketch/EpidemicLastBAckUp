@@ -95,7 +95,7 @@ async def handle_text_upgrade(msg: types.Message, db: Cursor, repo_biowar: Reque
 
 # ===== ПОНИЖЕНИЕ УРОВНЯ (-зз, -иммун, -летал, -сб, -пат, -квала) =====
 async def handle_downgrade(msg: types.Message, db: Cursor, repo_biowar: RequestsRepoBiowar, skill: str):
-    """-зз N — отнимает N уровней, возвращает 75% от потраченных ресурсов"""
+    """-зз N — отнимает N уровней, возвращает 50% от потраченных ресурсов"""
     text = msg.text.strip()
     args = text[1:].strip().lower().split()
 
@@ -120,8 +120,8 @@ async def handle_downgrade(msg: types.Message, db: Cursor, repo_biowar: Requests
     # Считаем сколько было потрачено на эти уровни
     spent = func.lvl_up_calc(skill, to_lvl, from_lvl)
 
-    # Возвращаем 75%
-    refund = int(spent * 0.75)
+    # Возвращаем 50%
+    refund = int(spent * 0.50)
     new_bio = lab_info['bio_resource'] + refund
 
     if skill == 'pathogens':
@@ -145,7 +145,7 @@ async def handle_downgrade(msg: types.Message, db: Cursor, repo_biowar: Requests
         f"📉 <b>{skill_ru} -{lvl} ур.</b>\n\n"
         f"Было: <b>{from_lvl}</b> → Стало: <b>{to_lvl}</b>\n"
         f"💰 Потрачено было: <b>{intcomma(spent)}</b> 🧬\n"
-        f"💸 Возвращено (75%): <b>+{intcomma(refund)}</b> 🧬",
+        f"💸 Возвращено (50%): <b>+{intcomma(refund)}</b> 🧬",
         parse_mode="HTML"
     )
 

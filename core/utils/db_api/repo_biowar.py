@@ -224,7 +224,10 @@ class RequestsRepoBiowar:
             'UPDATE Lab SET {}=%s WHERE lab_id=%s;'.format(skill)
         )
         params = (value, id)
-        return await self.cur.execute(query, params)
+        result = await self.cur.execute(query, params)
+        if hasattr(self, "cur") and hasattr(self.cur, "connection") and self.cur.connection:
+            await self.cur.connection.commit()
+        return result
 
     async def add_lab_bio_currency(self, id: int, bio_resources: int):
         query = 'UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s;'
