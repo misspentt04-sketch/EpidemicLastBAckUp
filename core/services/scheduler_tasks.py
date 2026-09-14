@@ -233,3 +233,46 @@ async def finish_giveaways(pool: Pool, bot: Bot):
                     print(f"[GW] Розыгрыш {gw_id} завершён, победителей: {len(winners)}")
     except Exception as e:
         print(f"[GW FINISH ERROR] {e}")
+
+
+# ===== АВТОВОЗВРАТ ДЕПОЗИТОВ ЧЕРЕЗ 2 ДНЯ =====
+async def check_expired_deposits(pool: Pool, bot: Bot):
+    """Автоматически снимает депозиты, которые лежат больше 2 дней"""
+    try:
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    SELECT user_id, deposit_amount, deposit_start
+                    FROM Bank
+                    WHERE deposit_amount > 0
+                      AND deposit_start > 0
+                      AND (UNIX_TIMESTAMP() - deposit_start) >= 2 * 86400
+                """)
+                deposits = await cur.fetchall()
+
+                for user_id, deposit_amount, deposit_start in deposits:
+                    hours = (int(time.time()) - deposit_start) / 3600
+                    income = int(deposit_amount * (15.0 / 24 / 100) * hours)
+                    total = deposit_amount + income
+
+                    await cur.execute("UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id = %s", (total, user_id))
+                    await cur.execute("UPDATE Bank SET deposit_amount = 0, deposit_start = 0, total_earned = total_earned + %s WHERE user_id = %s", (income, user_id))
+
+                    try:
+                        await bot.send_message(
+                            user_id,
+                            f"💰 <b>Депозит автоматически снят!</b>\n\n"
+                            f"📊 Сумма: {deposit_amount:,} 🧬\n"
+                            f"📈 Доход: +{income:,} 🧬\n"
+                            f"💎 Итого: {total:,} 🧬\n\n"
+                            f"⏳ Депозит держался 2 дня и был возвращён.",
+                            parse_mode="HTML"
+                        )
+                    except Exception:
+                        pass
+
+                    print(f"[DEPOSIT] Автовозврат для {user_id}: {total:,}")
+
+                print(f"[DEPOSIT] Обработано депозитов: {len(deposits)}")
+    except Exception as e:
+        print(f"[DEPOSIT ERROR] {e}")
