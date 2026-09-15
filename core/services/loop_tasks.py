@@ -320,10 +320,10 @@ async def loop_tasks(pool: Pool, redis: Redis, bot: Bot):
         print(f"[LOOP] ОШИБКА: {e}")
 
 async def student_income_loop(pool: Pool):
-    """Каждые 10 минут начисляет доход ученика от тика"""
+    """Каждые 6 часов начисляет доход ученика от тика"""
     print("🟢 [STUDENT_INCOME] Задача student_income_loop ЗАПУЩЕНА!")
     while True:
-        await asyncio.sleep(600)
+        await asyncio.sleep(21600)
         print("🔄 [STUDENT_INCOME] Начинаем выдачу дохода...")
         try:
             async with pool.acquire() as conn:

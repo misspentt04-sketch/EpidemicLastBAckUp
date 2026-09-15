@@ -41,3 +41,4 @@ biowar_router.include_router(bank_router)
 
 from .casino import router as casino_router
 biowar_router.include_router(casino_router)
+from core.handlers.biowar.student_commands import router as student_commands_router

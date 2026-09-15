@@ -167,7 +167,7 @@ async def send_bank_menu(target, pool: Pool, user_id: int, is_callback: bool = F
         f"├ Депозит: +{DEPOSIT_DAILY}% в день ({DEPOSIT_HOURLY:.3f}%/час)\n"
         f"├ Мин. срок депозита: 1 час\n"
         f"├ Кредит: +{CREDIT_BASE}% + растёт на {CREDIT_HOURLY:.3f}%/час\n"
-        f"├ Максимум депозита: ×2 от дохода\n"
+        f"├ Максимум депозита: ×5 от дохода\n"
         f"├ Максимум кредита: ×10 от дохода\n"
         f"├ Лимит: после возврата\n"
         f"└ Штраф за просрочку: ×{CREDIT_PENALTY}\n"
@@ -232,12 +232,12 @@ async def bank_deposit_process(msg: Message, state: FSMContext, pool: Pool):
             return
         # ===== ЛИМИТ: x2 ОТ ДОХОДА ЗА ТИК =====
         tick_income = await get_tick_income(pool, msg.from_user.id)
-        max_deposit = tick_income * 2
+        max_deposit = tick_income * 5
         if max_deposit <= 0:
             await msg.reply("❌ У вас нет дохода с жертв! Депозит доступен только с жертвами.")
             return
         if amount > max_deposit:
-            await msg.reply(f"❌ Максимальный депозит: <b>{format_money(max_deposit)}</b> 🧬 (×2 от дохода)", parse_mode="HTML")
+            await msg.reply(f"❌ Максимальный депозит: <b>{format_money(max_deposit)}</b> 🧬 (×5 от дохода)", parse_mode="HTML")
             return
         # ==========================================
 

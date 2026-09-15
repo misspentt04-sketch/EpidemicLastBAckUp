@@ -220,7 +220,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
             and victimer['chat_setup_virus']
             and victimer['chat_setup_virus'] != chat_id
             and vic_user_chat
-            and spent_pathogens >= 1
+            and spent_pathogens >= 2
         ):
             await bot.send_message(victimer['chat_setup_virus'], sb_virus_detect_try_text)
 

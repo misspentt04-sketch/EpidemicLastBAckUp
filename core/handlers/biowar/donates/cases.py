@@ -844,7 +844,7 @@ async def process_payment_callback(callback: types.CallbackQuery, state, db):
 # ==================== НОВАЯ КОМАНДА: ЗАБРАТЬ КЕЙС ====================
 @cases_router.message(F.text.lower().contains("забрать кейс"))
 async def admin_take_case(msg: types.Message, db):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     args = msg.text.split()
     target_id = None
     case_type = 1
@@ -881,7 +881,7 @@ async def admin_take_case(msg: types.Message, db):
 # ==================== НОВАЯ КОМАНДА: ПЕРЕНЕСТИ КЕЙСЫ (СВОП) ====================
 @cases_router.message(F.text.lower().contains("перенести кейсы"))
 async def admin_transfer_cases(msg: types.Message, db):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431, 6129560117]: return
+    if msg.from_user.id not in [7972320837, 7958133684, 6129560117]: return
     args = msg.text.split()
     if len(args) < 3:
         await msg.reply("❌ Ошибка формата!\nПример: <code>!перенести кейсы 123456789 987654321</code>")
@@ -965,7 +965,7 @@ async def log_admin_action(bot: Bot, admin_id: int, admin_name: str, action: str
         print(f"[Admin Log Error] {e}")
 
 # ==================== ОБНОВЛЕННАЯ КОМАНДА: ВЫДАТЬ КЕЙС (С ЛОГАМИ) ====================
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     args = msg.text.split()
     target_id = None
     case_type = 1
@@ -997,7 +997,7 @@ async def log_admin_action(bot: Bot, admin_id: int, admin_name: str, action: str
 # ==================== ОБНОВЛЕННАЯ КОМАНДА: ЗАБРАТЬ КЕЙС (С ЛОГАМИ) ====================
 @cases_router.message(F.text.lower().contains("забрать кейс"))
 async def admin_take_case(msg: types.Message, db, bot: Bot):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     args = msg.text.split()
     target_id = None
     case_type = 1
@@ -1036,7 +1036,7 @@ async def admin_take_case(msg: types.Message, db, bot: Bot):
 # ==================== ОБНОВЛЕННАЯ КОМАНДА: ПЕРЕНЕСТИ КЕЙСЫ (СВОП) (С ЛОГАМИ) ====================
 @cases_router.message(F.text.lower().contains("перенести кейсы"))
 async def admin_transfer_cases(msg: types.Message, db, bot: Bot):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431, 6129560117]: return
+    if msg.from_user.id not in [7972320837, 7958133684, 6129560117]: return
     args = msg.text.split()
     if len(args) < 3:
         await msg.reply("❌ Ошибка формата!\nПример: <code>!перенести кейсы 123456789 987654321</code>")
@@ -1106,7 +1106,7 @@ async def admin_transfer_cases(msg: types.Message, db, bot: Bot):
 @cases_router.message(F.text.lower().contains("выдать коины"))
 async def admin_give_coins(msg: types.Message, db, bot: Bot):
     args = msg.text.split()
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     target_id = None
     amount = 0
 
@@ -1137,7 +1137,7 @@ async def admin_give_coins(msg: types.Message, db, bot: Bot):
 # ==================== ОБНОВЛЕННАЯ КОМАНДА: ВЫДАТЬ КЕЙС (С ЛОГАМИ) ====================
 @cases_router.message(F.text.lower().contains("выдать кейс"))
 async def admin_give_case(msg: types.Message, db, bot: Bot):
-    if msg.from_user.id not in [7972320837, 7958133684, 1758346431]: return
+    if msg.from_user.id not in [7972320837, 7958133684]: return
     args = msg.text.split()
     target_id = None
     case_type = 1
