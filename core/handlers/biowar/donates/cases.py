@@ -9,6 +9,23 @@ from core.data.tricks.themes_data import get_theme_text
 
 cases_router = Router()
 
+
+async def check_cases_owner(call) -> bool:
+    """Проверяет, что call от владельца меню"""
+    try:
+        import redis.asyncio as aioredis
+        from core.settings import settings
+        r = aioredis.from_url(f"redis://{settings.redis.ip}:6379/0")
+        owner = await r.get(f"cases_owner:{call.message.message_id}")
+        await r.close()
+
+        if owner and int(owner) != call.from_user.id:
+            await call.answer("❌ Это не ваше меню!", show_alert=True)
+            return False
+    except Exception as e:
+        print(f"[CHECK OWNER ERROR] {e}")
+    return True
+
 def get_cases_keyboard():
     kb = [
         [InlineKeyboardButton(text="🛒 Купить Кейс 1", callback_data="buy_case_1")],
@@ -16,6 +33,11 @@ def get_cases_keyboard():
             InlineKeyboardButton(text="📦 Открыть Кейс 1", callback_data="open_case_1"),
             InlineKeyboardButton(text="💎 Открыть Кейс 2", callback_data="open_case_2")
         ],
+        [
+            InlineKeyboardButton(text="🛍 Магазин", callback_data="shop_menu"),
+            InlineKeyboardButton(text="📜 История", callback_data="case_history")
+        ],
+        [InlineKeyboardButton(text="🔄 Передать", callback_data="transfer_menu")],
         [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_cases_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
@@ -231,15 +253,24 @@ async def cmd_cases(msg: types.Message, db):
         case2=case2
     )
     
-    await msg.reply(text, reply_markup=get_cases_keyboard())
+    sent = await msg.reply(text, reply_markup=get_cases_keyboard())
+    import redis.asyncio as aioredis
+    from core.settings import settings
+    r = aioredis.from_url(f"redis://{settings.redis.ip}:6379/0")
+    await r.set(f"cases_owner:{sent.message_id}", user_id, ex=600)
+    await r.close()
 
 # ==================== CALLBACKS ====================
 @cases_router.callback_query(F.data == "close_cases_menu")
 async def cb_close(call: CallbackQuery):
+    if not await check_cases_owner(call):
+        return
     await call.message.delete()
 
 @cases_router.callback_query(F.data == "buy_case_1")
 async def cb_buy_case1(call: CallbackQuery, db):
+    if not await check_cases_owner(call):
+        return
     user_id = call.from_user.id
     
     await db.execute("SELECT epicoins, case1, case2 FROM Lab WHERE lab_id = %s;", (user_id,))
@@ -283,6 +314,8 @@ async def cb_buy_case1(call: CallbackQuery, db):
 
 @cases_router.callback_query(F.data == "open_case_1")
 async def cb_open_case1(call: CallbackQuery, db):
+    if not await check_cases_owner(call):
+        return
     user_id = call.from_user.id
 
     await db.execute("SELECT case1, science FROM Lab WHERE lab_id = %s;", (user_id,))
@@ -353,6 +386,15 @@ async def cb_open_case1(call: CallbackQuery, db):
             )
             reward_text = f"+{actual_lvl} к разработке"
 
+    # Логируем в историю
+    try:
+        await db.execute(
+            "INSERT INTO CaseHistory (user_id, case_type, reward) VALUES (%s, %s, %s);",
+            (user_id, 1, reward_text)
+        )
+    except Exception as e:
+        print(f"[CASE HISTORY ERROR] {e}")
+
     ch_sci = "9.75%" if science < 60 else "0%"
     ch_pat = "29.25%" if science < 60 else "39.0%"
     ch_oth = "19.5%" if science < 60 else "19.5%"
@@ -374,6 +416,8 @@ async def cb_open_case1(call: CallbackQuery, db):
 
 @cases_router.callback_query(F.data == "open_case_2")
 async def cb_open_case2(call: CallbackQuery, db):
+    if not await check_cases_owner(call):
+        return
     user_id = call.from_user.id
 
     await db.execute("SELECT case2, science FROM Lab WHERE lab_id = %s;", (user_id,))
@@ -436,6 +480,15 @@ async def cb_open_case2(call: CallbackQuery, db):
                 (actual_lvl, user_id)
             )
             reward_text = f"+{actual_lvl} к разработке"
+
+    # Логируем в историю
+    try:
+        await db.execute(
+            "INSERT INTO CaseHistory (user_id, case_type, reward) VALUES (%s, %s, %s);",
+            (user_id, 2, reward_text)
+        )
+    except Exception as e:
+        print(f"[CASE HISTORY ERROR] {e}")
 
     ch_normal = "30.8%" if science <= 57 else "46.2%"
 
@@ -1425,21 +1478,13 @@ class TransferStates(StatesGroup):
     waiting_case_type = State()
     waiting_amount = State()
 
-# Переопределяем клавиатуру с кнопкой "Передать"
-def get_cases_keyboard():
-    kb = [
-        [InlineKeyboardButton(text="🛒 Купить Кейс 1", callback_data="buy_case_1")],
-        [
-            InlineKeyboardButton(text="📦 Открыть Кейс 1", callback_data="open_case_1"),
-            InlineKeyboardButton(text="💎 Открыть Кейс 2", callback_data="open_case_2")
-        ],
-        [InlineKeyboardButton(text="🔄 Передать", callback_data="transfer_menu")],
-        [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_cases_menu")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=kb)
+# Клавиатура берётся из начала файла (с Магазином и Историей)
 
 @cases_router.callback_query(F.data == "transfer_menu")
 async def cmd_transfer_menu(call: CallbackQuery):
+    if not await check_cases_owner(call):
+        return
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="📦 Передать Кейсы", callback_data="transfer_cases"),
@@ -1456,6 +1501,8 @@ async def cmd_transfer_menu(call: CallbackQuery):
 
 @cases_router.callback_query(F.data == "transfer_cases")
 async def transfer_cases_start(call: CallbackQuery, state: FSMContext):
+    if not await check_cases_owner(call):
+        return
     await state.set_state(TransferStates.waiting_target)
     await state.update_data(transfer_type="cases")
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]])
@@ -1468,6 +1515,8 @@ async def transfer_cases_start(call: CallbackQuery, state: FSMContext):
 
 @cases_router.callback_query(F.data == "transfer_coins")
 async def transfer_coins_start(call: CallbackQuery, state: FSMContext):
+    if not await check_cases_owner(call):
+        return
     await state.set_state(TransferStates.waiting_target)
     await state.update_data(transfer_type="coins")
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_transfer")]])
@@ -1481,6 +1530,16 @@ async def transfer_coins_start(call: CallbackQuery, state: FSMContext):
 @cases_router.message(TransferStates.waiting_target)
 async def transfer_get_target(msg: Message, state: FSMContext, db, bot: Bot):
     text = msg.text.strip()
+
+    # ===== ОТМЕНА =====
+    if text.lower() in ("отмена", "cancel", "стоп", "выход", "exit"):
+        await state.clear()
+        await msg.reply("❌ Передача отменена.")
+        return
+
+    # ===== ЕСЛИ НЕ ID И НЕ @USERNAME — НЕ ОБРАБАТЫВАЕМ =====
+    if not text.startswith("@") and not text.isdigit():
+        return
     user_id = msg.from_user.id
     target_id = None
     target_username = None
@@ -1561,6 +1620,8 @@ async def transfer_get_target(msg: Message, state: FSMContext, db, bot: Bot):
 
 @cases_router.callback_query(F.data.startswith("transfer_case_type_"))
 async def transfer_case_type_selected(call: CallbackQuery, state: FSMContext):
+    if not await check_cases_owner(call):
+        return
     case_type = int(call.data.split("_")[-1])
     await state.update_data(case_type=case_type)
     await state.set_state(TransferStates.waiting_amount)
@@ -1586,6 +1647,12 @@ async def transfer_case_type_selected(call: CallbackQuery, state: FSMContext):
 
 @cases_router.message(TransferStates.waiting_amount)
 async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
+    # ===== ОТМЕНА =====
+    if msg.text and msg.text.strip().lower() in ("отмена", "cancel", "стоп", "выход", "exit"):
+        await state.clear()
+        await msg.reply("❌ Передача отменена.")
+        return
+
     if not msg.text.isdigit():
         await msg.reply("❌ Введите число!")
         return
@@ -1714,6 +1781,144 @@ async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
 
 @cases_router.callback_query(F.data == "cancel_transfer")
 async def cancel_transfer(call: CallbackQuery, state: FSMContext):
+    if not await check_cases_owner(call):
+        return
     await state.clear()
     await call.message.delete()
     await call.answer("✅ Передача отменена")
+
+
+# ==================== МАГАЗИН (1 ДОНАТ-КЕЙС ЗА 1000 КОИНОВ) ====================
+@cases_router.callback_query(F.data == "shop_menu")
+async def cb_shop_menu(call: CallbackQuery, db):
+    if not await check_cases_owner(call):
+        return
+    user_id = call.from_user.id
+
+    await db.execute("SELECT epicoins, case2 FROM Lab WHERE lab_id = %s;", (user_id,))
+    lab = await db.fetchone()
+
+    if not lab:
+        await call.answer("❌ У вас нет лаборатории!", show_alert=True)
+        return
+
+    if isinstance(lab, dict):
+        epicoins = lab.get("epicoins", 0) or 0
+        case2 = lab.get("case2", 0) or 0
+    else:
+        epicoins = lab[0] or 0
+        case2 = lab[1] or 0
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💎 Купить Донат-кейс (1500 🪙)", callback_data="shop_buy_case2")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="shop_back")]
+    ])
+
+    await call.message.edit_text(
+        f"🛍 <b>МАГАЗИН</b>\n\n"
+        f"🪙 <b>Ваши эпикоины:</b> {epicoins:,}\n"
+        f"💎 <b>Ваши донат-кейсы:</b> {case2}\n\n"
+        f"📦 <b>Донат-кейс</b> — <b>1,500 🪙</b>",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+    await call.answer()
+
+
+@cases_router.callback_query(F.data == "shop_buy_case2")
+async def cb_shop_buy_case2(call: CallbackQuery, db):
+    if not await check_cases_owner(call):
+        return
+    user_id = call.from_user.id
+    PRICE = 1500
+
+    await db.execute("SELECT epicoins FROM Lab WHERE lab_id = %s;", (user_id,))
+    lab = await db.fetchone()
+
+    if not lab:
+        await call.answer("❌ У вас нет лаборатории!", show_alert=True)
+        return
+
+    epicoins = lab[0] if isinstance(lab, (tuple, list)) else lab.get("epicoins", 0) or 0
+
+    if epicoins < PRICE:
+        await call.answer(f"❌ Недостаточно эпикоинов! Нужно {PRICE:,} 🪙", show_alert=True)
+        return
+
+    await db.execute(
+        "UPDATE Lab SET epicoins = epicoins - %s, case2 = case2 + 1 WHERE lab_id = %s;",
+        (PRICE, user_id)
+    )
+
+    await call.answer(f"✅ Куплен донат-кейс за {PRICE:,} 🪙!", show_alert=True)
+    # Обновляем магазин
+    await cb_shop_menu(call, db)
+
+
+@cases_router.callback_query(F.data == "shop_back")
+async def cb_shop_back(call: CallbackQuery, db):
+    if not await check_cases_owner(call):
+        return
+    user_id = call.from_user.id
+    await db.execute("SELECT epicoins, case1, case2 FROM Lab WHERE lab_id = %s;", (user_id,))
+    lab = await db.fetchone()
+
+    if isinstance(lab, dict):
+        epicoins = lab.get("epicoins", 0) or 0
+        case1 = lab.get("case1", 0) or 0
+        case2 = lab.get("case2", 0) or 0
+    else:
+        epicoins = lab[0] or 0
+        case1 = lab[1] or 0
+        case2 = lab[2] or 0
+
+    cases_text = await get_theme_text(db, user_id, "cases_menu")
+    text = cases_text.format(
+        epicoins=f"{epicoins:,}",
+        case1=case1,
+        case2=case2
+    )
+    await call.message.edit_text(text, reply_markup=get_cases_keyboard())
+    await call.answer()
+
+
+# ==================== ИСТОРИЯ ОТКРЫТИЙ КЕЙСОВ ====================
+@cases_router.callback_query(F.data == "case_history")
+async def cb_case_history(call: CallbackQuery, db):
+    if not await check_cases_owner(call):
+        return
+    user_id = call.from_user.id
+
+    # Берём последние 10 открытий из логов (если есть таблица) или из Casino
+    # Используем таблицу Casino как заглушку (или создадим CaseHistory)
+    try:
+        await db.execute("""
+            SELECT case_type, reward, opened_at FROM CaseHistory
+            WHERE user_id = %s ORDER BY id DESC LIMIT 10
+        """, (user_id,))
+        rows = await db.fetchall()
+    except Exception:
+        rows = []
+
+    if not rows:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="shop_back")]])
+        await call.message.edit_text("📜 <b>История кейсов</b>\n\n<i>Пока нет открытий.</i>", reply_markup=kb, parse_mode="HTML")
+        await call.answer()
+        return
+
+    lines = ["📜 <b>История открытий кейсов (10 последних):</b>\n"]
+    for r in rows:
+        if isinstance(r, dict):
+            case_type = r.get("case_type", "?")
+            reward = r.get("reward", "?")
+            opened_at = r.get("opened_at", "?")
+        else:
+            case_type = r[0]
+            reward = r[1]
+            opened_at = r[2]
+        emoji = "📦" if case_type == 1 else "💎"
+        lines.append(f"{emoji} {reward} — {opened_at}")
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="shop_back")]])
+    await call.message.edit_text("\n".join(lines), reply_markup=kb, parse_mode="HTML")
+    await call.answer()

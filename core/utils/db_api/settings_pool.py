@@ -76,11 +76,15 @@ async def scheduler_tasks(pool, redis, bot, scheduler):
     scheduler.add_job(send_monthly_top_report, 'cron', day='last sun,last mon,last tue,last wed,last thu,last fri,last sat', hour=23, minute=59, args=(bot,))
 
     # ===== АВТОЗАПУСК БОССА В 20:00 МСК =====
-    from core.services.scheduler_tasks import auto_start_boss, finish_boss, finish_giveaways, check_expired_deposits
+    from core.services.scheduler_tasks import (
+        auto_start_boss, finish_boss, finish_giveaways, 
+        check_expired_deposits, auto_reward_top_zar
+    )
     scheduler.add_job(auto_start_boss, 'cron', hour=20, minute=0, args=(pool, redis, bot))
     scheduler.add_job(finish_boss, 'interval', minutes=1, args=(pool, redis, bot))
     scheduler.add_job(finish_giveaways, 'interval', minutes=1, args=(pool, bot))
     scheduler.add_job(check_expired_deposits, 'interval', minutes=5, args=(pool, bot))
+    scheduler.add_job(auto_reward_top_zar, 'interval', minutes=5, args=(pool, redis, bot))
     print("[SCHEDULER] Автозапуск босса запланирован на 20:00 МСК")
 
 # ===== ПРОВЕРКА КРЕДИТОВ ДОБАВЛЕНА В loop_tasks =====

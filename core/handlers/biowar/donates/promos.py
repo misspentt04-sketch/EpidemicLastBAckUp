@@ -180,4 +180,25 @@ async def cmd_activate_promo(msg: types.Message, db):
     await db.execute("UPDATE Promos SET activations_left = activations_left - 1 WHERE code = %s;", (code,))
     await db.execute("INSERT INTO PromoActivations (code, user_id) VALUES (%s, %s);", (code, user_id))
 
-    await msg.reply(f"🎉 <b>Промокод успешно активирован!</b>\n🎁 Вы получили награду: <b>+{rval}</b>")
+    # Красивое название награды
+    reward_names = {
+        "case1": ("📦", "Обычный кейс"),
+        "case2": ("💎", "Донат-кейс"),
+        "epicoins": ("🪙", "Эпикоины"),
+        "infect": ("☣️", "Заразность (ЗЗ)"),
+        "immunity": ("🛡", "Иммунитет"),
+        "lethality": ("☠️", "Летальность"),
+        "pathogens": ("🧪", "Патогены"),
+        "security_service": ("🔒", "Служба безопасности"),
+        "bio_resource": ("🧬", "Биоресурсы"),
+        "bio_experience": ("🧪", "Опыт"),
+    }
+
+    emoji, name = reward_names.get(rtype, ("🎁", rtype))
+
+    await msg.reply(
+        f"🎉 <b>Промокод успешно активирован!</b>\n\n"
+        f"🎁 <b>Вы получили:</b>\n"
+        f"{emoji} <b>+{rval:,}</b> — {name}",
+        parse_mode="HTML"
+    )

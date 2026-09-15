@@ -301,3 +301,119 @@ async def check_expired_deposits(pool: Pool, bot: Bot):
                 print(f"[DEPOSIT] Обработано депозитов: {len(deposits)}")
     except Exception as e:
         print(f"[DEPOSIT ERROR] {e}")
+
+
+# ===== АВТОВЫДАЧА НАГРАД ЗА ТОП ЗАР =====
+async def auto_reward_top_zar(pool: Pool, redis: Redis, bot: Bot):
+    """Каждый понедельник — за неделю, 1 числа — за месяц"""
+    from datetime import datetime
+    from core.settings import moscow_tz
+
+    try:
+        now = datetime.now(moscow_tz)
+
+        # ===== НЕДЕЛЯ (понедельник, 00:00–00:59) =====
+        if now.weekday() == 0 and now.hour == 0:
+            key = f"top_zar_reward:w:{now.strftime('%Y-%W')}"
+            if not await redis.get(key):
+                await give_top_zar_rewards(pool, "w")
+                await redis.set(key, "1", ex=7 * 86400)
+                print("[TOP ZAR] Выданы награды за неделю")
+                # Уведомление в канал
+                try:
+                    await bot.send_message(
+                        -1004335676077,
+                        "🏆 <b>ТОП ЗАР (НЕДЕЛЯ) — награды выданы!</b>\n\n"
+                        "📦 1 место — 3 кейса\n"
+                        "📦 2 место — 1 кейс\n"
+                        "🪙 3 место — 400 коинов\n"
+                        "🪙 4–10 место — по 100 коинов",
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    print(f"[TOP ZAR SEND ERROR] {e}")
+
+        # ===== МЕСЯЦ (1 число, 00:00–00:59) =====
+        if now.day == 1 and now.hour == 0:
+            key = f"top_zar_reward:m:{now.strftime('%Y-%m')}"
+            if not await redis.get(key):
+                await give_top_zar_rewards(pool, "m")
+                await redis.set(key, "1", ex=35 * 86400)
+                print("[TOP ZAR] Выданы награды за месяц")
+                # Уведомление в канал
+                try:
+                    await bot.send_message(
+                        -1004335676077,
+                        "🏆 <b>ТОП ЗАР (МЕСЯЦ) — награды выданы!</b>\n\n"
+                        "💎 1 место — 3 донат-кейса\n"
+                        "💎 2 место — 1 донат-кейс\n"
+                        "📦 3 место — 3 кейса\n"
+                        "📦 4–5 место — по 2 кейса\n"
+                        "📦 6–10 место — по 1 кейсу",
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    print(f"[TOP ZAR SEND ERROR] {e}")
+
+    except Exception as e:
+        print(f"[TOP ZAR AUTO ERROR] {e}")
+
+
+async def give_top_zar_rewards(pool: Pool, period: str):
+    """Выдаёт награды топ-10 заражений за период"""
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            if period == "w":
+                date_filter = "AND (YEARWEEK(h.infect_date, 1) = YEARWEEK(NOW(), 1) OR h.week_str = DATE_FORMAT(NOW(), '%G-%V'))"
+            elif period == "m":
+                date_filter = "AND (DATE_FORMAT(h.infect_date, '%Y-%m') = DATE_FORMAT(NOW(), '%Y-%m') OR h.month_str = DATE_FORMAT(NOW(), '%Y-%m'))"
+            else:
+                return
+
+            await cur.execute(f"""
+                SELECT h.attacker_id, COUNT(h.id) as cnt
+                FROM biowar_infection_history h
+                WHERE h.attacker_id != 123456789 {date_filter}
+                GROUP BY h.attacker_id
+                ORDER BY cnt DESC
+                LIMIT 10;
+            """)
+            rows = await cur.fetchall()
+
+            for idx, row in enumerate(rows, 1):
+                attacker_id = row.get('attacker_id') if isinstance(row, dict) else row[0]
+
+                case1 = 0
+                case2 = 0
+                epicoins = 0
+
+                if period == "w":
+                    if idx == 1:
+                        case1 = 3
+                    elif idx == 2:
+                        case1 = 1
+                    elif idx == 3:
+                        epicoins = 400
+                    elif 4 <= idx <= 10:
+                        epicoins = 100
+                elif period == "m":
+                    if idx == 1:
+                        case2 = 3
+                    elif idx == 2:
+                        case2 = 1
+                    elif idx == 3:
+                        case1 = 3
+                    elif idx in (4, 5):
+                        case1 = 2
+                    elif 6 <= idx <= 10:
+                        case1 = 1
+
+                if case1 or case2 or epicoins:
+                    await cur.execute("""
+                        UPDATE Lab
+                        SET case1 = case1 + %s,
+                            case2 = case2 + %s,
+                            epicoins = epicoins + %s
+                        WHERE lab_id = %s
+                    """, (case1, case2, epicoins, attacker_id))
+                    print(f"[TOP ZAR] {period} #{idx} → {attacker_id}: +{case1}📦 +{case2}💎 +{epicoins}🪙")
