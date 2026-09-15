@@ -23,6 +23,11 @@ MAX_HOURS = 6
 MIN_WINNERS = 3
 MAX_WINNERS = 10
 
+# ===== МИНИМАЛЬНЫЕ НАГРАДЫ =====
+MIN_PRIZE_RESOURCE = 500_000
+MIN_PRIZE_EPICOINS = 300
+MIN_PRIZE_CASE = 1
+
 PRIZE_TYPES = {
     "resource": "🧬 Ресурсы",
     "epicoins": "🪙 Эпикоины",
@@ -61,27 +66,24 @@ async def check_member(bot: Bot, user_id: int) -> tuple[bool, str]:
 # ===== МЕНЮ =====
 @router.message(F.text.lower() == "!розыгрыш")
 async def cmd_giveaway(msg: Message, redis: Redis, state: FSMContext):
-    # ===== ТОЛЬКО АДМИН =====
-    if msg.from_user.id != ADMIN_ID:
-        return
-
     # ===== СОХРАНЯЕМ СОЗДАТЕЛЯ =====
     await state.update_data(creator_id=msg.from_user.id)
 
-    # ===== КД 12 ЧАСОВ =====
-    cooldown_key = f"giveaway_cooldown:{msg.from_user.id}"
-    last = await redis.get(cooldown_key)
-    if last:
-        remaining = 12 * 3600 - (int(time.time()) - int(last))
-        if remaining > 0:
-            hours = remaining // 3600
-            minutes = (remaining % 3600) // 60
-            return await msg.reply(
-                f"⏳ <b>КД на создание розыгрыша!</b>\n\n"
-                f"Осталось: <b>{hours}ч {minutes}м</b>\n"
-                f"Следующий розыгрыш можно создать через 12 часов после предыдущего.",
-                parse_mode="HTML"
-            )
+    # ===== КД 12 ЧАСОВ (кроме админа) =====
+    if msg.from_user.id != ADMIN_ID:
+        cooldown_key = f"giveaway_cooldown:{msg.from_user.id}"
+        last = await redis.get(cooldown_key)
+        if last:
+            remaining = 12 * 3600 - (int(time.time()) - int(last))
+            if remaining > 0:
+                hours = remaining // 3600
+                minutes = (remaining % 3600) // 60
+                return await msg.reply(
+                    f"⏳ <b>КД на создание розыгрыша!</b>\n\n"
+                    f"Осталось: <b>{hours}ч {minutes}м</b>\n"
+                    f"Следующий розыгрыш можно создать через 12 часов после предыдущего.",
+                    parse_mode="HTML"
+                )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🧬 Ресурсы", callback_data="gw:type:resource")],
@@ -239,12 +241,31 @@ async def gw_prizes(msg: Message, state: FSMContext, pool: Pool, bot: Bot, redis
                     parse_mode="HTML"
                 )
 
+        # ===== ПРОВЕРКА МИНИМУМА =====
+        if resource > 0 and resource < MIN_PRIZE_RESOURCE:
+            return await msg.reply(f"❌ Минимум для ресурсов: <b>{MIN_PRIZE_RESOURCE:,}</b> 🧬", parse_mode="HTML")
+        if epicoins > 0 and epicoins < MIN_PRIZE_EPICOINS:
+            return await msg.reply(f"❌ Минимум для эпикоинов: <b>{MIN_PRIZE_EPICOINS}</b> 🪙", parse_mode="HTML")
+        if case1 > 0 and case1 < MIN_PRIZE_CASE:
+            return await msg.reply(f"❌ Минимум для кейсов: <b>{MIN_PRIZE_CASE}</b>", parse_mode="HTML")
+        if case2 > 0 and case2 < MIN_PRIZE_CASE:
+            return await msg.reply(f"❌ Минимум для донат-кейсов: <b>{MIN_PRIZE_CASE}</b>", parse_mode="HTML")
+
         prize = {"place": current_place, "resource": resource, "epicoins": epicoins, "case1": case1, "case2": case2}
     else:
         try:
             amount = int(text)
         except ValueError:
             return await msg.reply("❌ Введите число")
+
+        # ===== ПРОВЕРКА МИНИМУМА =====
+        if prize_type == "resource" and amount < MIN_PRIZE_RESOURCE:
+            return await msg.reply(f"❌ Минимум для ресурсов: <b>{MIN_PRIZE_RESOURCE:,}</b> 🧬", parse_mode="HTML")
+        if prize_type == "epicoins" and amount < MIN_PRIZE_EPICOINS:
+            return await msg.reply(f"❌ Минимум для эпикоинов: <b>{MIN_PRIZE_EPICOINS}</b> 🪙", parse_mode="HTML")
+        if prize_type in ("case1", "case2") and amount < MIN_PRIZE_CASE:
+            return await msg.reply(f"❌ Минимум для кейсов: <b>{MIN_PRIZE_CASE}</b>", parse_mode="HTML")
+
         prize = {"place": current_place, "resource": 0, "epicoins": 0, "case1": 0, "case2": 0}
         prize[prize_type] = amount
 
@@ -318,20 +339,44 @@ async def create_giveaway(msg: Message, state: FSMContext, pool: Pool, bot: Bot,
 
     if not lab:
         await state.clear()
-        return await msg.reply("❌ У вас нет лаборатории!")
+        return await msg.reply("❌ У вас нет лаборатории!\n\n🚫 Розыгрыш отменён.", parse_mode="HTML")
 
     if lab["bio_resource"] < total_resource:
         await state.clear()
-        return await msg.reply(f"❌ Не хватает ресурсов! Нужно <b>{total_resource:,}</b> 🧬, у вас <b>{lab['bio_resource']:,}</b>", parse_mode="HTML")
+        return await msg.reply(
+            f"❌ <b>Не хватает ресурсов!</b>\n"
+            f"Нужно: <b>{total_resource:,}</b> 🧬\n"
+            f"У вас: <b>{lab['bio_resource']:,}</b> 🧬\n\n"
+            f"🚫 Розыгрыш отменён.",
+            parse_mode="HTML"
+        )
     if lab["epicoins"] < total_epicoins:
         await state.clear()
-        return await msg.reply(f"❌ Не хватает эпикоинов! Нужно <b>{total_epicoins:,}</b> 🪙, у вас <b>{lab['epicoins']:,}</b>", parse_mode="HTML")
+        return await msg.reply(
+            f"❌ <b>Не хватает эпикоинов!</b>\n"
+            f"Нужно: <b>{total_epicoins:,}</b> 🪙\n"
+            f"У вас: <b>{lab['epicoins']:,}</b> 🪙\n\n"
+            f"🚫 Розыгрыш отменён.",
+            parse_mode="HTML"
+        )
     if lab["case1"] < total_case1:
         await state.clear()
-        return await msg.reply(f"❌ Не хватает кейсов! Нужно <b>{total_case1}</b> 📦, у вас <b>{lab['case1']}</b>", parse_mode="HTML")
+        return await msg.reply(
+            f"❌ <b>Не хватает кейсов!</b>\n"
+            f"Нужно: <b>{total_case1}</b> 📦\n"
+            f"У вас: <b>{lab['case1']}</b> 📦\n\n"
+            f"🚫 Розыгрыш отменён.",
+            parse_mode="HTML"
+        )
     if lab["case2"] < total_case2:
         await state.clear()
-        return await msg.reply(f"❌ Не хватает донат-кейсов! Нужно <b>{total_case2}</b> 💎, у вас <b>{lab['case2']}</b>", parse_mode="HTML")
+        return await msg.reply(
+            f"❌ <b>Не хватает донат-кейсов!</b>\n"
+            f"Нужно: <b>{total_case2}</b> 💎\n"
+            f"У вас: <b>{lab['case2']}</b> 💎\n\n"
+            f"🚫 Розыгрыш отменён.",
+            parse_mode="HTML"
+        )
 
     # ===== СПИСЫВАЕМ =====
     async with pool.acquire() as conn:
@@ -355,13 +400,56 @@ async def create_giveaway(msg: Message, state: FSMContext, pool: Pool, bot: Bot,
             )
             giveaway_id = cur.lastrowid
 
+    # Получаем имя создателя
+    async with pool.acquire() as conn:
+        async with conn.cursor(DictCursor) as cur:
+            await cur.execute(
+                "SELECT full_name, username FROM Users WHERE id = %s LIMIT 1",
+                (creator_id,)
+            )
+            creator_row = await cur.fetchone()
+
+    if creator_row:
+        creator_name = creator_row.get('full_name') or f"ID {creator_id}"
+        creator_username = creator_row.get('username')
+        if creator_username:
+            creator_display = f'<a href="https://t.me/{creator_username}">{creator_name}</a>'
+        else:
+            creator_display = f'<a href="tg://user?id={creator_id}">{creator_name}</a>'
+    else:
+        creator_display = f'<a href="tg://user?id={creator_id}">ID {creator_id}</a>'
+
+    # Формируем список наград
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    prizes_lines = []
+    for p in prizes:
+        place = p["place"]
+        parts = []
+        if p.get("resource", 0) > 0:
+            parts.append(f"{p['resource']:,} 🧬")
+        if p.get("epicoins", 0) > 0:
+            parts.append(f"{p['epicoins']:,} 🪙")
+        if p.get("case1", 0) > 0:
+            parts.append(f"{p['case1']} 📦")
+        if p.get("case2", 0) > 0:
+            parts.append(f"{p['case2']} 💎")
+
+        if not parts:
+            parts = ["ничего"]
+
+        medal = medals[place - 1] if place <= len(medals) else f"{place}."
+        prizes_lines.append(f"{medal} {place} место — {', '.join(parts)}")
+
     # Пост в канал
     text = (
         f"🎁 <b>РОЗЫГРЫШ!</b>\n\n"
+        f"👤 От: {creator_display}\n"
         f"🎯 Тип: {PRIZE_TYPES[prize_type]}\n"
         f"🏆 Победителей: <b>{winners_count}</b>\n"
         f"⏳ До 6 часов или 50 участников\n\n"
-        f"Нажмите кнопку ниже, чтобы участвовать!"
+        f"🎁 <b>Награды:</b>\n"
+        + "\n".join(prizes_lines)
+        + f"\n\nНажмите кнопку ниже, чтобы участвовать!"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[

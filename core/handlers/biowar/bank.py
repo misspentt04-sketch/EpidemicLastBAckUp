@@ -19,7 +19,7 @@ CREDIT_DAILY = 25.0
 CREDIT_HOURLY = CREDIT_DAILY / 24
 
 CREDIT_TERM = 7 * 86400
-CREDIT_PENALTY = 5
+CREDIT_PENALTY = 1
 
 class BankStates(StatesGroup):
     waiting_deposit_amount = State()
@@ -145,10 +145,10 @@ async def send_bank_menu(target, pool: Pool, user_id: int, is_callback: bool = F
                 f"⏳ <b>Осталось:</b> {days_left}д {hours_left}ч\n"
             )
         else:
-            penalty = credit_amount * CREDIT_PENALTY
+            debt = calculate_credit_debt(credit_amount, credit_start)
             credit_text = (
                 f"💳 <b>Кредит:</b> {format_money(credit_amount)} 🧬\n"
-                f"⚠️ <b>ПРОСРОЧЕН!</b> Штраф: -{format_money(penalty)} 🧬\n"
+                f"⚠️ <b>ПРОСРОЧЕН!</b> К возврату: {format_money(debt)} 🧬\n"
             )
     else:
         credit_text = "💳 <b>Кредит:</b> нет активных\n"
@@ -422,13 +422,31 @@ async def bank_repay(call: CallbackQuery, pool: Pool):
         return
 
     debt = calculate_credit_debt(credit_amount, credit_start)
+    balance = await get_balance(pool, call.from_user.id)
+
+    # Сколько можем списать (не уходим в минус)
+    pay = min(balance, debt)
 
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s", (debt, call.from_user.id))
-            await cur.execute("UPDATE Bank SET credit_amount = 0, credit_returned = 1, total_repaid = total_repaid + %s WHERE user_id = %s", (debt, call.from_user.id))
+            await cur.execute("UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s", (pay, call.from_user.id))
 
-    await call.answer(f"✅ Кредит возвращён! Списано {format_money(debt)} 🧬", show_alert=True)
+            if pay >= debt:
+                # Полностью вернул
+                await cur.execute("UPDATE Bank SET credit_amount = 0, credit_returned = 1, total_repaid = total_repaid + %s WHERE user_id = %s", (pay, call.from_user.id))
+                await call.answer(f"✅ Кредит полностью возвращён! Списано {format_money(pay)} 🧬", show_alert=True)
+            else:
+                # Частично — уменьшаем кредит
+                remaining = debt - pay
+                # Пересчитываем "тело" кредита из остатка (учитывая процент)
+                # Остаток долга делим на текущий процент
+                now = int(time.time())
+                hours = (now - credit_start) / 3600
+                percent = CREDIT_BASE + (CREDIT_HOURLY * hours)
+                new_credit_amount = int(remaining / (1 + percent / 100))
+                await cur.execute("UPDATE Bank SET credit_amount = %s, credit_start = %s, total_repaid = total_repaid + %s WHERE user_id = %s", (new_credit_amount, now, pay, call.from_user.id))
+                await call.answer(f"⚠️ Частично возвращено: {format_money(pay)} 🧬\n💰 Остаток долга: {format_money(remaining)} 🧬", show_alert=True)
+
     await send_bank_menu(call.message, pool, call.from_user.id, is_callback=True)
 
 # ===== ОБНОВИТЬ =====

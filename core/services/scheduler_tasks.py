@@ -219,11 +219,36 @@ async def finish_giveaways(pool: Pool, bot: Bot):
                         (json.dumps(winners), gw_id)
                     )
 
+                    # Получаем имена победителей
+                    winners_info = []
+                    for uid in winners:
+                        await cur.execute(
+                            "SELECT full_name, username FROM Users WHERE id = %s LIMIT 1",
+                            (uid,)
+                        )
+                        user_row = await cur.fetchone()
+                        if user_row:
+                            if isinstance(user_row, dict):
+                                full_name = user_row.get('full_name') or f"ID {uid}"
+                                username = user_row.get('username')
+                            else:
+                                full_name = user_row[0] or f"ID {uid}"
+                                username = user_row[1] if len(user_row) > 1 else None
+                        else:
+                            full_name = f"ID {uid}"
+                            username = None
+
+                        if username:
+                            display = f'<a href="https://t.me/{username}">{full_name}</a>'
+                        else:
+                            display = f'<a href="tg://user?id={uid}">{full_name}</a>'
+                        winners_info.append(display)
+
                     # Пост в канал
                     text = f"🏆 <b>РОЗЫГРЫШ ЗАВЕРШЁН!</b>\n\n"
                     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-                    for i, uid in enumerate(winners):
-                        text += f"{medals[i] if i < len(medals) else f'{i+1}.'} <code>{uid}</code>\n"
+                    for i, display in enumerate(winners_info):
+                        text += f"{medals[i] if i < len(medals) else f'{i+1}.'} {display}\n"
 
                     try:
                         await bot.send_message(-1004335676077, text, parse_mode="HTML")
