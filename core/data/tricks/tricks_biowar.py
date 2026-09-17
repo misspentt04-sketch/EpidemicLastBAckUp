@@ -50,9 +50,9 @@ tricks_biowar = {
     'price': {
         'skills': {
             'pathogens': 2,
-            'science': 2.6,
-            'infect': 2.5,
-            'immunity': 2.45,
+            'science': 2.5,
+            'infect': 2.55,
+            'immunity': 2.5,
             'lethality': 1.95,
             'security_service': 2.1
         },
