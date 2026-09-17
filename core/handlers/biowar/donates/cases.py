@@ -352,24 +352,15 @@ async def cb_open_case1(call: CallbackQuery, db):
         )
         reward_text = "💎 1 Донат Кейс!"
     else:
-        lvl = random.choices([1, 2, 3, 4, 5], weights=[40, 30, 18, 8, 4])[0]
+        lvl = random.choices([1, 2, 3], weights=[50, 35, 15])[0]
 
-        if science < 60:
-            items = ['pathogens', 'infect', 'immunity', 'lethality', 'science']
-            weights = [30, 20, 20, 20, 10]
-        else:
-            items = ['pathogens', 'infect', 'immunity', 'lethality']
-            weights = [40, 20, 20, 20]
+        # Без патогенов и разработки: ЗЗ, Иммун, Летал, СБ
+        items = ['infect', 'immunity', 'lethality', 'security_service']
+        weights = [22, 25, 25, 25.5]
 
         item_type = random.choices(items, weights=weights)[0]
 
-        if item_type == 'pathogens':
-            await db.execute(
-                "UPDATE Lab SET case1 = case1 - 1, pathogens = pathogens + %s, ready_pathogens = LEAST(ready_pathogens + %s, pathogens + %s) WHERE lab_id = %s;",
-                (lvl, lvl, lvl, user_id)
-            )
-            reward_text = f"+{lvl} к уровню патогена и +{lvl} готовый патоген"
-        elif item_type == 'infect':
+        if item_type == 'infect':
             await db.execute(
                 "UPDATE Lab SET case1 = case1 - 1, infect = infect + %s WHERE lab_id = %s;",
                 (lvl, user_id)
@@ -387,13 +378,12 @@ async def cb_open_case1(call: CallbackQuery, db):
                 (lvl, user_id)
             )
             reward_text = f"+{lvl} летальности"
-        elif item_type == 'science':
-            actual_lvl = min(lvl, 3, 60 - science)
+        elif item_type == 'security_service':
             await db.execute(
-                "UPDATE Lab SET case1 = case1 - 1, science = science + %s WHERE lab_id = %s;",
-                (actual_lvl, user_id)
+                "UPDATE Lab SET case1 = case1 - 1, security_service = security_service + %s WHERE lab_id = %s;",
+                (lvl, user_id)
             )
-            reward_text = f"+{actual_lvl} к разработке"
+            reward_text = f"+{lvl} безопасности"
 
     # Логируем в историю
     try:
@@ -404,18 +394,20 @@ async def cb_open_case1(call: CallbackQuery, db):
     except Exception as e:
         print(f"[CASE HISTORY ERROR] {e}")
 
-    ch_sci = "9.75%" if science < 60 else "0%"
-    ch_pat = "29.25%" if science < 60 else "39.0%"
-    ch_oth = "19.5%" if science < 60 else "19.5%"
-
     lines = [
         f"📦 Вы открыли <b>1 обычный кейс</b> и получили: <b>{reward_text}</b>",
         "<blockquote expandable>",
         "📊 <b>Шансы на дроп:</b>",
-        f"├ 💎 <b>Донат-кейс:</b> <code>2.5%</code>",
-        f"├ 🧪 <b>🧪 Готовых патогенов:</b> <code>{ch_pat}</code>",
-        f"├ ☣️ <b>ЗЗ / 🛡 Иммун / ☠️ Летальность:</b> по <code>{ch_oth}</code>",
-        f"└ 🧬 <b>Разработка (макс +3):</b> <code>{ch_sci}</code>",
+        "├ 💎 <b>Донат-кейс:</b> <code>2.5%</code>",
+        "├ 🛡 <b>Иммунитет:</b> <code>25%</code>",
+        "├ ☣️ <b>ЗЗ:</b> <code>22%</code>",
+        "├ ☠️ <b>Летальность:</b> <code>25%</code>",
+        "└ 🔒 <b>Безопасность:</b> <code>25.5%</code>",
+        "",
+        "🎲 <b>Уровень прибавки:</b>",
+        "├ +1 — <code>50%</code>",
+        "├ +2 — <code>35%</code>",
+        "└ +3 — <code>15%</code>",
         "</blockquote>"
     ]
     text = chr(10).join(lines)
