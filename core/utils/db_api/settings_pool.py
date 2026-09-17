@@ -85,6 +85,8 @@ async def scheduler_tasks(pool, redis, bot, scheduler):
     scheduler.add_job(finish_giveaways, 'interval', minutes=1, args=(pool, bot))
     scheduler.add_job(check_expired_deposits, 'interval', minutes=5, args=(pool, bot))
     scheduler.add_job(auto_reward_top_zar, 'interval', minutes=5, args=(pool, redis, bot))
+    from core.services.scheduler_tasks import reward_activity_top
+    scheduler.add_job(reward_activity_top, 'interval', minutes=5, args=(pool, redis, bot))
     print("[SCHEDULER] Автозапуск босса запланирован на 20:00 МСК")
 
 # ===== ПРОВЕРКА КРЕДИТОВ ДОБАВЛЕНА В loop_tasks =====

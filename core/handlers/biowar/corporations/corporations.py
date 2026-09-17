@@ -41,17 +41,26 @@ async def get_corporation(msg: Message, bot: Bot, db: Cursor, repo_biowar: Reque
     corp_leader = await repo_biowar.get_info_user_lab(corp['leader_id'])
     
     corp_leader_entity = func.entity_create_full_name(
-        corp_leader['id'], corp_leader['full_name']
+        corp_leader["id"], corp_leader["full_name"]
     )
-    
+
+    # Опыт и текущее кол-во жертв руководителя
+    leader_exp = corp_leader.get("bio_experience", 0) or 0
+    leader_infected = await repo_biowar.get_my_infected(corp_leader["id"])
+
     text = (
-        tricks_biowar['corporation']['get_corporation'].format(
-            corp['name'], corp_leader_entity, intcomma(corp['bio_experience']), corp['infected'],
-            intcomma(corp['bio_experience']), corp['infected'], count_labs, corp['invitation_code'],
-            ('открыто' if corp['corporation_dossier'] == 1 else 'засекречено')
+        tricks_biowar["corporation"]["get_corporation"].format(
+            corp["name"],
+            corp_leader_entity,
+            intcomma(leader_exp),
+            leader_infected,
+            intcomma(corp["bio_experience"]),
+            corp["infected"],
+            count_labs,
+            corp["invitation_code"],
+            ("открыто" if corp["corporation_dossier"] == 1 else "засекречено")
         )
     )
-    
     await msg.answer(text, reply_markup=corp_navigation(id, corp['invitation_code']))
 
 async def create_corporation(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):

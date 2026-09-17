@@ -204,6 +204,15 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         is_success = True
         await redis.delete(redis_key)
 
+        # +1 очко активности за успешное заражение
+        try:
+            from core.utils.activity import add_activity_point
+            from core.utils.db_api.settings_pool import db_pool
+            _pool = await db_pool.get_pool()
+            await add_activity_point(_pool, infecter['id'], "infect")
+        except Exception as e:
+            print(f"[ACTIVITY INFECT ERROR] {e}")
+
     infect_chance = total_chance
     display_chance_str = f"{infect_chance:.4f}"
     if display_chance_str == "" or display_chance_str == "0":

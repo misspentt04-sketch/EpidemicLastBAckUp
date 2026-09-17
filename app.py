@@ -59,6 +59,7 @@ from core.handlers.biowar.start_handler import start_router
 from core.handlers.biowar.admin.force_tick import set_pool
 from core.handlers.biowar.boss import router as boss_router
 from core.handlers.biowar.student_lab import router as student_lab_router
+from core.handlers.biowar.activity_top import router as activity_top_router
 from core.handlers.biowar.student_commands import router as student_commands_router
 from points_handler import router as points_router, start_reset_scheduler
 
@@ -217,6 +218,7 @@ async def main():
         points_router,
         boss_router,
         student_lab_router,
+        activity_top_router,
         student_commands_router,
         activity_router,
         giveaway_router,

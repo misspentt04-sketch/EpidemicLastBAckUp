@@ -417,3 +417,84 @@ async def give_top_zar_rewards(pool: Pool, period: str):
                         WHERE lab_id = %s
                     """, (case1, case2, epicoins, attacker_id))
                     print(f"[TOP ZAR] {period} #{idx} → {attacker_id}: +{case1}📦 +{case2}💎 +{epicoins}🪙")
+
+
+# ===== АВТОВЫДАЧА НАГРАД ЗА ТОП АКТИВНОСТИ =====
+async def reward_activity_top(pool: Pool, redis: Redis, bot: Bot):
+    """Каждый понедельник 00:00 — выдаёт награды за топ-5 активности"""
+    from core.utils.activity import get_week_str
+    from datetime import datetime, timedelta
+
+    try:
+        now = datetime.now(moscow_tz)
+
+        if now.weekday() != 0 or now.hour != 0:
+            return
+
+        last_week = (now - timedelta(days=7)).strftime("%Y-%W")
+        key = f"activity_reward:{last_week}"
+        if await redis.get(key):
+            return
+
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    SELECT ap.user_id, ap.points, u.full_name, l.lab_name
+                    FROM ActivityPoints ap
+                    LEFT JOIN Users u ON u.id = ap.user_id
+                    LEFT JOIN Lab l ON l.lab_id = ap.user_id
+                    WHERE ap.week_str = %s
+                    ORDER BY ap.points DESC
+                    LIMIT 5
+                """, (last_week,))
+                rows = await cur.fetchall()
+
+                winners_text = "🏆 <b>ИТОГИ ТОПА АКТИВНОСТИ</b>\n\n"
+                medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+
+                for i, row in enumerate(rows):
+                    uid = row[0]
+                    name = row[3] or row[2] or f"ID {uid}"
+                    case1 = 0
+                    case2 = 0
+                    epicoins = 0
+
+                    if i == 0:
+                        case2 = 2
+                    elif i == 1:
+                        case2 = 1
+                    elif i == 2:
+                        epicoins = 1000
+                    elif i in (3, 4):
+                        case1 = 1
+
+                    if case1 or case2 or epicoins:
+                        await cur.execute("""
+                            UPDATE Lab
+                            SET case1 = case1 + %s,
+                                case2 = case2 + %s,
+                                epicoins = epicoins + %s
+                            WHERE lab_id = %s
+                        """, (case1, case2, epicoins, uid))
+
+                    reward_str = []
+                    if case2:
+                        reward_str.append(f"+{case2} 💎")
+                    if case1:
+                        reward_str.append(f"+{case1} 📦")
+                    if epicoins:
+                        reward_str.append(f"+{epicoins} 🪙")
+
+                    winners_text += f"{medals[i]} <code>{uid}</code> — {' '.join(reward_str)}\n"
+
+                await redis.set(key, "1", ex=14 * 86400)
+
+                try:
+                    await bot.send_message(-1004335676077, winners_text, parse_mode="HTML")
+                except Exception as e:
+                    print(f"[ACTIVITY TOP SEND ERROR] {e}")
+
+                print(f"[ACTIVITY TOP] Награды за {last_week} выданы")
+
+    except Exception as e:
+        print(f"[ACTIVITY TOP ERROR] {e}")

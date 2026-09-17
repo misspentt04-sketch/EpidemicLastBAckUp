@@ -1,4 +1,5 @@
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from asyncmy.pool import Pool
 import time
 import random
 from aiogram import Bot, Router, types, F
@@ -45,7 +46,7 @@ def get_cases_keyboard():
 # ==================== 1. ФАРМ ====================
 @cases_router.message(F.text.lower() == "фарм")
 @cases_router.message(Command("farm"))
-async def cmd_farm(msg: types.Message, db):
+async def cmd_farm(msg: types.Message, db, pool: Pool):
     user_id = msg.from_user.id
     
     await db.execute("SELECT epicoins, case1, case2, last_farm FROM Lab WHERE lab_id = %s;", (user_id,))
@@ -76,6 +77,14 @@ async def cmd_farm(msg: types.Message, db):
         (reward, now, user_id)
     )
     
+    # +1 очко активности
+    try:
+        from core.utils.activity import add_activity_point
+        if pool:
+            await add_activity_point(pool, user_id, "farm")
+    except Exception as e:
+        print(f"[ACTIVITY FARM ERROR] {e}")
+
     await msg.reply(
         "🧪 Вы успешно провели научный сбор и получили:\n"
         f"<b>+{reward} 🪙 эпикоинов</b>"
