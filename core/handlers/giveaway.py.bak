@@ -446,15 +446,14 @@ async def create_giveaway(msg: Message, state: FSMContext, pool: Pool, bot: Bot,
         f"👤 От: {creator_display}\n"
         f"🎯 Тип: {PRIZE_TYPES[prize_type]}\n"
         f"🏆 Победителей: <b>{winners_count}</b>\n"
-        f"👥 Участников: <b>0</b> / {MAX_MEMBERS}\n"
-        f"⏳ До 6 часов или {MAX_MEMBERS} участников\n\n"
+        f"⏳ До 6 часов или 50 участников\n\n"
         f"🎁 <b>Награды:</b>\n"
         + "\n".join(prizes_lines)
         + f"\n\nНажмите кнопку ниже, чтобы участвовать!"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"🎉 Участвовать ({0})", callback_data=f"gw:join:{giveaway_id}")],
+        [InlineKeyboardButton(text="🎉 Участвовать", callback_data=f"gw:join:{giveaway_id}")],
     ])
 
     try:
@@ -471,86 +470,6 @@ async def create_giveaway(msg: Message, state: FSMContext, pool: Pool, bot: Bot,
 
     await state.clear()
     await msg.reply(f"✅ Розыгрыш создан! ID: <code>{giveaway_id}</code>", parse_mode="HTML")
-
-
-# ===== ХЕЛПЕР: текст и клавиатура розыгрыша =====
-async def build_giveaway_message(pool: Pool, giveaway_id: int) -> tuple[str, InlineKeyboardMarkup, int] | None:
-    """Возвращает (text, keyboard, msg_id) или None, если розыгрыш не найден"""
-    async with pool.acquire() as conn:
-        async with conn.cursor(DictCursor) as cur:
-            await cur.execute(
-                "SELECT channel_msg_id, creator_id, prize_type, winners_count, prizes, is_finished "
-                "FROM Giveaways WHERE id = %s",
-                (giveaway_id,)
-            )
-            gw_data = await cur.fetchone()
-            if not gw_data:
-                return None
-
-            await cur.execute(
-                "SELECT COUNT(*) AS cnt FROM GiveawayMembers WHERE giveaway_id = %s",
-                (giveaway_id,)
-            )
-            cnt_row = await cur.fetchone()
-            new_count = cnt_row["cnt"] if cnt_row else 0
-
-            creator_id = gw_data["creator_id"]
-            await cur.execute(
-                "SELECT full_name, username FROM Users WHERE id = %s LIMIT 1",
-                (creator_id,)
-            )
-            creator_row = await cur.fetchone()
-
-    if creator_row:
-        creator_name = creator_row.get("full_name") or f"ID {creator_id}"
-        creator_username = creator_row.get("username")
-        if creator_username:
-            creator_display = f'<a href="https://t.me/{creator_username}">{creator_name}</a>'
-        else:
-            creator_display = f'<a href="tg://user?id={creator_id}">{creator_name}</a>'
-    else:
-        creator_display = f'<a href="tg://user?id={creator_id}">ID {creator_id}</a>'
-
-    prizes_raw = gw_data["prizes"]
-    prizes = json.loads(prizes_raw) if isinstance(prizes_raw, str) else prizes_raw
-
-    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-    prizes_lines = []
-    for p in prizes:
-        place = p["place"]
-        parts = []
-        if p.get("resource", 0) > 0:
-            parts.append(f"{p['resource']:,} 🧬")
-        if p.get("epicoins", 0) > 0:
-            parts.append(f"{p['epicoins']:,} 🪙")
-        if p.get("case1", 0) > 0:
-            parts.append(f"{p['case1']} 📦")
-        if p.get("case2", 0) > 0:
-            parts.append(f"{p['case2']} 💎")
-        if not parts:
-            parts = ["ничего"]
-        medal = medals[place - 1] if place <= len(medals) else f"{place}."
-        prizes_lines.append(f"{medal} {place} место — {', '.join(parts)}")
-
-    status = "🎉 <b>АКТИВЕН</b>" if not gw_data["is_finished"] else "🏁 <b>ЗАВЕРШЁН</b>"
-
-    text = (
-        f"🎁 <b>РОЗЫГРЫШ!</b> {status}\n\n"
-        f"👤 От: {creator_display}\n"
-        f"🎯 Тип: {PRIZE_TYPES[gw_data['prize_type']]}\n"
-        f"🏆 Победителей: <b>{gw_data['winners_count']}</b>\n"
-        f"👥 Участников: <b>{new_count}</b> / {MAX_MEMBERS}\n"
-        f"⏳ До 6 часов или {MAX_MEMBERS} участников\n\n"
-        f"🎁 <b>Награды:</b>\n"
-        + "\n".join(prizes_lines)
-        + f"\n\nНажмите кнопку ниже, чтобы участвовать!"
-    )
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"🎉 Участвовать ({new_count})", callback_data=f"gw:join:{giveaway_id}")],
-    ])
-
-    return text, kb, gw_data["channel_msg_id"]
 
 
 # ===== УЧАСТИЕ =====
@@ -576,7 +495,7 @@ async def gw_join(call: CallbackQuery, pool: Pool, bot: Bot):
             await cur.execute("SELECT COUNT(*) FROM GiveawayMembers WHERE giveaway_id = %s", (giveaway_id,))
             count = (await cur.fetchone())[0]
             if count >= MAX_MEMBERS:
-                return await call.answer(f"❌ Участников уже {MAX_MEMBERS}!", show_alert=True)
+                return await call.answer("❌ Участников уже 50!", show_alert=True)
 
             # Добавляем
             try:
@@ -588,188 +507,7 @@ async def gw_join(call: CallbackQuery, pool: Pool, bot: Bot):
             except Exception:
                 return await call.answer("❌ Вы уже участвуете!", show_alert=True)
 
-    # ===== ОБНОВЛЯЕМ СЧЁТЧИК В КАНАЛЕ =====
-    try:
-        async with pool.acquire() as conn:
-            async with conn.cursor(DictCursor) as cur:
-                # Перечитываем данные розыгрыша
-                await cur.execute(
-                    "SELECT channel_msg_id, creator_id, prize_type, winners_count, prizes "
-                    "FROM Giveaways WHERE id = %s",
-                    (giveaway_id,)
-                )
-                gw_data = await cur.fetchone()
-
-                # Перечитываем счётчик
-                await cur.execute(
-                    "SELECT COUNT(*) AS cnt FROM GiveawayMembers WHERE giveaway_id = %s",
-                    (giveaway_id,)
-                )
-                cnt_row = await cur.fetchone()
-                new_count = cnt_row["cnt"] if cnt_row else 0
-
-        if gw_data and gw_data.get("channel_msg_id"):
-            channel_msg_id = gw_data["channel_msg_id"]
-            creator_id = gw_data["creator_id"]
-            prize_type = gw_data["prize_type"]
-            winners_count = gw_data["winners_count"]
-            prizes_raw = gw_data["prizes"]
-            prizes = json.loads(prizes_raw) if isinstance(prizes_raw, str) else prizes_raw
-
-            # Имя создателя
-            async with pool.acquire() as conn:
-                async with conn.cursor(DictCursor) as cur:
-                    await cur.execute(
-                        "SELECT full_name, username FROM Users WHERE id = %s LIMIT 1",
-                        (creator_id,)
-                    )
-                    creator_row = await cur.fetchone()
-
-            if creator_row:
-                creator_name = creator_row.get("full_name") or f"ID {creator_id}"
-                creator_username = creator_row.get("username")
-                if creator_username:
-                    creator_display = f'<a href="https://t.me/{creator_username}">{creator_name}</a>'
-                else:
-                    creator_display = f'<a href="tg://user?id={creator_id}">{creator_name}</a>'
-            else:
-                creator_display = f'<a href="tg://user?id={creator_id}">ID {creator_id}</a>'
-
-            # Список призов
-            medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
-            prizes_lines = []
-            for p in prizes:
-                place = p["place"]
-                parts = []
-                if p.get("resource", 0) > 0:
-                    parts.append(f"{p['resource']:,} 🧬")
-                if p.get("epicoins", 0) > 0:
-                    parts.append(f"{p['epicoins']:,} 🪙")
-                if p.get("case1", 0) > 0:
-                    parts.append(f"{p['case1']} 📦")
-                if p.get("case2", 0) > 0:
-                    parts.append(f"{p['case2']} 💎")
-                if not parts:
-                    parts = ["ничего"]
-                medal = medals[place - 1] if place <= len(medals) else f"{place}."
-                prizes_lines.append(f"{medal} {place} место — {', '.join(parts)}")
-
-            text = (
-                f"🎁 <b>РОЗЫГРЫШ!</b>\n\n"
-                f"👤 От: {creator_display}\n"
-                f"🎯 Тип: {PRIZE_TYPES[prize_type]}\n"
-                f"🏆 Победителей: <b>{winners_count}</b>\n"
-                f"👥 Участников: <b>{new_count}</b> / {MAX_MEMBERS}\n"
-                f"⏳ До 6 часов или {MAX_MEMBERS} участников\n\n"
-                f"🎁 <b>Награды:</b>\n"
-                + "\n".join(prizes_lines)
-                + f"\n\nНажмите кнопку ниже, чтобы участвовать!"
-            )
-
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=f"🎉 Участвовать ({new_count})", callback_data=f"gw:join:{giveaway_id}")],
-            ])
-
-            try:
-                await bot.edit_message_text(
-                    chat_id=LOG_CHANNEL,
-                    message_id=channel_msg_id,
-                    text=text,
-                    reply_markup=kb,
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                if "message is not modified" not in str(e).lower():
-                    print(f"[GW UPDATE ERROR] {e}")
-    except Exception as e:
-        print(f"[GW COUNTER ERROR] {e}")
-
-
-# ===== ПЕРЕОТПРАВКА РОЗЫГРЫША (ОБНОВЛЕНИЕ СООБЩЕНИЯ) =====
-@router.message(F.text.lower().startswith("!обновить розыгрыш"))
-@router.message(F.text.lower().startswith("!обновить_розыгрыш"))
-@router.message(F.text.lower().startswith("!refresh_giveaway"))
-async def cmd_refresh_giveaway(msg: Message, pool: Pool, bot: Bot, redis: Redis):
-    user_id = msg.from_user.id
-
-    # ===== ПАРСИМ НОМЕР РОЗЫГРЫША =====
-    args = msg.text.split()
-    giveaway_id = None
-    for arg in args:
-        if arg.isdigit():
-            giveaway_id = int(arg)
-            break
-
-    # ===== ЕСЛИ НОМЕР НЕ УКАЗАН — БЕРЁМ ПОСЛЕДНИЙ АКТИВНЫЙ =====
-    if giveaway_id is None:
-        async with pool.acquire() as conn:
-            async with conn.cursor(DictCursor) as cur:
-                await cur.execute(
-                    "SELECT id FROM Giveaways WHERE is_finished = 0 "
-                    "ORDER BY id DESC LIMIT 1"
-                )
-                row = await cur.fetchone()
-        if not row:
-            return await msg.reply(
-                "❌ Нет активных розыгрышей!\n\n"
-                "💡 Укажите номер: <code>!обновить розыгрыш 5</code>",
-                parse_mode="HTML"
-            )
-        giveaway_id = row["id"]
-
-    # ===== ЗАГРУЖАЕМ РОЗЫГРЫШ =====
-    async with pool.acquire() as conn:
-        async with conn.cursor(DictCursor) as cur:
-            await cur.execute(
-                "SELECT id, creator_id, channel_msg_id, is_finished "
-                "FROM Giveaways WHERE id = %s",
-                (giveaway_id,)
-            )
-            gw = await cur.fetchone()
-
-    if not gw:
-        return await msg.reply(f"❌ Розыгрыш <b>#{giveaway_id}</b> не найден!", parse_mode="HTML")
-
-    creator_id = gw["creator_id"]
-    old_msg_id = gw["channel_msg_id"]
-
-    # Проверка прав: админ или создатель
-    if user_id != ADMIN_ID and user_id != creator_id:
-        return await msg.reply("❌ Только создатель или админ может обновить розыгрыш!")
-
-    # ===== УДАЛЯЕМ СТАРОЕ СООБЩЕНИЕ =====
-    if old_msg_id:
-        try:
-            await bot.delete_message(chat_id=LOG_CHANNEL, message_id=old_msg_id)
-            print(f"[GW REFRESH] Удалено старое сообщение {old_msg_id} для розыгрыша #{giveaway_id}")
-        except Exception as e:
-            print(f"[GW REFRESH DELETE ERROR] {e}")
-
-    # ===== СОБИРАЕМ НОВОЕ =====
-    result = await build_giveaway_message(pool, giveaway_id)
-    if not result:
-        return await msg.reply("❌ Не удалось собрать сообщение розыгрыша!")
-
-    text, kb, _ = result
-
-    # ===== ОТПРАВЛЯЕМ НОВОЕ =====
-    try:
-        sent = await bot.send_message(LOG_CHANNEL, text, reply_markup=kb, parse_mode="HTML")
-        # Обновляем channel_msg_id в БД
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    "UPDATE Giveaways SET channel_msg_id = %s WHERE id = %s",
-                    (sent.message_id, giveaway_id)
-                )
-        await msg.reply(
-            f"✅ Розыгрыш <b>#{giveaway_id}</b> обновлён!\n"
-            f"📩 Новое сообщение: <code>{sent.message_id}</code>\n"
-            f"🗑 Старое: <code>{old_msg_id or 'нет'}</code>",
-            parse_mode="HTML"
-        )
-    except Exception as e:
-        await msg.reply(f"❌ Ошибка при отправке: {e}")
+    # TODO: обновить счётчик в сообщении
 
 
 # ===== СПИСОК УЧАСТНИКОВ =====
