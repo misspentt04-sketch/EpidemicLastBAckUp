@@ -1692,7 +1692,7 @@ async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
             await msg.reply(f"❌ У вас недостаточно {type_name}!\n📦 Доступно: <b>{user_cases}</b> шт.", parse_mode="HTML")
             return
 
-        if epicoins < 500:
+        if epicoins < 5000:
             await msg.reply("❌ Недостаточно эпикоинов для комиссии (нужно <b>5,000 🪙</b>)!", parse_mode="HTML")
             return
 
@@ -1704,7 +1704,7 @@ async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
 
         await db.execute(f"UPDATE Lab SET {col} = {col} - %s WHERE lab_id = %s;", (amount, user_id))
         await db.execute(f"UPDATE Lab SET {col} = {col} + %s WHERE lab_id = %s;", (amount, target_id))
-        await db.execute("UPDATE Lab SET epicoins = epicoins - 500 WHERE lab_id = %s;", (user_id,))
+        await db.execute("UPDATE Lab SET epicoins = epicoins - 5000 WHERE lab_id = %s;", (user_id,))
 
     else:
         type_name = "Коинов"

@@ -64,7 +64,8 @@ async def pathogens_refresh_check(pool: Pool):
     logging.info("DEBUG pathogens_refresh_check started")
     sql = (
         "SELECT lab_id, science, pathogens, ready_pathogens, science_time FROM Lab "
-        "WHERE science_time IS NOT NULL AND science_time <= %s;"
+        "WHERE (science_time IS NULL AND ready_pathogens < pathogens) "
+        "   OR (science_time IS NOT NULL AND (science_time <= %s OR science_time > %s));"
     )
     sql_clear = (
         "UPDATE Lab SET science_time=NULL, "
@@ -82,8 +83,11 @@ async def pathogens_refresh_check(pool: Pool):
             while True:
                 await asyncio.sleep(15)
                 now_ts = int(time.time())
-                await cur.execute(sql, now_ts)
+                await cur.execute(sql, (now_ts, now_ts + 3600))
                 check = await cur.fetchall()
+                print(f"[PATHOGEN DEBUG] now={now_ts}, найдено записей: {len(check)}")
+                if check:
+                    print(f"[PATHOGEN DEBUG] IDs: {[s['lab_id'] for s in check[:10]]}")
 
                 for string in check:
                     lab_id = string["lab_id"]
@@ -92,10 +96,31 @@ async def pathogens_refresh_check(pool: Pool):
                     ready_pathogens = string["ready_pathogens"]
                     science_time = string["science_time"]
 
-                    if ready_pathogens + 1 >= pathogens:
+                    # Максимальное время ожидания — 60 минут
+                    seconds_to_wait = max((61 - science_lvl), 1) * 60
+
+                    # ===== ЕСЛИ ТАЙМЕРА НЕТ — ЗАПУСКАЕМ =====
+                    if science_time is None:
+                        next_expire = now_ts + seconds_to_wait
+                        await cur.execute(sql_next, (next_expire, lab_id))
+                        print(f"[PATHOGEN START] lab={lab_id}, science={science_lvl}, таймер на {seconds_to_wait} сек")
+                        continue
+
+                    max_allowed_time = now_ts + seconds_to_wait + 60  # +1 мин запас
+
+                    # ===== ФИКС: если таймер ушёл в космос — сбрасываем =====
+                    if science_time > max_allowed_time:
+                        next_expire = now_ts + seconds_to_wait
+                        print(f"[PATHOGEN FIX] lab={lab_id}, science_time={science_time}, сброс до {next_expire}", flush=True)
+                        await cur.execute(sql_next, (next_expire, lab_id))
+                        continue
+
+                    if ready_pathogens >= pathogens:
+                        # Уже полный — просто сбрасываем таймер
+                        await cur.execute("UPDATE Lab SET science_time = NULL WHERE lab_id = %s", (lab_id,))
+                    elif ready_pathogens + 1 >= pathogens:
                         await cur.execute(sql_clear, lab_id)
                     else:
-                        seconds_to_wait = max((61 - science_lvl), 1) * 60
                         base_time = max(science_time, now_ts)
                         next_expire = base_time + seconds_to_wait
                         await cur.execute(sql_next, (next_expire, lab_id))

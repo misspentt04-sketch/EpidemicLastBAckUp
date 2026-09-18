@@ -152,3 +152,67 @@ async def top_donors_handler(message: types.Message):
         await message.reply(text, parse_mode="Markdown", disable_web_page_preview=True)
     except Exception:
         await message.reply("❌ **Ошибка при загрузке топа из базы данных.**", parse_mode="Markdown")
+
+
+# ===== АВТОВЫДАЧА НАГРАД ЗА ТОП ДОНАТ =====
+async def reward_top_donors(bot):
+    """Выдаёт награды топ-5 донатеров и сбрасывает очки"""
+    try:
+        rows = await asyncio.to_thread(_get_top_sync)
+        if not rows:
+            print("[TOP DON] Нет данных для награждения")
+            return
+
+        # Награды: 1 — 5 ДК, 2 — 3 ДК, 3 — 1 ДК, 4-5 — 2 обычных кейса
+        rewards = {
+            1: {"case2": 5, "case1": 0},
+            2: {"case2": 3, "case1": 0},
+            3: {"case2": 1, "case1": 0},
+            4: {"case2": 0, "case1": 2},
+            5: {"case2": 0, "case1": 2},
+        }
+
+        winners_text = "🏆 <b>ИТОГИ ТОПА ДОНАТЕРОВ</b>\n\n"
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as c:
+                for idx, (uid, points) in enumerate(rows[:5], 1):
+                    reward = rewards.get(idx)
+                    if not reward:
+                        continue
+
+                    case1 = reward["case1"]
+                    case2 = reward["case2"]
+
+                    c.execute("""
+                        UPDATE Lab
+                        SET case1 = case1 + %s,
+                            case2 = case2 + %s
+                        WHERE lab_id = %s
+                    """, (case1, case2, uid))
+
+                    reward_str = []
+                    if case2:
+                        reward_str.append(f"+{case2} 💎")
+                    if case1:
+                        reward_str.append(f"+{case1} 📦")
+
+                    winners_text += f"{medals[idx-1]} <code>{uid}</code> — {' '.join(reward_str)} ({points} очков)\n"
+
+                # Сброс очков
+                c.execute("UPDATE Users SET don_top = 0")
+        finally:
+            conn.close()
+
+        # Уведомление в канал
+        try:
+            await bot.send_message(-1004335676077, winners_text, parse_mode="HTML")
+        except Exception as e:
+            print(f"[TOP DON SEND ERROR] {e}")
+
+        print("[TOP DON] Награды выданы, очки сброшены")
+
+    except Exception as e:
+        print(f"[TOP DON REWARD ERROR] {e}")

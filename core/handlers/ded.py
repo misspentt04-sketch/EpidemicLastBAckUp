@@ -9,8 +9,8 @@ router = Router()
 
 # ===== НАСТРОЙКИ =====
 REWARD_RESOURCE = 10_000
-REWARD_EXP = 2_000
-COOLDOWN = 30 * 60  # 30 минут
+REWARD_EXP = 500
+COOLDOWN = 60 * 60  # 1 час
 
 # ===== ТЕКСТЫ КОМАНД (любой регистр) =====
 COMMANDS = [
@@ -69,6 +69,6 @@ async def cmd_ded(msg: Message, pool: Pool, redis: Redis):
         f"🎁 <b>Награда получена!</b>\n\n"
         f"💰 +{REWARD_RESOURCE:,} 🧬\n"
         f"⭐ +{REWARD_EXP:,} XP\n\n"
-        f"⏳ Следующая награда через 30 минут",
+        f"⏳ Следующая награда через 1 час",
         parse_mode="HTML"
     )

@@ -10,7 +10,7 @@ from core.services.loop_tasks import (
     refresh_pets_vuln_indicator, game_mute_check, pet_the_pet_time_check,
     pet_happy_check,
     student_income_loop,
-    weekly_exp_grant
+    # weekly_exp_grant  # ОТКЛЮЧЕНО: еженедельная выдача опыта
 )
 from core.services.top_reports import send_weekly_top_report, send_monthly_top_report
 
@@ -47,7 +47,7 @@ async def loop_tasks(pool, redis, bot):
     
     # Запускаем все задачи через create_task, чтобы они не блокировали друг друга
     try:
-        asyncio.create_task(weekly_exp_grant(pool))
+        # asyncio.create_task(weekly_exp_grant(pool))  # ОТКЛЮЧЕНО: еженедельная выдача опыта
         asyncio.create_task(victim_expire_check(pool))
         asyncio.create_task(victim_expire_kd_check(pool))
         asyncio.create_task(victim_fever_check(pool))

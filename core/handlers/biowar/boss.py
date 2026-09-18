@@ -12,9 +12,9 @@ BOSS_STICKER = "CAACAgIAAxkBAAER3bRqnrlPKu8usp1KpsKlwSmDa0twSQACNwMAAu7EoQpGEtmG
 LOG_CHAT = -1004335676077
 
 REWARDS = {
-    1: {"place": "🥇 1 место", "epicoins": 1000, "cases": 3, "exp": 10000},
-    2: {"place": "🥈 2 место", "epicoins": 500, "cases": 1, "exp": 3000},
-    3: {"place": "🥉 3 место", "epicoins": 300, "cases": 0, "exp": 1000},
+    1: {"place": "🥇 1 место", "epicoins": 1000, "cases": 3, "exp": 3000},
+    2: {"place": "🥈 2 место", "epicoins": 500, "cases": 1, "exp": 1000},
+    3: {"place": "🥉 3 место", "epicoins": 300, "cases": 0, "exp": 500},
 }
 
 ATTACK_COOLDOWN = 60
@@ -274,8 +274,9 @@ async def start_boss(msg: Message, **kwargs):
     
     await msg.reply(
         f"🧟 <b>Босс создан!</b>\n\n❤️ HP: <b>{max_hp:,}</b>\n⏳ Время: 1 час\n⏱️ КД: 1 минута\n\n"
-        f"🏆 <b>Награды:</b>\n🥇 1 место — 10 000 опыта + 3 кейса + 1 000 🪙\n"
-        f"🥈 2 место — 3 000 опыта + 1 кейс + 500 🪙\n🥉 3 место — 1 000 опыта + 300 🪙\n\n"
+        f"🏆 <b>Награды:</b>\n🥇 1 место — 3 000 опыта + 3 кейса + 1 000 🪙\n"
+        f"🥈 2 место — 1 000 опыта + 1 кейс + 500 🪙\n🥉 3 место — 500 опыта + 300 🪙\n"
+        f"🎁 Участникам: 150–200 🪙 и 150 опыта\n\n"
         f"⚔️ <b>Урон:</b> БЕЗОПАСНОСТЬ (×3) + ЛЕТАЛЬНОСТЬ (×2)\n🎲 Рандом: ±50%\n\n"
         f"Атакуйте через <code>/boss</code>!",
         parse_mode="HTML"
@@ -368,6 +369,11 @@ async def boss_attack(call: CallbackQuery, **kwargs):
 
     await send_boss_menu(call.message, redis, pool, is_callback=True)
 
+# ===== ХЕЛПЕР: отображение игрока =====
+def get_user_display(user_id: int) -> str:
+    """Возвращает кликабельное @ID (ссылка на профиль по ID)"""
+    return f"<a href='tg://user?id={user_id}'>@{user_id}</a>"
+
 # ===== НАГРАДЫ =====
 async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: int):
     all_attackers = await get_all_attackers(pool, boss_id)
@@ -407,6 +413,33 @@ async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: i
                     ON DUPLICATE KEY UPDATE wins = wins + 1, total_damage = total_damage + %s
                 """, (user_id, damage, i, damage))
 
+    # ===== НАГРАДЫ ВСЕМ ОСТАЛЬНЫМ УЧАСТНИКАМ =====
+    top_3_ids = {uid for uid, _ in top_3}
+    other_attackers = [(uid, dmg) for uid, dmg in all_attackers if uid not in top_3_ids]
+
+    for user_id, damage in other_attackers:
+        epicoins_reward = random.randint(150, 200)
+        exp_reward = 150
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("""
+                    UPDATE Lab
+                    SET epicoins = epicoins + %s,
+                        bio_experience = bio_experience + %s
+                    WHERE lab_id = %s
+                """, (epicoins_reward, exp_reward, user_id))
+        try:
+            await call.bot.send_message(
+                user_id,
+                f"🎁 <b>Награда за участие в боссе!</b>\n\n"
+                f"⚔️ Ваш урон: {damage:,}\n"
+                f"🪙 +{epicoins_reward} эпикоинов\n"
+                f"🧪 +{exp_reward} опыта",
+                parse_mode="HTML"
+            )
+        except:
+            pass
+
     # Закрываем босса в БД
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
@@ -415,13 +448,49 @@ async def give_rewards(call: CallbackQuery, pool: Pool, redis: Redis, boss_id: i
     log_text = f"🧟 <b>Босс повержен!</b>\n\n"
     medals = ["🥇", "🥈", "🥉"]
     for i, (user_id, damage) in enumerate(top_3, start=1):
-        log_text += f"{medals[i-1]} <code>{user_id}</code> — <b>{damage:,}</b> урона\n"
+        display = get_user_display(user_id)
+        log_text += f"{medals[i-1]} {display} — <b>{damage:,}</b> урона\n"
+
+    # ===== ВСЕ ОСТАЛЬНЫЕ УЧАСТНИКИ =====
+    if other_attackers:
+        log_text += f"\n🎁 <b>Остальные участники:</b>\n"
+        for user_id, damage in other_attackers:
+            display = get_user_display(user_id)
+            log_text += f"• {display} — <b>{damage:,}</b> урона\n"
+
     log_text += f"\n📊 Всего атакующих: {len(all_attackers)}"
+    log_text += f"\n🎁 Награждено за участие: {len(other_attackers)}"
     
-    try:
-        await call.bot.send_message(LOG_CHAT, log_text, parse_mode="HTML")
-    except:
-        pass
+    # ===== ОТПРАВКА С РАЗБИВКОЙ НА ЧАСТИ (лимит Telegram 4096) =====
+    async def send_long_message(bot, chat_id: int, text: str, parse_mode: str = "HTML"):
+        """Отправляет длинное сообщение, разбивая на части"""
+        MAX_LEN = 3500
+        if len(text) <= MAX_LEN:
+            try:
+                await bot.send_message(chat_id, text, parse_mode=parse_mode)
+            except Exception as e:
+                print(f"[SEND LOG ERROR] {e}")
+            return
+
+        # Разбиваем по строкам
+        lines = text.split("\n")
+        chunk = ""
+        for line in lines:
+            if len(chunk) + len(line) + 1 > MAX_LEN:
+                try:
+                    await bot.send_message(chat_id, chunk, parse_mode=parse_mode)
+                except Exception as e:
+                    print(f"[SEND LOG ERROR] {e}")
+                chunk = line + "\n"
+            else:
+                chunk += line + "\n"
+        if chunk.strip():
+            try:
+                await bot.send_message(chat_id, chunk, parse_mode=parse_mode)
+            except Exception as e:
+                print(f"[SEND LOG ERROR] {e}")
+
+    await send_long_message(call.bot, LOG_CHAT, log_text, parse_mode="HTML")
 
 # ===== НАКАЗАНИЕ =====
 
