@@ -30,7 +30,7 @@ async def pathogen_name_change(msg: Message, bot: Bot, db: Cursor, repo_biowar: 
     if bio_mute:
         bio_mute_days = (datetime.fromtimestamp(bio_mute['time_expire']) - datetime.utcnow()).days
         return await msg.answer(tricks_biowar['epidemic_admins']['bio_muted'].format(bio_mute_days))
-    if len(pathogen_name) >= max_pathogen_len:
+    if len(pathogen_name) > max_pathogen_len:
         return await msg.answer(tricks_biowar['lab']['pathogen_name_change_max_len'].format(max_pathogen_len))
     if pathogen_check:
         return await msg.answer(tricks_biowar['lab']['pathogen_name_already_exists'])

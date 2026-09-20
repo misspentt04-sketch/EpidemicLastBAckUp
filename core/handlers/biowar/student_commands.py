@@ -402,8 +402,8 @@ async def cmd_student_set_pathogen_name(msg: Message, pool: Pool, repo_biowar: R
     match = re.match(r'(?i)^ученик\s+\+имя\s+патогена\s+(.+)$', msg.text)
     new_name = match.group(1).strip()
 
-    if len(new_name) > 48:
-        return await msg.reply("❌ Имя патогена слишком длинное (макс. 48)")
+    if len(new_name) > 40:
+        return await msg.reply("❌ Имя патогена слишком длинное (макс. 40)")
 
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
@@ -423,8 +423,8 @@ async def cmd_student_set_lab_name(msg: Message, pool: Pool):
     match = re.match(r'(?i)^ученик\s+\+имя\s+(.+)$', msg.text)
     new_name = match.group(1).strip()
 
-    if len(new_name) > 48:
-        return await msg.reply("❌ Имя лаборатории слишком длинное (макс. 48)")
+    if len(new_name) > 40:
+        return await msg.reply("❌ Имя лаборатории слишком длинное (макс. 40)")
 
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:

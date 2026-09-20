@@ -11,6 +11,7 @@ from .event import event_router
 from .infects import infect_router, infect2_router
 from .missions import missions_router
 from .donates import promos_router, cases_router
+from .discounts import router as acts_router
 from .boss import router as boss_router
 from .student_lab import router as student_lab_router
 
@@ -29,6 +30,7 @@ biowar_router.include_routers(
     event_router,
     missions_router,
     cases_router,
+    acts_router,
     promos_router
 )
 

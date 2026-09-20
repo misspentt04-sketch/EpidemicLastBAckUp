@@ -29,6 +29,7 @@ async def check_cases_owner(call) -> bool:
 
 def get_cases_keyboard():
     kb = [
+        [InlineKeyboardButton(text="🔥 АКЦИИ", callback_data="acts_menu")],
         [InlineKeyboardButton(text="🛒 Купить Кейс 1", callback_data="buy_case_1")],
         [
             InlineKeyboardButton(text="📦 Открыть Кейс 1", callback_data="open_case_1"),
@@ -237,6 +238,10 @@ async def cmd_open_all_cases(msg: types.Message, db):
 @cases_router.message(Command("case"))
 async def cmd_cases(msg: types.Message, db):
     user_id = msg.from_user.id
+
+    # ===== ЗАПРЕТ =====
+    if user_id == 1758346431:
+        return await msg.reply("❌ <b>Вам запрещено использовать кейсы!</b>", parse_mode="HTML")
     
     await db.execute("SELECT epicoins, case1, case2, last_farm FROM Lab WHERE lab_id = %s;", (user_id,))
     lab = await db.fetchone()

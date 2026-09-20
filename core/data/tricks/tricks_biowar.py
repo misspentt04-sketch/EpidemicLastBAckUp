@@ -76,7 +76,7 @@ tricks_biowar = {
             'gave_victims_food': 12 * 60 * 60,
         },
         'elements': {
-            'pathogen_name_len': 48,
+            'pathogen_name_len': 40,
             'lab_name_len': 48,
             'infect_claim_percent': 0.10,
             'infect_boost_percent_by_trailblazer': 0.015,
