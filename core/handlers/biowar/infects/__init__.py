@@ -1,4 +1,4 @@
-from .mf import cmd_mass_fallen, process_mf_page, process_mf_start
+from .mf import cmd_mass_fallen, process_mf_page, process_mf_start, process_mf_start_all, process_mf_cleanup, process_mf_cancel, cmd_mf_stop
 from aiogram import Router, F
 from core.data import texttriggers as trg
 from aiogram.filters import Command
@@ -41,6 +41,8 @@ infect_router.callback_query.register(hit_target_callback, F.data.startswith('hi
 infect_router.message.register(cmd_mass_fallen, F.text.lower() == 'мф')
 infect_router.callback_query.register(process_mf_page, F.data.startswith('mf_page:'))
 infect_router.callback_query.register(process_mf_start, F.data.startswith('mf_start:'))
+infect_router.callback_query.register(process_mf_start_all, F.data == 'mf_start_all')
+infect_router.callback_query.register(process_mf_cleanup, F.data == 'mf_cleanup')
 
 # Подключаем топ жертв
 infect_router.include_router(top_victims_router)

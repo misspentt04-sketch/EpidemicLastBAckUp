@@ -235,6 +235,30 @@ async def process_rebirth_confirm(callback: types.CallbackQuery, db):
 
     await db.execute("DELETE FROM Victims WHERE victims_owner_id = %s;", (owner_id,))
 
+    # ===== СБРОС КД =====
+    # 1. КД на жертв в БД (только у этого игрока — обнулить)
+    await db.execute(
+        "UPDATE Victims SET victim_expire_kd = 0 WHERE victims_owner_id = %s;",
+        (owner_id,)
+    )
+
+    # 2. КД на фарм (только у этого игрока)
+    await db.execute(
+        "UPDATE Lab SET last_farm = 0 WHERE lab_id = %s;",
+        (owner_id,)
+    )
+
+    # 3. Redis: дед + локи заражения (только у этого игрока)
+    try:
+        import redis.asyncio as aioredis
+        from core.settings import settings
+        r = aioredis.from_url(f"redis://{settings.redis.ip}:6379/0")
+        await r.delete(f"ded_cooldown:{owner_id}")
+        await r.delete(f"epidemic_victim_lock:{owner_id}")
+        await r.close()
+    except Exception as e:
+        print(f"[RB REDIS ERROR] {e}")
+
     # Сброс банка (депозит + кредит)
     await db.execute("""
         UPDATE Bank
