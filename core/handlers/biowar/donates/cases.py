@@ -39,6 +39,7 @@ def get_cases_keyboard():
             InlineKeyboardButton(text="🛍 Магазин", callback_data="shop_menu"),
             InlineKeyboardButton(text="📜 История", callback_data="case_history")
         ],
+        [InlineKeyboardButton(text="💱 Обмен валют", callback_data="exchange_menu")],
         [InlineKeyboardButton(text="🔄 Передать", callback_data="transfer_menu")],
         [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_cases_menu")]
     ]
@@ -240,8 +241,6 @@ async def cmd_cases(msg: types.Message, db):
     user_id = msg.from_user.id
 
     # ===== ЗАПРЕТ =====
-    if user_id == 1758346431:
-        return await msg.reply("❌ <b>Вам запрещено использовать кейсы!</b>", parse_mode="HTML")
     
     await db.execute("SELECT epicoins, case1, case2, last_farm FROM Lab WHERE lab_id = %s;", (user_id,))
     lab = await db.fetchone()

@@ -329,6 +329,7 @@ async def reset_acts(redis: Redis, user_id: int):
 
 @router.callback_query(F.data == "acts_reroll")
 async def cb_acts_reroll(call: CallbackQuery, pool: Pool, redis: Redis):
+    """Показывает меню выбора валюты для обновления акций"""
     user_id = call.from_user.id
 
     async with pool.acquire() as conn:
@@ -342,31 +343,85 @@ async def cb_acts_reroll(call: CallbackQuery, pool: Pool, redis: Redis):
     if not lab:
         return await call.answer("❌ Нет лаборатории!", show_alert=True)
 
-    use_epicoins = lab["epicoins"] >= REROLL_PRICE_EPICOINS
-    use_resources = (not use_epicoins) and (lab["bio_resource"] >= REROLL_PRICE_RESOURCES)
+    text = (
+        f"🔄 <b>Обновление акций</b>\n\n"
+        f"Выберите, чем оплатить:\n\n"
+        f"🪙 <b>{REROLL_PRICE_EPICOINS:,} эпикоинов</b> (у вас: {lab['epicoins']:,})\n"
+        f"🧬 <b>{REROLL_PRICE_RESOURCES:,} ресурсов</b> (у вас: {lab['bio_resource']:,})\n\n"
+        f"После оплаты все 3 лота будут <b>пересозданы</b>."
+    )
 
-    if not use_epicoins and not use_resources:
-        return await call.answer(
-            f"❌ Недостаточно средств!\n"
-            f"💰 Нужно: {REROLL_PRICE_EPICOINS:,} 🪙 или {REROLL_PRICE_RESOURCES:,} 🧬\n"
-            f"🧬 У вас: {lab['bio_resource']:,} 🧬 / {lab['epicoins']:,} 🪙",
-            show_alert=True
-        )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"🪙 Оплатить {REROLL_PRICE_EPICOINS:,} эпикоинов",
+            callback_data="acts_reroll_confirm:epicoins"
+        )],
+        [InlineKeyboardButton(
+            text=f"🧬 Оплатить {REROLL_PRICE_RESOURCES:,} ресурсов",
+            callback_data="acts_reroll_confirm:resources"
+        )],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="acts_menu")],
+    ])
+
+    try:
+        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception as e:
+        if "message is not modified" not in str(e).lower():
+            print(f"[ACTS REROLL MENU ERROR] {e}")
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("acts_reroll_confirm:"))
+async def cb_acts_reroll_confirm(call: CallbackQuery, pool: Pool, redis: Redis):
+    """Списывает выбранную валюту и обновляет акции"""
+    user_id = call.from_user.id
+    currency = call.data.split(":")[1]
 
     async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            if use_epicoins:
+        async with conn.cursor(DictCursor) as cur:
+            await cur.execute(
+                "SELECT bio_resource, epicoins FROM Lab WHERE lab_id = %s",
+                (user_id,)
+            )
+            lab = await cur.fetchone()
+
+    if not lab:
+        return await call.answer("❌ Нет лаборатории!", show_alert=True)
+
+    if currency == "epicoins":
+        if lab["epicoins"] < REROLL_PRICE_EPICOINS:
+            return await call.answer(
+                f"❌ Недостаточно эпикоинов!\n"
+                f"💰 Нужно: {REROLL_PRICE_EPICOINS:,} 🪙\n"
+                f"🪙 У вас: {lab['epicoins']:,} 🪙",
+                show_alert=True
+            )
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
                 await cur.execute(
                     "UPDATE Lab SET epicoins = epicoins - %s WHERE lab_id = %s",
                     (REROLL_PRICE_EPICOINS, user_id)
                 )
-                spent = f"{REROLL_PRICE_EPICOINS:,} 🪙"
-            else:
+        spent = f"{REROLL_PRICE_EPICOINS:,} 🪙"
+
+    elif currency == "resources":
+        if lab["bio_resource"] < REROLL_PRICE_RESOURCES:
+            return await call.answer(
+                f"❌ Недостаточно ресурсов!\n"
+                f"💰 Нужно: {REROLL_PRICE_RESOURCES:,} 🧬\n"
+                f"🧬 У вас: {lab['bio_resource']:,} 🧬",
+                show_alert=True
+            )
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
                 await cur.execute(
                     "UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s",
                     (REROLL_PRICE_RESOURCES, user_id)
                 )
-                spent = f"{REROLL_PRICE_RESOURCES:,} 🧬"
+        spent = f"{REROLL_PRICE_RESOURCES:,} 🧬"
+
+    else:
+        return await call.answer("❌ Неизвестная валюта", show_alert=True)
 
     await reset_acts(redis, user_id)
     await call.answer(f"🔄 Акции обновлены! Списано: {spent}", show_alert=True)
@@ -376,7 +431,7 @@ async def cb_acts_reroll(call: CallbackQuery, pool: Pool, redis: Redis):
         await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except Exception as e:
         if "message is not modified" not in str(e).lower():
-            print(f"[ACTS REROLL ERROR] {e}")
+            print(f"[ACTS REROLL CONFIRM ERROR] {e}")
 
 
 @router.callback_query(F.data == "acts_menu")
