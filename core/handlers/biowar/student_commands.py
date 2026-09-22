@@ -96,21 +96,33 @@ async def cmd_student_top_chat(msg: Message, pool: Pool, bot: Bot):
                 LEFT JOIN Users u ON u.id = sl.lab_id
                 WHERE sl.is_active = TRUE
                 ORDER BY sl.bio_experience DESC
-                LIMIT 100
+                LIMIT 30
             """)
             all_students = await cur.fetchall()
 
-    # Фильтруем по чату
+    # Фильтруем по текущему чату — параллельно пачками
+    current_chat_id = msg.chat.id
     chat_students = []
-    for s in all_students:
+
+    async def _check(s):
         try:
-            member = await bot.get_chat_member(CHAT_ID, s['lab_id'])
+            member = await bot.get_chat_member(current_chat_id, s['lab_id'])
             if member.status not in ("left", "kicked", "banned"):
-                chat_students.append(s)
-        except Exception:
-            continue
+                return s
+        except Exception as e:
+            print(f"[CHAT MEMBER ERROR] chat={current_chat_id} lab_id={s['lab_id']} err={e}")
+        return None
+
+    batch_size = 10
+    for i in range(0, len(all_students), batch_size):
         if len(chat_students) >= MAX_TOP:
             break
+        batch = all_students[i:i+batch_size]
+        results = await asyncio.gather(*[_check(s) for s in batch])
+        for s in results:
+            if s is not None and len(chat_students) < MAX_TOP:
+                chat_students.append(s)
+        await asyncio.sleep(0.2)  # пауза между пачками, чтобы не ловить флудвейт
 
     if not chat_students:
         return await msg.reply("📊 Пока нет активных учеников из чата.")
@@ -301,8 +313,8 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                "UPDATE StudentLab SET ready_pathogens = GREATEST(ready_pathogens - %s, 0) WHERE lab_id = %s",
-                (used, user_id)
+                "UPDATE StudentLab SET ready_pathogens = GREATEST(ready_pathogens - %s, 0), last_cook_time = %s WHERE lab_id = %s",
+                (used, now, user_id)
             )
 
     if not success:

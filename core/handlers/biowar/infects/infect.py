@@ -115,7 +115,8 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
 
     victim_expire_kd_check = await repo_biowar.check_victim_expire(infecter['id'], victimer['id'])
-    if victim_expire_kd_check != 0:
+    now_ts = int(time.time())
+    if victim_expire_kd_check and victim_expire_kd_check > now_ts:
         return await msg.answer(tricks_biowar['text']['victim_expire_yes'].format(
             func.victim_expire_difference_check(victim_expire_kd_check)
         ))

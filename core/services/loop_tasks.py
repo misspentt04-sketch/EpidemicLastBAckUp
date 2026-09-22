@@ -333,9 +333,9 @@ async def force_tick(pool: Pool):
 
 async def student_pathogen_cook(pool: Pool):
     """Раз в 30 сек добавляет готовые патогены."""
-    print("[STUDENT COOK] функция запущена, ждём 30 сек")
+    print("[STUDENT COOK] функция запущена, интервал 5 сек")
     while True:
-        await asyncio.sleep(21600)
+        await asyncio.sleep(5)
         try:
             now = int(time.time())
             async with pool.acquire() as conn:
@@ -372,7 +372,9 @@ async def student_pathogen_cook(pool: Pool):
                         cooked = elapsed // need_time
                         if cooked < 1:
                             continue
-                        new_ready = ready + cooked
+
+                        # +1 патоген за тик, таймер сбрасываем на now
+                        new_ready = ready + 1
                         if new_ready > pathogens:
                             new_ready = pathogens
 
