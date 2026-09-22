@@ -1,3 +1,4 @@
+import asyncio
 import time
 import re
 import random
@@ -204,13 +205,20 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
 
     # 3. Парсим цель (реплай или текст)
     target_id = None
+    requested_attempts = 1  # по умолчанию — 1 патоген
+
     if msg.reply_to_message and msg.reply_to_message.from_user:
         target_id = msg.reply_to_message.from_user.id
+        # Пробуем вытащить число из текста "ученик заразить 5"
+        m = re.search(r'ученик заразить(?:\s+(\d+))?\s*$', (msg.text or ""), re.IGNORECASE)
+        if m and m.group(1):
+            requested_attempts = int(m.group(1))
     else:
-        match = re.search(r'ученик заразить\s+(\d{6,16}|@\w+)', msg.text, re.IGNORECASE)
+        match = re.search(r'ученик заразить\s+(\d{6,16}|@\w+)(?:\s+(\d+))?', msg.text, re.IGNORECASE)
         if not match:
-            return await msg.reply("❌ Формат: <code>ученик заразить @user</code>, <code>ученик заразить 123456789</code> или реплаем", parse_mode="HTML")
+            return await msg.reply("❌ Формат: <code>ученик заразить @user [N]</code>, <code>ученик заразить 123456789 [N]</code> или реплаем", parse_mode="HTML")
         target = match.group(1)
+        requested_attempts = int(match.group(2)) if match.group(2) else 1
         if target.startswith("@"):
             username = target.lstrip("@").lower()
             async with pool.acquire() as conn:
@@ -266,7 +274,7 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
     victim_immunity = int(victim_lab.get('immunity') or 0)
     infect_chance = get_infect_chance(attacker_infect, victim_immunity)
 
-    # Сколько готовых патогенов доступно (максимум 10 попыток)
+    # Сколько готовых патогенов доступно
     attacker_ready = int(student.get('ready_pathogens') or 0)
     if attacker_ready < 1:
         return await msg.reply(
@@ -274,13 +282,17 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
             parse_mode="HTML"
         )
 
-    attempts = attacker_ready if attacker_ready < 10 else 10
+    # Сколько попыток делаем: по умолчанию 1, макс 10, не больше чем ready
+    attempts = requested_attempts if requested_attempts > 0 else 1
+    if attempts > 10:
+        attempts = 10
+    if attempts > attacker_ready:
+        attempts = attacker_ready
 
-    # N независимых попыток
+    # N независимых попыток (списываем ровно attempts)
     success = False
-    used = 0
+    used = attempts
     for _ in range(attempts):
-        used += 1
         if random.random() < infect_chance:
             success = True
             break
@@ -296,6 +308,22 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
     if not success:
         percent_one = round(infect_chance * 100, 3)
         percent_total = round((1 - (1 - infect_chance) ** attempts) * 100, 3)
+
+        # Уведомление жертве о том, что была попытка заражения (провал)
+        try:
+            print(f"[NOTIFY VICTIM FAIL] отправляю target_id={target_id}")
+            await bot.send_message(
+                target_id,
+                f"⚠️ <b>Вас пытались заразить, но атака не удалась!</b>\n\n"
+                f"🎯 Атакующий: <code>{user_id}</code>\n"
+                f"🔁 Попыток: <b>{attempts}</b>\n"
+                f"🎲 Шанс был: <b>{percent_total}%</b>",
+                parse_mode="HTML"
+            )
+            print(f"[NOTIFY VICTIM FAIL] отправлено target_id={target_id}")
+        except Exception as e:
+            print(f"[NOTIFY VICTIM FAIL ERROR] target_id={target_id} err={e}")
+
         return await msg.reply(
             f"❌ <b>Заражение не удалось!</b>\n\n"
             f"🎯 Цель: <code>{target_id}</code>\n"
@@ -348,51 +376,33 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
                 WHERE lab_id = %s
             """, (infected_until, target_id))
 
-    # 10. Уведомление владельцу атакующего
-    async with pool.acquire() as conn:
-        async with conn.cursor(DictCursor) as cur:
-            await cur.execute(
-                "SELECT chat_setup_virus FROM StudentLab WHERE lab_id = %s",
-                (user_id,)
-            )
-            owner_lab = await cur.fetchone()
-
-    notify_chat = owner_lab.get('chat_setup_virus') if owner_lab else None
-    if notify_chat:
-        try:
-            await bot.send_message(
-                notify_chat,
-                f"🦠 <b>Ваш ученик заразил цель!</b>\n\n"
-                f"🎯 Жертва: <code>{target_id}</code>\n"
-                f"⭐ +{intcomma(earn_exp)} XP ученику\n"
-                f"⏳ Жертва не сможет заражать {victim_lethality} мин.",
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
-
-    # 10.5. Уведомление ЖЕРТВЕ о том, что её заразили
-    async with pool.acquire() as conn:
-        async with conn.cursor(DictCursor) as cur:
-            await cur.execute(
-                "SELECT chat_setup_virus FROM StudentLab WHERE lab_id = %s",
-                (target_id,)
-            )
-            victim_chat_row = await cur.fetchone()
-
-    victim_chat = victim_chat_row.get('chat_setup_virus') if victim_chat_row else None
-    victim_notify_target = victim_chat or target_id
+    # 10. Уведомление атакующему — всегда в личку
     try:
         await bot.send_message(
-            victim_notify_target,
+            user_id,
+            f"🦠 <b>Ваш ученик заразил цель!</b>\n\n"
+            f"🎯 Жертва: <code>{target_id}</code>\n"
+            f"⭐ +{intcomma(earn_exp)} XP ученику\n"
+            f"⏳ Жертва не сможет заражать {victim_lethality} мин.",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+    # 10.5. Уведомление ЖЕРТВЕ — всегда в личку
+    try:
+        print(f"[NOTIFY VICTIM] отправляю target_id={target_id}")
+        await bot.send_message(
+            target_id,
             f"🤒 <b>Вас заразил ученик!</b>\n\n"
             f"🎯 Атакующий: <code>{user_id}</code>\n"
             f"⏳ Вы не можете заражать {victim_lethality} мин.\n"
             f"💊 Купите <b>ученик кв</b>, чтобы снять эффект.",
             parse_mode="HTML"
         )
-    except Exception:
-        pass
+        print(f"[NOTIFY VICTIM] отправлено target_id={target_id}")
+    except Exception as e:
+        print(f"[NOTIFY VICTIM ERROR] target_id={target_id} err={e}")
 
     await msg.reply(
         f"🦠 <b>Ученик заразил!</b>\n\n"
@@ -476,37 +486,6 @@ async def cmd_student_buy_vaccine(msg: Message, pool: Pool):
         f"💊 Вакцина активна, инфекция снята",
         parse_mode="HTML"
     )
-
-
-# ===== УЧЕНИК +ВИРУСЫ =====
-@router.message(F.text.lower() == "ученик +вирусы")
-async def cmd_student_add_virus(msg: Message, pool: Pool):
-    user_id = msg.from_user.id
-
-    if not await check_owner_missions(pool, user_id):
-        return await msg.reply("❌ Сначала активируйте ученика!")
-
-    chat_id = msg.chat.id
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("UPDATE StudentLab SET chat_setup_virus = %s WHERE lab_id = %s", (chat_id, user_id))
-
-    await msg.reply("✅ Сообщения об атаке ученика будут приходить в этот чат.")
-
-
-# ===== УЧЕНИК -ВИРУСЫ =====
-@router.message(F.text.lower() == "ученик -вирусы")
-async def cmd_student_del_virus(msg: Message, pool: Pool):
-    user_id = msg.from_user.id
-
-    if not await check_owner_missions(pool, user_id):
-        return await msg.reply("❌ Сначала активируйте ученика!")
-
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("UPDATE StudentLab SET chat_setup_virus = NULL WHERE lab_id = %s", (user_id,))
-
-    await msg.reply("✅ Сообщения об атаке ученика отключены.")
 
 
 # ===== УЧЕНИК -ИМЯ =====

@@ -11,6 +11,7 @@ from core.services.loop_tasks import (
     pet_happy_check,
     student_income_loop,
     student_pathogen_cook,
+    student_cook_timer_init,
     # weekly_exp_grant  # ОТКЛЮЧЕНО: еженедельная выдача опыта
 )
 from core.services.top_reports import send_weekly_top_report, send_monthly_top_report
@@ -59,6 +60,7 @@ async def loop_tasks(pool, redis, bot):
         asyncio.create_task(pet_the_pet_time_check(pool, redis, bot))
         asyncio.create_task(pet_happy_check(pool))
         asyncio.create_task(student_pathogen_cook(pool))
+        asyncio.create_task(student_cook_timer_init(pool))
         print("[LOOP] loop_tasks запущена!")
         print("✅ [SETTINGS_POOL] Все задачи запущены, включая student_income_loop!")
     except Exception as e:

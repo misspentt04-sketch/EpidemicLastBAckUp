@@ -384,11 +384,33 @@ async def student_pathogen_cook(pool: Pool):
             print(f"[STUDENT COOK ERROR] {e}")
 
 
+
+
+async def student_cook_timer_init(pool: Pool):
+    """Каждые 5 сек: если у кого-то last_cook_time = 0 — инициализирует таймер."""
+    while True:
+        await asyncio.sleep(5)
+        try:
+            now = int(time.time())
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("""
+                        UPDATE StudentLab
+                        SET last_cook_time = %s
+                        WHERE is_active = TRUE
+                          AND last_cook_time = 0
+                          AND ready_pathogens < pathogens
+                    """, (now,))
+        except Exception as e:
+            print(f"[STUDENT COOK INIT ERROR] {e}")
+
+
 async def loop_tasks(pool: Pool, redis: Redis, bot: Bot):
     print("[LOOP] loop_tasks запущена!")
     try:
         asyncio.create_task(victim_expire_check(pool))
         asyncio.create_task(student_pathogen_cook(pool))
+        asyncio.create_task(student_cook_timer_init(pool))
         asyncio.create_task(victim_expire_kd_check(pool))
         asyncio.create_task(victim_fever_check(pool))
         asyncio.create_task(pathogens_refresh_check(pool))
