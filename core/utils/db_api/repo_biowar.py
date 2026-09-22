@@ -400,15 +400,16 @@ class RequestsRepoBiowar:
 
     ## Check ##
 
-    async def check_victim_expire(self, owner_victim_id, victim_id: int) -> Union[str, bool]:
+    async def check_victim_expire(self, owner_victim_id, victim_id: int) -> int:
         request = await self.select_one(
             'SELECT victim_expire_kd FROM Victims WHERE victims_owner_id = %s AND victim_id = %s;',
             (owner_victim_id, victim_id)
         )
-        if request:
-            return request
-        else:
-            return False
+        try:
+            return int(request) if request is not None else 0
+        except (TypeError, ValueError):
+            return 0
+
 
     ### Infections Addons ###
 

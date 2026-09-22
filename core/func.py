@@ -181,21 +181,25 @@ def diff_convert_timestamp_to_human(timestamp_time: int):
         return False
 
 def victim_expire_difference_check(victim_time: int):
-    now = datetime.utcnow()
-    vic_time = datetime.fromtimestamp(victim_time)
-    dif = vic_time - now
-    difs = int(dif.total_seconds())
+    import time as _t
+    now = int(_t.time())
+    try:
+        vic_time = int(victim_time)
+    except (TypeError, ValueError):
+        return 'несколько секунд'
+    difs = vic_time - now
     hours, minutes, seconds = convert_seconds(difs)
     if difs > 0:
-        if difs/60/60 >= 1:
+        if difs / 60 / 60 >= 1:
             text = f'{hours} часов {minutes} минут'
-        elif difs/60 >= 1:
+        elif difs / 60 >= 1:
             text = f'{minutes} минут'
         else:
             text = f'{seconds} секунд'
         return text
     else:
         return 'несколько секунд'
+
 
 def fever_expire_difference_check(fever_seconds):
     import time

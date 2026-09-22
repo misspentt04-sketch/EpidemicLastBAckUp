@@ -382,6 +382,13 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
                 WHERE lab_id = %s
             """, (earn_exp, user_id))
 
+            # Списываем опыт У ЖЕРТВЫ (ученика) — те же 20%
+            await cur.execute("""
+                UPDATE StudentLab
+                SET bio_experience = GREATEST(bio_experience - %s, 0)
+                WHERE lab_id = %s
+            """, (earn_exp, target_id))
+
             await cur.execute("""
                 UPDATE StudentLab
                 SET infected_until = %s

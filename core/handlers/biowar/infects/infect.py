@@ -116,14 +116,19 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
     victim_expire_kd_check = await repo_biowar.check_victim_expire(infecter['id'], victimer['id'])
     now_ts = int(time.time())
-    if victim_expire_kd_check and victim_expire_kd_check > now_ts:
+    try:
+        _kd = int(victim_expire_kd_check or 0)
+    except (TypeError, ValueError):
+        _kd = 0
+    print(f"[KD CHECK] attacker={infecter['id']} victim={victimer['id']} kd={_kd} now={now_ts} block={'YES' if _kd > now_ts else 'NO'}")
+    if _kd > now_ts:
         return await msg.answer(tricks_biowar['text']['victim_expire_yes'].format(
-            func.victim_expire_difference_check(victim_expire_kd_check)
+            func.victim_expire_difference_check(_kd)
         ))
 
     # ===== ANTI-RACE: атомарный лок на жертву (250 мс) =====
     # Ставим ТОЛЬКО после всех проверок — чтобы КД не блокировал других игроков
-    victim_lock_key = f"epidemic_victim_lock:{victimer_id}"
+    victim_lock_key = f"epidemic_victim_lock:{victimer['id']}"
     victim_locked = await redis.set(victim_lock_key, "1", nx=True, px=250)
     if not victim_locked:
         await msg.answer("⏳ Эту жертву уже заражают! Подождите.")
@@ -348,6 +353,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     
     # Если всё ок — закрепляем блокировку
     await redis.set(lock_key, "1", px=1)
+    print(f"[KD SETUP] saving vic_expire_kd={vic_expire_kd} (in {vic_expire_kd - int(time.time())} sec) for {infecter['id']} → {victimer['id']}")
     await repo_biowar.infect_setup(
         infecter['id'], victimer['id'], earn_exp, vic_exp,
         vic_expire_kd, inf_ready_pathogens_left,
