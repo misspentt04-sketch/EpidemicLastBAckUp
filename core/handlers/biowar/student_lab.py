@@ -6,8 +6,12 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from asyncmy.pool import Pool
 from redis.asyncio import Redis
 from core import func
+from core.utils.student_cook import cook_time_seconds
 
 router = Router()
+
+ALLOWED_SKILLS = {"infect", "immunity", "lethality", "security_service", "science", "pathogens", "cook_speed"}
+MAX_SKILL = {"cook_speed": 100}
 button_cooldown = TTLCache(maxsize=10000, ttl=1)
 
 async def get_student_lab(pool: Pool, user_id: int):
@@ -94,8 +98,14 @@ async def cmd_student_lab(msg: Message, pool: Pool, edit: bool = False):
             'security_service': lab[5] if len(lab) > 5 else 0,
             'science': lab[6] if len(lab) > 6 else 0,
             'pathogens': lab[7] if len(lab) > 7 else 0,
-            'total_earned': lab[10] if len(lab) > 10 else 0,
+            'ready_pathogens': lab[8] if len(lab) > 8 else 0,
             'last_income_time': lab[9] if len(lab) > 9 else 0,
+            'total_earned': lab[10] if len(lab) > 10 else 0,
+            'bio_experience': lab[12] if len(lab) > 12 else 0,
+            'vaccine': lab[14] if len(lab) > 14 else 0,
+            'infected_until': lab[15] if len(lab) > 15 else 0,
+            'cook_speed': lab[16] if len(lab) > 16 else 0,
+            'last_cook_time': lab[17] if len(lab) > 17 else 0,
         }
     else:
         is_active = lab.get('is_active', False)
@@ -117,37 +127,61 @@ async def cmd_student_lab(msg: Message, pool: Pool, edit: bool = False):
     all_missions = await get_all_missions(pool)
     total_missions = len(all_missions) if all_missions else 0
 
-    income = await get_student_income(user_id, lab, pool)
-
+    # Доход ученика от StudentVictims (сумма student_exp)
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
-                SELECT COALESCE(SUM(victim_bio_resource_earn), 0)
-                FROM Victims
-                WHERE victims_owner_id = %s
+                SELECT COALESCE(SUM(student_exp), 0), COUNT(*)
+                FROM StudentVictims
+                WHERE owner_id = %s
             """, (user_id,))
             row = await cur.fetchone()
-            tick_income = float(row[0]) if row and row[0] is not None else 0.0
+            sum_exp = float(row[0]) if row and row[0] is not None else 0.0
+            victims_count = int(row[1]) if row and row[1] is not None else 0
 
+    # Таймер выдачи дохода (6 часов = 21600 сек)
     if last_income:
-        next_income = last_income + 600
+        next_income = last_income + 21600
         time_left = int(next_income - time.time())
         if time_left > 0:
-            minutes = time_left // 60
-            seconds = time_left % 60
-            next_income_str = f"⏳ Следующая выдача через: <b>{minutes} мин {seconds} сек</b>"
+            h = time_left // 3600
+            m = (time_left % 3600) // 60
+            s = time_left % 60
+            next_income_str = f"⏳ Следующая выдача через: <b>{h}ч {m}м {s}с</b>"
         else:
             next_income_str = "⏳ Скоро будет выдано..."
     else:
         next_income_str = "⏳ Время выдачи не установлено"
 
-    income_percent = (income / tick_income * 100) if tick_income > 0 else 0
+    # Таймер готовки патогенов
+    now = int(time.time())
+    cook_speed = lab.get('cook_speed', 0) or 0
+    last_cook = lab.get('last_cook_time', 0) or 0
+    ready_pathogens = lab.get('ready_pathogens', 0) or 0
+
+    if ready_pathogens >= pathogens and pathogens > 0:
+        timer_str = "✅ Все патогены готовы"
+    else:
+        need_time = cook_time_seconds(cook_speed)
+        if last_cook == 0:
+            timer_str = f"⏳ Готовка начнётся в ближайший тик"
+        else:
+            elapsed = now - last_cook
+            remaining = need_time - elapsed
+            if remaining < 0:
+                remaining = 0
+            m = remaining // 60
+            s = remaining % 60
+            if m > 0:
+                timer_str = f"⏳ Следующий патоген: <b>{m}м {s}с</b>"
+            else:
+                timer_str = f"⏳ Следующий патоген: <b>{s}с</b>"
 
     text = (
         f"🧪 <b>Лаборатория ученика</b>\n\n"
         f"📊 Статус: <b>✅ АКТИВНА</b>\n"
-        f"📈 Доход с жертв за тик: <b>{tick_income:,.0f}</b>\n"
-        f"📈 Доход ученика: <b>{income:,} 🧬/10 мин</b>\n"
+        f"☠️ Жертв ученика: <b>{victims_count}</b>\n"
+        f"📈 Доход ученика: <b>{int(sum_exp):,} 🧬 / 6 часов</b>\n"
         f"💰 Всего заработано: <b>{total_earned:,}</b>\n"
         f"{next_income_str}\n\n"
         f"🧮 <b>Навыки ученика:</b>\n"
@@ -156,9 +190,11 @@ async def cmd_student_lab(msg: Message, pool: Pool, edit: bool = False):
         f"├ ☠️ Летальность: <b>{lethality}</b>\n"
         f"├ 🔒 Безопасность: <b>{security}</b>\n"
         f"├ 🧬 Патогены: <b>{pathogens}</b>\n"
-        f"└ 🧪 Разработка: <b>{science}</b>\n\n"
+        f"├ 🧪 Разработка: <b>{science}</b>\n"
+        f"└ ⚡ Скорость готовки: <b>{cook_speed}</b> / 100\n\n"
         f"📊 Сумма навыков: <b>{total_skills}</b>\n"
-        f"💰 Доход = 0.01% от тика × (1 + 5% × {total_skills}) = <b>{income_percent:.2f}%</b> от дохода с жертв\n\n"
+        f"🧪 Готовых патогенов: <b>{ready_pathogens}</b> / <b>{pathogens}</b>\n"
+        f"{timer_str}\n\n"
         f"📋 Миссии выполнено: <b>✅ Все миссии выполнены</b>"
     )
 
@@ -171,7 +207,8 @@ async def cmd_student_lab(msg: Message, pool: Pool, edit: bool = False):
         [
             InlineKeyboardButton(text="🔒 +1 СБ", callback_data="student_upgrade:security_service"),
             InlineKeyboardButton(text="🧬 +1 Патоген", callback_data="student_upgrade:pathogens"),
-            InlineKeyboardButton(text="🧪 +1 Разраб", callback_data="student_upgrade:science")
+            InlineKeyboardButton(text="🧪 +1 Разраб", callback_data="student_upgrade:science"),
+            InlineKeyboardButton(text="⚡ +1 Скор.готовки", callback_data="student_upgrade:cook_speed"),
         ],
     ])
     
@@ -241,6 +278,10 @@ async def student_upgrade(call: CallbackQuery, pool: Pool, repo_biowar):
     print(f"[STUDENT UPGRADE] Пользователь {user_id} нажал {call.data}")
 
     skill = call.data.split(":")[1]
+    if skill not in ALLOWED_SKILLS:
+        await call.answer("❌ Неизвестный навык!", show_alert=True)
+        return
+
     lab = await get_student_lab(pool, user_id)
     if not lab:
         await call.answer("❌ У вас нет лаборатории ученика!", show_alert=True)
@@ -248,7 +289,7 @@ async def student_upgrade(call: CallbackQuery, pool: Pool, repo_biowar):
 
     if isinstance(lab, tuple):
         is_active = lab[1] if len(lab) > 1 else False
-        idx = {"infect": 2, "immunity": 3, "lethality": 4, "security_service": 5, "science": 6, "pathogens": 7}
+        idx = {"infect": 2, "immunity": 3, "lethality": 4, "security_service": 5, "science": 6, "pathogens": 7, "cook_speed": 16}
         current_lvl = lab[idx.get(skill, 2)] if idx.get(skill, 2) < len(lab) else 0
         science_lvl = lab[6] if len(lab) > 6 else 0
     else:
@@ -260,6 +301,13 @@ async def student_upgrade(call: CallbackQuery, pool: Pool, repo_biowar):
     all_missions = await get_all_missions(pool)
     if not is_active and done < len(all_missions):
         await call.answer("❌ Сначала выполните все миссии!", show_alert=True)
+        return
+
+    if skill == "cook_speed" and current_lvl >= science_lvl:
+        await call.answer(
+            f"❌ Скорость готовки не может быть выше разработки ({science_lvl})!",
+            show_alert=True
+        )
         return
 
     to_lvl = current_lvl + 1
@@ -281,10 +329,23 @@ async def student_upgrade(call: CallbackQuery, pool: Pool, repo_biowar):
                 "UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s",
                 (price, user_id)
             )
-            await cur.execute(
-                f"UPDATE StudentLab SET {skill} = {skill} + 1 WHERE lab_id = %s",
-                (user_id,)
-            )
+            if skill == "cook_speed":
+                await cur.execute(
+                    "UPDATE StudentLab SET cook_speed = LEAST(cook_speed + 1, science) WHERE lab_id = %s",
+                    (user_id,)
+                )
+            else:
+                max_val = MAX_SKILL.get(skill)
+                if max_val is not None:
+                    await cur.execute(
+                        f"UPDATE StudentLab SET {skill} = LEAST({skill} + 1, %s) WHERE lab_id = %s",
+                        (max_val, user_id)
+                    )
+                else:
+                    await cur.execute(
+                        f"UPDATE StudentLab SET {skill} = {skill} + 1 WHERE lab_id = %s",
+                        (user_id,)
+                    )
 
     await call.answer(f"✅ {skill} повышен до {to_lvl}! -{price:,} 🧬", show_alert=True)
 
@@ -499,10 +560,23 @@ async def student_upgrade_cmd(msg: Message, pool: Pool, repo_biowar):
                 "UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s",
                 (price, user_id)
             )
-            await cur.execute(
-                f"UPDATE StudentLab SET {skill} = {skill} + %s WHERE lab_id = %s",
-                (amount, user_id)
-            )
+            if skill == "cook_speed":
+                await cur.execute(
+                    "UPDATE StudentLab SET cook_speed = LEAST(cook_speed + %s, science) WHERE lab_id = %s",
+                    (amount, user_id)
+                )
+            else:
+                max_val = MAX_SKILL.get(skill)
+                if max_val is not None:
+                    await cur.execute(
+                        f"UPDATE StudentLab SET {skill} = LEAST({skill} + %s, %s) WHERE lab_id = %s",
+                        (amount, max_val, user_id)
+                    )
+                else:
+                    await cur.execute(
+                        f"UPDATE StudentLab SET {skill} = {skill} + %s WHERE lab_id = %s",
+                        (amount, user_id)
+                    )
 
     skill_names = {
         "infect": "Заразность",
@@ -511,6 +585,7 @@ async def student_upgrade_cmd(msg: Message, pool: Pool, repo_biowar):
         "security_service": "Безопасность",
         "science": "Разработка",
         "pathogens": "Патогены",
+        "cook_speed": "Скорость готовки",
     }
 
     await msg.reply(

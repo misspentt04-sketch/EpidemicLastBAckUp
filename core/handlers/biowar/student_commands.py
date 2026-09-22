@@ -1,5 +1,6 @@
 import time
 import re
+import random
 from datetime import datetime, timedelta
 from html import unescape
 
@@ -20,6 +21,7 @@ from humanize import intcomma
 from core import func
 from core.data.icons import LabIco
 from core.utils.db_api.repo_biowar import RequestsRepoBiowar
+from core.data.infect_chances import get_infect_chance
 
 router = Router()
 
@@ -177,9 +179,31 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
     if not await check_owner_missions(pool, user_id):
         return await msg.reply("❌ Сначала активируйте ученика (выполните все миссии)!")
 
-    # 2. Парсим цель (реплай или текст)
-    target_id = None
+    now = int(time.time())
 
+    # 2. Проверка: ты сам не инфицирован
+    async with pool.acquire() as conn:
+        async with conn.cursor(DictCursor) as cur:
+            await cur.execute(
+                "SELECT infected_until, vaccine FROM StudentLab WHERE lab_id = %s",
+                (user_id,)
+            )
+            attacker_lab = await cur.fetchone()
+
+    if attacker_lab:
+        infected_until = int(attacker_lab.get('infected_until') or 0)
+        vaccine = int(attacker_lab.get('vaccine') or 0)
+        if infected_until > now and vaccine == 0:
+            left = infected_until - now
+            return await msg.reply(
+                f"🤒 Вы недавно были заражены и не можете заражать других.\n"
+                f"⏳ Подождите ещё {left // 60} мин {left % 60} сек "
+                f"или купите <b>ученик кв</b>.",
+                parse_mode="HTML"
+            )
+
+    # 3. Парсим цель (реплай или текст)
+    target_id = None
     if msg.reply_to_message and msg.reply_to_message.from_user:
         target_id = msg.reply_to_message.from_user.id
     else:
@@ -187,10 +211,8 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
         if not match:
             return await msg.reply("❌ Формат: <code>ученик заразить @user</code>, <code>ученик заразить 123456789</code> или реплаем", parse_mode="HTML")
         target = match.group(1)
-
         if target.startswith("@"):
             username = target.lstrip("@").lower()
-            # Ищем в БД
             async with pool.acquire() as conn:
                 async with conn.cursor(DictCursor) as cur:
                     await cur.execute(
@@ -198,11 +220,9 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
                         (username,)
                     )
                     user_row = await cur.fetchone()
-
             if user_row:
                 target_id = user_row['id']
             else:
-                # Fallback — через Telegram
                 try:
                     entity = await bot.get_users(target)
                     target_id = entity.id
@@ -211,12 +231,11 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
         else:
             target_id = int(target)
 
-    # 3. Проверка: цель — ученик
-    print(f"[STUDENT DEBUG] target_id={target_id}")
+    # 4. Проверка: цель — ученик
     if not await check_owner_missions(pool, target_id):
         return await msg.reply("❌ Цель не активировала ученика!")
 
-    # 4. Проверка КД
+    # 5. Проверка КД атакующего на пару (attacker, victim) — 2 часа
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             await cur.execute("""
@@ -225,15 +244,14 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
             """, (user_id, target_id))
             existing = await cur.fetchone()
 
-    now = int(time.time())
     if existing and existing.get('kd_expire', 0) > now:
         left = existing['kd_expire'] - now
         return await msg.reply(f"⏳ Цель в КД! Осталось: {left // 60}м {left % 60}с")
 
-    # 5. Заражение (20% от опыта жертвы)
+    # 6. Опыт жертвы
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
-            await cur.execute("SELECT bio_experience FROM StudentLab WHERE lab_id = %s", (target_id,))
+            await cur.execute("SELECT bio_experience, lethality, immunity FROM StudentLab WHERE lab_id = %s", (target_id,))
             victim_lab = await cur.fetchone()
 
     if not victim_lab:
@@ -242,13 +260,39 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
     victim_exp = victim_lab.get('bio_experience', 0) or 0
     earn_exp = int(victim_exp * 0.20)
 
-    # 6. Летальность ученика
+    # Получаем student ДО использования (иначе UnboundLocalError)
     student = await get_student_lab(pool, user_id)
-    lethality = student.get('lethality', 1) or 1
-    expire_days = lethality
-    expire_date = now + expire_days * 86400
-    kd_expire = now + 2 * 3600  # 2 часа КД
+    attacker_infect = int(student.get('infect') or 0)
+    victim_immunity = int(victim_lab.get('immunity') or 0)
+    infect_chance = get_infect_chance(attacker_infect, victim_immunity)
 
+    if random.random() >= infect_chance:
+        percent = round(infect_chance * 100, 3)
+        return await msg.reply(
+            f"❌ <b>Заражение не удалось!</b>\n\n"
+            f"🎯 Цель: <code>{target_id}</code>\n"
+            f"🧬 Ваша заразность: <b>{attacker_infect}</b>\n"
+            f"🛡 Иммунитет жертвы: <b>{victim_immunity}</b>\n"
+            f"🎲 Шанс был: <b>{percent}%</b>",
+            parse_mode="HTML"
+        )
+
+    # 7. Таймер инфекции жертвы = lethality минут, максимум 60
+    victim_lethality = int(victim_lab.get('lethality') or 1)
+    if victim_lethality < 1:
+        victim_lethality = 1
+    if victim_lethality > 60:
+        victim_lethality = 60
+    infected_until = now + victim_lethality * 60
+
+    # 8. Летальность атакующего → срок жизни жертвы
+    lethality = int(student.get('lethality') or 1)
+    if lethality < 1:
+        lethality = 1
+    expire_date = now + lethality * 86400
+    kd_expire = now + 2 * 3600
+
+    # 9. INSERT/UPDATE StudentVictims + XP + инфекция жертве
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
@@ -261,18 +305,69 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
                     kd_expire = VALUES(kd_expire)
             """, (user_id, target_id, earn_exp, now, expire_date, kd_expire, student.get('pathogen_name') or 'Ученик'))
 
-            # Начисляем опыт ученику
             await cur.execute("""
                 UPDATE StudentLab
                 SET bio_experience = bio_experience + %s
                 WHERE lab_id = %s
             """, (earn_exp, user_id))
 
+            await cur.execute("""
+                UPDATE StudentLab
+                SET infected_until = %s
+                WHERE lab_id = %s
+            """, (infected_until, target_id))
+
+    # 10. Уведомление владельцу атакующего
+    async with pool.acquire() as conn:
+        async with conn.cursor(DictCursor) as cur:
+            await cur.execute(
+                "SELECT chat_setup_virus FROM StudentLab WHERE lab_id = %s",
+                (user_id,)
+            )
+            owner_lab = await cur.fetchone()
+
+    notify_chat = owner_lab.get('chat_setup_virus') if owner_lab else None
+    if notify_chat:
+        try:
+            await bot.send_message(
+                notify_chat,
+                f"🦠 <b>Ваш ученик заразил цель!</b>\n\n"
+                f"🎯 Жертва: <code>{target_id}</code>\n"
+                f"⭐ +{intcomma(earn_exp)} XP ученику\n"
+                f"⏳ Жертва не сможет заражать {victim_lethality} мин.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+    # 10.5. Уведомление ЖЕРТВЕ о том, что её заразили
+    async with pool.acquire() as conn:
+        async with conn.cursor(DictCursor) as cur:
+            await cur.execute(
+                "SELECT chat_setup_virus FROM StudentLab WHERE lab_id = %s",
+                (target_id,)
+            )
+            victim_chat_row = await cur.fetchone()
+
+    victim_chat = victim_chat_row.get('chat_setup_virus') if victim_chat_row else None
+    victim_notify_target = victim_chat or target_id
+    try:
+        await bot.send_message(
+            victim_notify_target,
+            f"🤒 <b>Вас заразил ученик!</b>\n\n"
+            f"🎯 Атакующий: <code>{user_id}</code>\n"
+            f"⏳ Вы не можете заражать {victim_lethality} мин.\n"
+            f"💊 Купите <b>ученик кв</b>, чтобы снять эффект.",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
     await msg.reply(
         f"🦠 <b>Ученик заразил!</b>\n\n"
         f"🎯 Цель: <code>{target_id}</code>\n"
         f"⭐ +{intcomma(earn_exp)} XP ученику\n"
-        f"⏳ Срок: {expire_days} дн.",
+        f"⏳ Жертва не сможет заражать {victim_lethality} мин.",
         parse_mode="HTML"
     )
 
@@ -287,26 +382,42 @@ async def cmd_student_buy_vaccine(msg: Message, pool: Pool):
     if not await check_owner_missions(pool, user_id):
         return await msg.reply("❌ Сначала активируйте ученика!")
 
-    # Цена вакцины — как в обычной (например, 500_000)
-    VACCINE_PRICE = 500_000
-
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
-            await cur.execute("SELECT bio_resource FROM Lab WHERE lab_id = %s", (user_id,))
-            lab = await cur.fetchone()
+            await cur.execute(
+                "SELECT sl.infect, l.bio_resource "
+                "FROM StudentLab sl LEFT JOIN Lab l ON l.lab_id = sl.lab_id "
+                "WHERE sl.lab_id = %s",
+                (user_id,)
+            )
+            row = await cur.fetchone()
 
-    if not lab or lab.get('bio_resource', 0) < VACCINE_PRICE:
+    if not row:
+        return await msg.reply("❌ Ученик не найден.")
+
+    infect = int(row.get('infect') or 0)
+    if infect < 1:
+        infect = 1
+    VACCINE_PRICE = infect * 50
+
+    if (row.get('bio_resource') or 0) < VACCINE_PRICE:
         return await msg.reply(f"❌ Недостаточно ресурсов! Нужно {intcomma(VACCINE_PRICE)} 🧬")
 
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s", (VACCINE_PRICE, user_id))
-            await cur.execute("UPDATE StudentLab SET vaccine = 1 WHERE lab_id = %s", (user_id,))
+            await cur.execute(
+                "UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id = %s",
+                (VACCINE_PRICE, user_id)
+            )
+            await cur.execute(
+                "UPDATE StudentLab SET vaccine = 1, infected_until = 0 WHERE lab_id = %s",
+                (user_id,)
+            )
 
     await msg.reply(
         f"✅ <b>Вакцина куплена для ученика!</b>\n\n"
         f"💰 Списано: <b>{intcomma(VACCINE_PRICE)}</b> 🧬\n"
-        f"💊 Вакцина активна",
+        f"💊 Вакцина активна, инфекция снята",
         parse_mode="HTML"
     )
 

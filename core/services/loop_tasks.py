@@ -1,6 +1,7 @@
 import logging
 import time
 import asyncio
+from core.utils.student_cook import cook_time_seconds
 from datetime import datetime, timedelta, timezone
 from aiogram import Bot
 from asyncmy.pool import Pool
@@ -38,7 +39,7 @@ async def victim_expire_kd_check(pool: Pool):
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
-                await asyncio.sleep(30)
+                await asyncio.sleep(21600)
                 timestmp = int(datetime.utcnow().timestamp())
                 await cur.execute(sql, timestmp)
                 check = await cur.fetchall()
@@ -53,7 +54,7 @@ async def victim_fever_check(pool: Pool):
     async with pool.acquire() as conn:
         async with conn.cursor(DictCursor) as cur:
             while True:
-                await asyncio.sleep(30)
+                await asyncio.sleep(21600)
                 timestmp = int(datetime.utcnow().timestamp())
                 await cur.execute(sql, timestmp)
                 check = await cur.fetchall()
@@ -328,10 +329,66 @@ async def force_tick(pool: Pool):
             now_ts = int(datetime.now(timezone.utc).timestamp())
             await cur.execute(sql_del_victims, (now_ts,))
 
+
+
+async def student_pathogen_cook(pool: Pool):
+    """Раз в 30 сек добавляет готовые патогены."""
+    print("[STUDENT COOK] функция запущена, ждём 30 сек")
+    while True:
+        await asyncio.sleep(30)
+        try:
+            now = int(time.time())
+            async with pool.acquire() as conn:
+                async with conn.cursor(DictCursor) as cur:
+                    await cur.execute("""
+                        SELECT lab_id, cook_speed, last_cook_time, pathogens, ready_pathogens
+                        FROM StudentLab
+                        WHERE is_active = TRUE
+                          AND ready_pathogens < pathogens
+                    """)
+                    rows = await cur.fetchall()
+
+                    print(f"[STUDENT COOK] tick, found {len(rows)} students")
+
+                    for row in rows:
+                        lab_id = row['lab_id']
+                        cook_speed = int(row['cook_speed'] or 0)
+                        last_cook = int(row['last_cook_time'] or 0)
+                        pathogens = int(row['pathogens'] or 0)
+                        ready = int(row['ready_pathogens'] or 0)
+
+                        need_time = cook_time_seconds(cook_speed)
+                        if need_time < 1:
+                            need_time = 1
+
+                        if last_cook == 0:
+                            await cur.execute(
+                                "UPDATE StudentLab SET last_cook_time = %s WHERE lab_id = %s",
+                                (now, lab_id)
+                            )
+                            continue
+
+                        elapsed = now - last_cook
+                        cooked = elapsed // need_time
+                        if cooked < 1:
+                            continue
+                        new_ready = ready + cooked
+                        if new_ready > pathogens:
+                            new_ready = pathogens
+
+                        await cur.execute(
+                            "UPDATE StudentLab SET ready_pathogens = %s, last_cook_time = %s WHERE lab_id = %s",
+                            (new_ready, now, lab_id)
+                        )
+        except Exception as e:
+            print(f"[STUDENT COOK ERROR] {e}")
+
+
 async def loop_tasks(pool: Pool, redis: Redis, bot: Bot):
     print("[LOOP] loop_tasks запущена!")
     try:
         asyncio.create_task(victim_expire_check(pool))
+        asyncio.create_task(student_pathogen_cook(pool))
         asyncio.create_task(victim_expire_kd_check(pool))
         asyncio.create_task(victim_fever_check(pool))
         asyncio.create_task(pathogens_refresh_check(pool))
@@ -381,15 +438,16 @@ async def student_income_loop(pool: Pool):
                             total_earned = student[7] if len(student) > 7 else 0
 
                         await cur.execute("""
-                            SELECT COALESCE(SUM(victim_bio_resource_earn), 0)
-                            FROM Victims
-                            WHERE victims_owner_id = %s
+                            SELECT COALESCE(SUM(student_exp), 0),
+                                   COUNT(*)
+                            FROM StudentVictims
+                            WHERE owner_id = %s
                         """, (user_id,))
                         row = await cur.fetchone()
                         tick_income = float(row[0]) if row and row[0] is not None else 0.0
+                        victims_count = int(row[1]) if row and row[1] is not None else 0
 
-                        total_skills = infect + immunity + lethality + security + science + pathogens
-                        income = int(tick_income * 0.00001 * (1 + 0.05 * total_skills))
+                        income = int(tick_income)
 
                         if income > 0:
                             await cur.execute(
@@ -408,8 +466,8 @@ async def student_income_loop(pool: Pool):
                                     f"🧪 <b>Ученик принёс доход!</b>\n\n"
                                     f"📈 Начислено: <b>{income:,} 🧬</b>\n"
                                     f"📊 Всего заработано: <b>{total_earned + income:,}</b>\n\n"
-                                    f"📊 Доход с жертв за тик: <b>{tick_income:,.0f}</b>\n"
-                                    f"🧮 Сумма навыков: <b>{total_skills}</b>",
+                                    f"☠️ Жертв ученика: <b>{victims_count}</b>\n"
+                                    f"📊 XP жертв: <b>{tick_income:,.0f}</b>",
                                     parse_mode="HTML"
                                 )
                             except Exception as e:
