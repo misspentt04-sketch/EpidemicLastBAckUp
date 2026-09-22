@@ -11,7 +11,7 @@ from core.utils.student_cook import cook_time_seconds
 router = Router()
 
 ALLOWED_SKILLS = {"infect", "immunity", "lethality", "security_service", "science", "pathogens", "cook_speed"}
-MAX_SKILL = {"cook_speed": 100}
+MAX_SKILL = {"cook_speed": 100, "science": 100}
 button_cooldown = TTLCache(maxsize=10000, ttl=1)
 
 async def get_student_lab(pool: Pool, user_id: int):
@@ -334,6 +334,11 @@ async def student_upgrade(call: CallbackQuery, pool: Pool, repo_biowar):
                     "UPDATE StudentLab SET cook_speed = LEAST(cook_speed + 1, science) WHERE lab_id = %s",
                     (user_id,)
                 )
+            elif skill == "pathogens":
+                await cur.execute(
+                    "UPDATE StudentLab SET pathogens = pathogens + 1, ready_pathogens = ready_pathogens + 1 WHERE lab_id = %s",
+                    (user_id,)
+                )
             else:
                 max_val = MAX_SKILL.get(skill)
                 if max_val is not None:
@@ -564,6 +569,11 @@ async def student_upgrade_cmd(msg: Message, pool: Pool, repo_biowar):
                 await cur.execute(
                     "UPDATE StudentLab SET cook_speed = LEAST(cook_speed + %s, science) WHERE lab_id = %s",
                     (amount, user_id)
+                )
+            elif skill == "pathogens":
+                await cur.execute(
+                    "UPDATE StudentLab SET pathogens = pathogens + %s, ready_pathogens = ready_pathogens + %s WHERE lab_id = %s",
+                    (amount, amount, user_id)
                 )
             else:
                 max_val = MAX_SKILL.get(skill)

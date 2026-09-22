@@ -266,14 +266,45 @@ async def cmd_student_infect(msg: Message, pool: Pool, bot: Bot, repo_biowar: Re
     victim_immunity = int(victim_lab.get('immunity') or 0)
     infect_chance = get_infect_chance(attacker_infect, victim_immunity)
 
-    if random.random() >= infect_chance:
-        percent = round(infect_chance * 100, 3)
+    # Сколько готовых патогенов доступно (максимум 10 попыток)
+    attacker_ready = int(student.get('ready_pathogens') or 0)
+    if attacker_ready < 1:
+        return await msg.reply(
+            "🧪 У вас нет готовых патогенов! Дождитесь, пока они приготовятся.",
+            parse_mode="HTML"
+        )
+
+    attempts = attacker_ready if attacker_ready < 10 else 10
+
+    # N независимых попыток
+    success = False
+    used = 0
+    for _ in range(attempts):
+        used += 1
+        if random.random() < infect_chance:
+            success = True
+            break
+
+    # Списываем патогены ВСЕГДА — сколько попыток, столько и потрачено
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE StudentLab SET ready_pathogens = GREATEST(ready_pathogens - %s, 0) WHERE lab_id = %s",
+                (used, user_id)
+            )
+
+    if not success:
+        percent_one = round(infect_chance * 100, 3)
+        percent_total = round((1 - (1 - infect_chance) ** attempts) * 100, 3)
         return await msg.reply(
             f"❌ <b>Заражение не удалось!</b>\n\n"
             f"🎯 Цель: <code>{target_id}</code>\n"
             f"🧬 Ваша заразность: <b>{attacker_infect}</b>\n"
             f"🛡 Иммунитет жертвы: <b>{victim_immunity}</b>\n"
-            f"🎲 Шанс был: <b>{percent}%</b>",
+            f"🎲 Шанс за попытку: <b>{percent_one}%</b>\n"
+            f"🔁 Попыток: <b>{attempts}</b>\n"
+            f"🎯 Итоговый шанс: <b>{percent_total}%</b>\n"
+            f"🧪 Потрачено патогенов: <b>{used}</b>",
             parse_mode="HTML"
         )
 
@@ -402,6 +433,31 @@ async def cmd_student_buy_vaccine(msg: Message, pool: Pool):
 
     if (row.get('bio_resource') or 0) < VACCINE_PRICE:
         return await msg.reply(f"❌ Недостаточно ресурсов! Нужно {intcomma(VACCINE_PRICE)} 🧬")
+
+    # Проверяем: инфицирован ли ученик?
+    now = int(time.time())
+    async with pool.acquire() as conn:
+        async with conn.cursor(DictCursor) as cur:
+            await cur.execute(
+                "SELECT infected_until, vaccine FROM StudentLab WHERE lab_id = %s",
+                (user_id,)
+            )
+            lab_row = await cur.fetchone()
+
+    infected_until = int(lab_row.get('infected_until') or 0) if lab_row else 0
+    vaccine_active = int(lab_row.get('vaccine') or 0) if lab_row else 0
+
+    if vaccine_active == 1:
+        return await msg.reply(
+            "💊 У вас уже активна вакцина. Повторно покупать не нужно.",
+            parse_mode="HTML"
+        )
+
+    if infected_until <= now:
+        return await msg.reply(
+            "✅ Ваш ученик не инфицирован — вакцина не требуется.",
+            parse_mode="HTML"
+        )
 
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:

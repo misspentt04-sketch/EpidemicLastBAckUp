@@ -335,7 +335,7 @@ async def student_pathogen_cook(pool: Pool):
     """Раз в 30 сек добавляет готовые патогены."""
     print("[STUDENT COOK] функция запущена, ждём 30 сек")
     while True:
-        await asyncio.sleep(30)
+        await asyncio.sleep(21600)
         try:
             now = int(time.time())
             async with pool.acquire() as conn:
