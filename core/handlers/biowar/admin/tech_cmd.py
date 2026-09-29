@@ -4,7 +4,7 @@ from aiogram.types import Message
 
 router = Router()
 MAINTENANCE_FILE = "/home/ubuntu/epidemic/maintenance.flag"
-ALLOWED_USERS = {7972320837, 7958133684}
+ALLOWED_USERS = {7972320837, 7958133684, 6719964564, 6129560117}
 
 @router.message(F.text.in_({"+тех", "-тех", "/tech_on", "/tech_off"}))
 async def cmd_toggle_tech(message: Message):

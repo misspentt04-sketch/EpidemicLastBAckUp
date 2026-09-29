@@ -70,7 +70,7 @@ import asyncio
 
 # --- Настройка роутера перезапуска ---
 restart_router = Router()
-ALLOWED_ADMINS = {7958133684, 7972320837, 7958133684}
+ALLOWED_ADMINS = {7958133684, 7972320837, 6129560117, 6719964564}
 RESTART_FILE = "/tmp/epidemic_restart_chat.txt"
 
 @restart_router.message(Command("restart"))
