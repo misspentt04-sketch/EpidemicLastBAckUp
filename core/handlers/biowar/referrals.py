@@ -57,20 +57,15 @@ async def cmd_start_ref(message: Message, command: CommandObject):
     username = message.from_user.username
     args = command.args or ""
 
-    # Разбор аргумента
+    # Разбор аргумента — только новый формат ref<code>
     referrer_id = None
     ref_arg = args.strip()
     if ref_arg.startswith("ref"):
-        code_or_id = ref_arg[3:].strip()
-
-        if code_or_id.isdigit():
-            candidate = int(code_or_id)
-            if candidate != user_id:
-                referrer_id = candidate
-        elif code_or_id:
+        code = ref_arg[3:].strip()
+        if code:
             try:
                 pool = await _get_pool()
-                referrer_id = await resolve_referral_code(pool, code_or_id)
+                referrer_id = await resolve_referral_code(pool, code)
                 if referrer_id == user_id:
                     referrer_id = None
             except Exception as e:
