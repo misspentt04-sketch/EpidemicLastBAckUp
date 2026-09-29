@@ -46,3 +46,7 @@ infect_router.callback_query.register(process_mf_cleanup, F.data == 'mf_cleanup'
 
 # Подключаем топ жертв
 infect_router.include_router(top_victims_router)
+
+# Кнопки после провала заражения
+from .infect_buttons import router as infect_buttons_router
+infect_router.include_router(infect_buttons_router)

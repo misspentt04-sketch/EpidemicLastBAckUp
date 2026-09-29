@@ -24,11 +24,30 @@ from core import func
 from core.data.tricks.tricks_biowar import tricks_biowar
 
 from core.settings import settings
+from core.handlers.biowar.labs.lab_text_upgrade import handle_upgrade
 
 import re
 import random
 import asyncio
 import time
+
+
+
+
+def _infect_fail_kb(target_id: int, owner_id: int) -> InlineKeyboardMarkup:
+    """Кнопки после провала заражения: повторить заражение + прокачка ЗЗ."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🔁 1 пат", callback_data=f"repeat_infect:{target_id}:{owner_id}:1"),
+            InlineKeyboardButton(text="🔁 5 патов", callback_data=f"repeat_infect:{target_id}:{owner_id}:5"),
+            InlineKeyboardButton(text="🔁 9 патов", callback_data=f"repeat_infect:{target_id}:{owner_id}:9"),
+        ],
+        [
+            InlineKeyboardButton(text="🎯 +1 ЗЗ", callback_data=f"up_infect:{owner_id}:1"),
+            InlineKeyboardButton(text="🎯 +3 ЗЗ", callback_data=f"up_infect:{owner_id}:3"),
+            InlineKeyboardButton(text="🎯 +10 ЗЗ", callback_data=f"up_infect:{owner_id}:10"),
+        ],
+    ])
 
 
 async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar, redis: Redis, lock: Lock):
@@ -47,11 +66,8 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     if not victimer_id and len(parts) > 1 and parts[1].isdigit() and len(parts[1]) > 5:
         victimer_id = int(parts[1])
 
-    if getattr(msg, "_override_target_id", None):
-        spent_pathogens = 1
-    else:
-        raw_p = digits[-1] if digits else 1
-        spent_pathogens = min(10, max(1, raw_p))
+    raw_p = digits[-1] if digits else 1
+    spent_pathogens = min(10, max(1, raw_p))
     is_tag = func.check_if_tag(msg)
     sb_answer = True
     pet_boost_exp = False
@@ -257,7 +273,7 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         else:
             fail_text = default_fail_msg
 
-        return await msg.answer(fail_text)
+        return await msg.answer(fail_text, reply_markup=_infect_fail_kb(victimer['id'], infecter['id']))
 
     inf_fev_time = tricks_biowar['max']['time']['infect_fever_time'] / 60
     fever_time = int(infecter['lethality'] / 3)

@@ -80,14 +80,17 @@ async def confirm_exit_biowar(call: types.CallbackQuery, bot: Bot, repo_biowar: 
     if call.from_user.id != user_id:
         return await call.answer("❌ Это не ваше меню!", show_alert=True)
 
-    mute_time = (datetime.utcnow() + timedelta(days=9999)).timestamp()
     user = await repo_biowar.get_user(user_id)
     mention = func.entity_create(user['id'], user['full_name'])
 
-    await repo_biowar.game_mute(user['id'], mute_time, user['id'], 'Выход из игры био-войн')
-    await redis.set(f'epidemic_gamemute:{user["id"]}', mute_time)
+    # Бан больше не выдаём. Просто снимаем возможный старый бан.
+    await repo_biowar.game_mute_cancel(user['id'])
+    try:
+        await redis.delete(f'epidemic_gamemute:{user["id"]}')
+    except Exception:
+        pass
 
-    text = f'Игрок {mention} вышел из игры «био-войны»'
+    text = f'Игрок {mention} вышел из игры «био-войны» (без бана)'
 
     await call.message.edit_text(text, parse_mode="HTML")
     await call.answer("✅ Вы вышли из игры!")
