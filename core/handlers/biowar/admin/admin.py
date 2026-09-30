@@ -21,23 +21,6 @@ from datetime import datetime, timedelta
 import asyncio
 import sys
 
-async def search_pathogen(
-        message: types.Message,
-        repo_biowar: RequestsRepoBiowar,
-        command: CommandObject
-):
-    args = command.args
-
-    q = f"SELECT lab_id, lab_name, pathogen_name FROM Lab WHERE pathogen_name LIKE '%{args}%';"
-    result = await repo_biowar.select_all(q, use_index_zero=False)
-
-    if not result:
-        text = '❌ Ни у кого нет такого патогена'
-    else:
-        text = f'📝 Список людей содержащие в имени патогена "{args}":'
-        for index, i in enumerate(result, start=1):
-            text += f"\n{index}. {func.entity_create_full_name(i['lab_id'], i['lab_name'])}: {i['pathogen_name']}"
-    await message.reply(text)
 
 async def all_game_bio_experience(msg: types.Message, repo_biowar: RequestsRepoBiowar, command: CommandObject):
     

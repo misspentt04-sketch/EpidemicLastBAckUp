@@ -10,7 +10,7 @@ from .chat_bot_update import (
     new_chat_member, leave_chat_member, upd_chat_name
 )
 from .admin import (
-    search_pathogen, all_game_bio_experience, pathogen_mute,
+    all_game_bio_experience, pathogen_mute,
     game_mute, lab_transfer, game_mute_cancel, pathogen_mute_cancel, le,
     stop_bot, biomute_list, gamemute_list, check_the_mute, bot_statistics
 )
@@ -30,7 +30,6 @@ admin_router_global = Router()
 IS_GROUP = F.chat.type.in_([ChatType.GROUP, ChatType.SUPERGROUP])
 
 # Admins commands
-admin_router.message.register(search_pathogen, Command("search_pathogen"), IsAdminFilter())
 admin_router.message.register(all_game_bio_experience, Command("game_exp"), IsAdminFilter())
 admin_router.message.register(pathogen_mute, F.text.regexp(trg.re_pathogen_mute, mode='fullmatch'), IsAdminFilter())
 admin_router.message.register(pathogen_mute_cancel, F.text.regexp(trg.re_pathogen_mute_cancel, mode='fullmatch'), IsAdminFilter())
@@ -74,3 +73,5 @@ admin_router.include_router(force_tick_router)
 from .git_cmd import router as git_cmd_router
 admin_router.include_router(git_cmd_router)
 
+from .search import router as search_router
+admin_router.include_router(search_router)

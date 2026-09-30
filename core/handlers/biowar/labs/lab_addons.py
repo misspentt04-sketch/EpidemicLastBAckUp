@@ -46,8 +46,16 @@ async def pathogen_name_change(msg: Message, bot: Bot, db: Cursor, repo_biowar: 
     
     text_to_moders = f'Игрок {mention} поменял имя патогена на «{pathogen_name}»'
     
+    old_pathogen = await repo_biowar.select_one(
+        "SELECT pathogen_name FROM Lab WHERE lab_id = %s", (id,)
+    )
     await repo_biowar.pathogen_name_change(pathogen_name, id)
     await msg.answer(text)
+
+    # Лог смены имени патогена
+    from core.utils.name_logger import log_name_change
+    await log_name_change(repo_biowar, id, "pathogen_name", old_pathogen, pathogen_name, bot=bot)
+
     await asyncio.sleep(1)
     
    # is_mat = gpt_thinks(tricks_genai['prompts']['anti_mat'].format(pathogen_name))
@@ -128,8 +136,15 @@ async def change_lab_name(msg: Message, bot: Bot, db: Cursor, repo_biowar: Reque
     
     text_to_moders = f'Игрок {mention} поменял имя лабы на «{lab_name}»'
     
+    old_lab = await repo_biowar.select_one(
+        "SELECT lab_name FROM Lab WHERE lab_id = %s", (id,)
+    )
     await repo_biowar.lab_name_change(lab_name, id)
-    
+
+    # Лог смены имени лабы
+    from core.utils.name_logger import log_name_change
+    await log_name_change(repo_biowar, id, "lab_name", old_lab, lab_name, bot=bot)
+
     await msg.answer(text)
     await asyncio.sleep(1)
     is_mat = gpt_thinks(tricks_genai['prompts']['anti_mat'].format(lab_name))
