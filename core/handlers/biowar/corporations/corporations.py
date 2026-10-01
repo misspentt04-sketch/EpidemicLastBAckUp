@@ -155,6 +155,54 @@ async def invite_request_corporation(msg: Message, bot: Bot, db: Cursor, repo_bi
     
     await msg.answer(text)
 
+    # Уведомляем владельца + соруков в ЛС
+    try:
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        notify_ids = set()
+        if corp.get('leader_id'):
+            notify_ids.add(int(corp['leader_id']))
+        try:
+            admins = await repo_biowar.get_corp_admin_list(corp_code)
+            if admins:
+                for a in admins:
+                    if isinstance(a, dict):
+                        mid = a.get('member_id') or a.get('id')
+                    else:
+                        mid = a
+                    if mid:
+                        notify_ids.add(int(mid))
+        except Exception as e:
+            print(f"[CORP NOTIFY ADMINS ERROR] {e}")
+
+        notify_ids.discard(int(id))
+        print(f"[CORP NOTIFY] notify_ids={notify_ids} corp_code={corp_code} leader={corp.get('leader_id')}")
+
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Принять", callback_data=f"corp_accept_one:{corp_code}:{id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"corp_reject_one:{corp_code}:{id}"),
+        ]])
+
+        notify_text = (
+            f"📩 <a href='tg://user?id={id}'>{msg.from_user.full_name}</a> "
+            f"хочет вступить в корпу <b>«{corp['name']}»</b>\n\n"
+            f"⚡ Био-опыт: <code>{int(invite_user['bio_experience']):,}</code>"
+        )
+
+        for nid in notify_ids:
+            try:
+                await bot.send_message(
+                    nid,
+                    notify_text,
+                    parse_mode="HTML",
+                    reply_markup=kb,
+                )
+                print(f"[CORP NOTIFY] отправлено {nid}")
+            except Exception as e:
+                print(f"[CORP NOTIFY ERROR] {nid}: {e}")
+    except Exception as e:
+        print(f"[CORP NOTIFY GLOBAL ERROR] {e}")
+
 
 async def invite_accept_corporation(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
     
@@ -328,18 +376,23 @@ async def get_corporation_invites(msg: Message, bot: Bot, db: Cursor, repo_biowa
     if corp['is_admin'] == 0:
         return await msg.answer(tricks_biowar['corporation']['you_are_not_admin'])
     
-    invite_list = await repo_biowar.get_corp_invite_list(corp['invitation_code'])
+    invite_list = await repo_biowar.get_active_corp_invite_list(corp['invitation_code'])
     invite_list = func.get_corp_members_or_invite_list(invite_list, 'invites')
-    
-    
+
     text = (
         tricks_biowar['corporation']['get_corporation_invites'].format(
             corp['name'],
-            '\n'.join(invite_list)
+            '\n'.join(invite_list) if invite_list else 'Нет активных заявок'
         )
     )
-    
-    await msg.answer(text)
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Принять всех", callback_data=f"corp_accept_all:{corp['invitation_code']}"),
+        InlineKeyboardButton(text="❌ Отклонить всех", callback_data=f"corp_reject_all:{corp['invitation_code']}"),
+    ]])
+
+    await msg.answer(text, reply_markup=kb)
 
 
 async def change_corporation_name(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):

@@ -3,7 +3,14 @@ from core.utils.callbackdata import Corporation
 from core.data import texttriggers as trg
 from aiogram.filters import Command
 from aiogram.enums import ChatType
-from .corporations_inline import corporation_get_members, invite_request_corporation_inline
+from .corporations_inline import (
+    corporation_get_members,
+    invite_request_corporation_inline,
+    corp_accept_all,
+    corp_reject_all,
+    corp_accept_one,
+    corp_reject_one,
+)
 from .corporations import (
     get_corporation, create_corporation, delete_corporation,
     invite_request_corporation, invite_accept_corporation, invite_reject_corporation,
@@ -33,3 +40,11 @@ corporation_router.message.register(get_corporations_biotop, F.text.regexp(trg.r
 # Corporation inline
 corporation_router.callback_query.register(corporation_get_members, Corporation.filter(F.action == 'corp_get_members'))
 corporation_router.callback_query.register(invite_request_corporation_inline, Corporation.filter(F.action == 'invite_request_corporation'))
+
+# ===== Массовое принятие/отклонение заявок =====
+corporation_router.callback_query.register(corp_accept_all, F.data.startswith("corp_accept_all:"))
+corporation_router.callback_query.register(corp_reject_all, F.data.startswith("corp_reject_all:"))
+
+# ===== Одиночное принятие/отклонение =====
+corporation_router.callback_query.register(corp_accept_one, F.data.startswith("corp_accept_one:"))
+corporation_router.callback_query.register(corp_reject_one, F.data.startswith("corp_reject_one:"))

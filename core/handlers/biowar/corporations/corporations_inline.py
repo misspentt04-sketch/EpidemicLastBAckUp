@@ -83,4 +83,191 @@ async def invite_request_corporation_inline(call: CallbackQuery, bot: Bot, callb
     )
     
     await call.message.answer(text)
+
+    # Уведомляем владельца + соруков в ЛС
+    try:
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+        notify_ids = set()
+        if corp.get('leader_id'):
+            notify_ids.add(int(corp['leader_id']))
+        try:
+            admins = await repo_biowar.get_corp_admin_list(corp_code)
+            if admins:
+                for a in admins:
+                    # a — dict или int
+                    if isinstance(a, dict):
+                        mid = a.get('member_id') or a.get('id')
+                    else:
+                        mid = a
+                    if mid:
+                        notify_ids.add(int(mid))
+        except Exception as e:
+            print(f"[CORP NOTIFY ADMINS ERROR] {e}")
+
+        notify_ids.discard(int(id))
+        print(f"[CORP NOTIFY] notify_ids={notify_ids} corp_code={corp_code} leader={corp.get('leader_id')}")
+
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Принять", callback_data=f"corp_accept_one:{corp_code}:{id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"corp_reject_one:{corp_code}:{id}"),
+        ]])
+
+        notify_text = (
+            f"📩 <a href='tg://user?id={id}'>{call.from_user.full_name}</a> "
+            f"хочет вступить в корпу <b>«{corp['name']}»</b>\n\n"
+            f"⚡ Био-опыт: <code>{int(invite_user['bio_experience']):,}</code>"
+        )
+
+        for nid in notify_ids:
+            try:
+                await call.bot.send_message(
+                    nid,
+                    notify_text,
+                    parse_mode="HTML",
+                    reply_markup=kb,
+                )
+                print(f"[CORP NOTIFY] отправлено {nid}")
+            except Exception as e:
+                print(f"[CORP NOTIFY ERROR] {nid}: {e}")
+    except Exception as e:
+        print(f"[CORP NOTIFY GLOBAL ERROR] {e}")
+
     await call.answer()
+
+
+# ===== МАССОВОЕ ПРИНЯТИЕ / ОТКЛОНЕНИЕ =====
+
+async def corp_accept_all(call: CallbackQuery, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    try:
+        corp_code = call.data.split(":")[1]
+    except (ValueError, IndexError):
+        return await call.answer("❌ Ошибка", show_alert=True)
+
+    corp = await repo_biowar.get_corporation(call.from_user.id)
+    if not corp or corp['invitation_code'] != corp_code:
+        return await call.answer("❌ Это не твоя корпа!", show_alert=True)
+    if corp['is_admin'] == 0:
+        return await call.answer("❌ Только для админов корпы!", show_alert=True)
+
+    accepted = await repo_biowar.accept_all_corp_invites(corp_code)
+
+    # Уведомляем принятых
+    for uid in accepted:
+        try:
+            await bot.send_message(
+                uid,
+                f"🎉 Вас приняли в корпорацию <b>«{corp['name']}»</b>!\n\n"
+                f"Используйте <code>.корп</code> для просмотра информации.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+    await call.message.edit_text(
+        f"✅ Принято в корпу «{corp['name']}»: <b>{len(accepted)}</b>"
+    )
+    await call.answer(f"✅ Принято: {len(accepted)}")
+
+
+async def corp_reject_all(call: CallbackQuery, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    try:
+        corp_code = call.data.split(":")[1]
+    except (ValueError, IndexError):
+        return await call.answer("❌ Ошибка", show_alert=True)
+
+    corp = await repo_biowar.get_corporation(call.from_user.id)
+    if not corp or corp['invitation_code'] != corp_code:
+        return await call.answer("❌ Это не твоя корпа!", show_alert=True)
+    if corp['is_admin'] == 0:
+        return await call.answer("❌ Только для админов корпы!", show_alert=True)
+
+    rejected = await repo_biowar.reject_all_corp_invites(corp_code)
+
+    for uid in rejected:
+        try:
+            await bot.send_message(
+                uid,
+                f"😔 Ваша заявка в корпорацию <b>«{corp['name']}»</b> отклонена.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+    await call.message.edit_text(
+        f"❌ Отклонено заявок в корпу «{corp['name']}»: <b>{len(rejected)}</b>"
+    )
+    await call.answer(f"❌ Отклонено: {len(rejected)}")
+
+
+# ===== Принятие/отклонение одной заявки =====
+
+async def corp_accept_one(call: CallbackQuery, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    try:
+        _, corp_code, uid = call.data.split(":")
+        uid = int(uid)
+    except (ValueError, IndexError):
+        return await call.answer("❌ Ошибка", show_alert=True)
+
+    corp = await repo_biowar.get_corporation(call.from_user.id)
+    if not corp or corp['invitation_code'] != corp_code:
+        return await call.answer("❌ Это не твоя корпа!", show_alert=True)
+    if corp['is_admin'] == 0 and corp.get('leader_id') != call.from_user.id:
+        return await call.answer("❌ Только для админов корпы!", show_alert=True)
+
+    user = await repo_biowar.get_info_user_lab(uid)
+    if not user:
+        return await call.answer("❌ Игрок не найден", show_alert=True)
+
+    infected = await repo_biowar.get_my_infected(uid)
+    await repo_biowar.claim_invite_request_corporation(
+        corp_code, uid, user['full_name'], user['bio_experience'], infected
+    )
+
+    try:
+        await call.message.edit_text(f"✅ Принят: {user['full_name']}")
+    except Exception:
+        pass
+
+    try:
+        await bot.send_message(
+            uid,
+            f"🎉 Вас приняли в корпорацию <b>«{corp['name']}»</b>!",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+    await call.answer("Принят")
+
+
+async def corp_reject_one(call: CallbackQuery, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
+    try:
+        _, corp_code, uid = call.data.split(":")
+        uid = int(uid)
+    except (ValueError, IndexError):
+        return await call.answer("❌ Ошибка", show_alert=True)
+
+    corp = await repo_biowar.get_corporation(call.from_user.id)
+    if not corp or corp['invitation_code'] != corp_code:
+        return await call.answer("❌ Это не твоя корпа!", show_alert=True)
+    if corp['is_admin'] == 0 and corp.get('leader_id') != call.from_user.id:
+        return await call.answer("❌ Только для админов корпы!", show_alert=True)
+
+    await repo_biowar.reject_invite_request_corporation(corp_code, uid)
+
+    try:
+        await call.message.edit_text(f"❌ Отклонён ID: {uid}")
+    except Exception:
+        pass
+
+    try:
+        await bot.send_message(
+            uid,
+            f"😔 Ваша заявка в корпорацию <b>«{corp['name']}»</b> отклонена.",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+    await call.answer("Отклонён")

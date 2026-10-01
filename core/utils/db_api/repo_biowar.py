@@ -552,12 +552,13 @@ class RequestsRepoBiowar:
         await self.cur.execute(query, params)
 
     async def send_invite_request_corporation(self, corp_code: int, user_id: int, name: str, exp: int):
+        import time as _time
         query = (
             'INSERT INTO CorporationInviteList'
-            ' (invite_user_id, corporation_code, name, bio_experience) VALUES'
-            ' (%s, %s, %s, %s)'
+            ' (invite_user_id, corporation_code, name, bio_experience, created_at) VALUES'
+            ' (%s, %s, %s, %s, %s)'
         )
-        params = (user_id, corp_code, name, exp)
+        params = (user_id, corp_code, name, exp, int(_time.time()))
         await self.cur.execute(query, params)
 
     async def claim_invite_request_corporation(self, corp_code: int, user_id: int, name: str, exp: int, infected: int):
@@ -585,6 +586,59 @@ class RequestsRepoBiowar:
         )
         params = (user_id, corp_code)
         await self.cur.execute(query, params)
+
+    async def get_active_corp_invite_list(self, corp_code: str):
+        import time as _time
+        cutoff = int(_time.time()) - 1800  # 30 минут
+        query = (
+            'SELECT invite_user_id, name, bio_experience, created_at '
+            'FROM CorporationInviteList '
+            'WHERE corporation_code=%s AND created_at>=%s '
+            'ORDER BY created_at DESC'
+        )
+        return await self.select_all(query, (corp_code, cutoff), use_index_zero=False)
+
+    async def accept_all_corp_invites(self, corp_code: str):
+        import time as _time
+        cutoff = int(_time.time()) - 1800
+
+        query = (
+            'SELECT invite_user_id, name, bio_experience '
+            'FROM CorporationInviteList '
+            'WHERE corporation_code=%s AND created_at>=%s'
+        )
+        rows = await self.select_all(query, (corp_code, cutoff), use_index_zero=False)
+
+        accepted = []
+        for r in rows or []:
+            try:
+                user_id = r['invite_user_id']
+                name = r['name']
+                exp = r['bio_experience']
+                # infected берём через отдельный запрос (в таблице нет infected)
+                infected = await self.get_my_infected(user_id)
+                await self.claim_invite_request_corporation(corp_code, user_id, name, exp, infected)
+                accepted.append(user_id)
+            except Exception as e:
+                print(f"[ACCEPT ALL ERROR] {r.get('invite_user_id')}: {e}")
+        return accepted
+
+    async def reject_all_corp_invites(self, corp_code: str):
+        import time as _time
+        cutoff = int(_time.time()) - 1800
+        query = (
+            'SELECT invite_user_id FROM CorporationInviteList '
+            'WHERE corporation_code=%s AND created_at>=%s'
+        )
+        rows = await self.select_all(query, (corp_code, cutoff), use_index_zero=False)
+        ids = [r['invite_user_id'] for r in rows] if rows else []
+        await self.cur.execute(
+            'DELETE FROM CorporationInviteList WHERE corporation_code=%s AND created_at>=%s',
+            (corp_code, cutoff)
+        )
+        return ids
+
+
 
     # Event
 
