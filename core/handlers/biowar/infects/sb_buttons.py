@@ -107,3 +107,34 @@ async def cb_sb_infect(callback: types.CallbackQuery, bot: Bot, db,
                      redis=redis, lock=lock)
     except Exception as e:
         logger.error(f"[SB_INFECT ERROR] {e}")
+
+
+@router.callback_query(F.data.startswith("fever_heal:"))
+async def cb_fever_heal(callback: types.CallbackQuery, bot: Bot, db,
+                        redis: Redis, repo_biowar: RequestsRepoBiowar):
+    try:
+        owner_id = int(callback.data.split(":")[1])
+    except (ValueError, IndexError):
+        return await callback.answer("❌ Ошибка", show_alert=True)
+
+    if callback.from_user.id != owner_id:
+        return await callback.answer("❌ Это не твоё сообщение!", show_alert=True)
+
+    from core.handlers.biowar.infects.infect_addons import buy_vaccine
+
+    fake_message = callback.message.model_copy(update={
+        'from_user': callback.from_user,
+        'text': 'кв',
+        'reply_to_message': None,
+    })
+
+    try:
+        await buy_vaccine(fake_message, bot, db, redis, repo_biowar)
+        await callback.answer("💊 Вакцина куплена!")
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error(f"[FEVER HEAL ERROR] {e}")
+        await callback.answer("❌ Ошибка при лечении", show_alert=True)

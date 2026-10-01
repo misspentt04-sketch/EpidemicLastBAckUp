@@ -125,9 +125,16 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
                 await redis.set(f'epidemic_pet_try_count_heal:{infecter["id"]}', 0)
                 await repo_biowar.buy_vaccine(0, infecter['id'])
                 return await msg.answer(tricks_biowar['pet']['pet_skills_text']['байлу']['heal_fever'])
-        return await msg.answer(tricks_biowar['infect']['fever'].format(
-            fever_pathogen_name, fever
-        ))
+        fever_kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="💊 Вылечиться",
+                callback_data=f"fever_heal:{infecter['id']}"
+            )
+        ]])
+        return await msg.answer(
+            tricks_biowar['infect']['fever'].format(fever_pathogen_name, fever),
+            reply_markup=fever_kb,
+        )
 
 
     victim_expire_kd_check = await repo_biowar.check_victim_expire(infecter['id'], victimer['id'])
