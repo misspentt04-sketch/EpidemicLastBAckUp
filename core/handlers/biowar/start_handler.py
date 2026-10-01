@@ -191,12 +191,32 @@ async def cmd_mini_lab(msg: Message, repo_biowar: RequestsRepoBiowar):
     exp_formatted = f"{bio_exp:,}".replace(",", " ")
     res_formatted = f"{bio_res:,}".replace(",", " ")
 
+    # Проверка горячки
+    import time as _time
+    fever_ts = lab.get('fever') or 0
+    try:
+        fever_ts = int(fever_ts)
+    except (TypeError, ValueError):
+        fever_ts = 0
+    now_ts = int(_time.time())
+    if fever_ts > now_ts:
+        left = fever_ts - now_ts
+        h = left // 3600
+        m = (left % 3600) // 60
+        if h > 0:
+            fever_line = f"🤒 Горячка: есть (осталось {h} ч {m} мин)"
+        else:
+            fever_line = f"🤒 Горячка: есть (осталось {m} мин)"
+    else:
+        fever_line = "🏥 Горячка: ✅ нет"
+
     text = (
         f"👤 Руководитель: {owner_link}\n"
         f"🏛 В составе Корпорации — «{corp_display}»\n"
         f"🧪 Готовых патогенов: {ready_pathogens}/{pathogens}\n"
         f"☣️ Опыт: {exp_formatted}\n"
-        f"🧬 Ресурсы: {res_formatted}"
+        f"🧬 Ресурсы: {res_formatted}\n"
+        f"{fever_line}"
     )
 
     await msg.answer(
