@@ -446,10 +446,29 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
             (vic_user_chat if victimer['chat_setup_virus'] == victimer['id'] else True)
         ):
             await asyncio.sleep(0.1)
-            await bot.send_message(
-                victimer['chat_setup_virus'],
-                sb_virus_detect_text if ss_detect == 1 else sb_virus_not_detect_text
-            )
+
+            # Кнопки только если атакующий раскрыт (ss_detect == 1)
+            if ss_detect == 1:
+                sb_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text="🔍 Чек",
+                        callback_data=f"sb_check:{infecter['id']}:{victimer['id']}"
+                    ),
+                    InlineKeyboardButton(
+                        text="⚔️ Заразить",
+                        callback_data=f"sb_infect:{infecter['id']}:{victimer['id']}"
+                    ),
+                ]])
+                await bot.send_message(
+                    victimer['chat_setup_virus'],
+                    sb_virus_detect_text,
+                    reply_markup=sb_kb,
+                )
+            else:
+                await bot.send_message(
+                    victimer['chat_setup_virus'],
+                    sb_virus_not_detect_text,
+                )
     except:
         pass
 

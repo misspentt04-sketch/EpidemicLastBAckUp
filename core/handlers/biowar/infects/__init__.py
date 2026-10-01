@@ -50,3 +50,7 @@ infect_router.include_router(top_victims_router)
 # Кнопки после провала заражения
 from .infect_buttons import router as infect_buttons_router
 infect_router.include_router(infect_buttons_router)
+
+# СБ-кнопки (чек и заразить)
+from .sb_buttons import router as sb_buttons_router
+infect_router.include_router(sb_buttons_router)
