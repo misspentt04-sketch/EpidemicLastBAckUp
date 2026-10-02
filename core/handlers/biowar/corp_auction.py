@@ -354,8 +354,9 @@ async def cmd_slot_bid(msg: types.Message):
                 "SELECT bio_resource FROM Lab WHERE lab_id=%s", (msg.from_user.id,)
             )
             lab = await cur.fetchone()
-            if not lab or lab['bio_resource'] < amount:
-                return await msg.answer("❌ Недостаточно био-ресурсов.")
+            if not lab:
+                return await msg.answer("❌ У вас нет лаборатории.")
+            balance = int(lab['bio_resource'] or 0)
 
             # текущая ставка игрока
             await cur.execute(
@@ -368,12 +369,27 @@ async def cmd_slot_bid(msg: types.Message):
                 if amount < 1:
                     return await msg.answer("❌ Минимум +1 🧬.")
                 new_total = prev['bid_total'] + amount
+                # === ГЛАВНАЯ ПРОВЕРКА: общая сумма ставки не больше баланса ===
+                if new_total > balance:
+                    return await msg.answer(
+                        f"❌ Общая сумма ставки не может превышать ваш баланс!\n"
+                        f"💰 Баланс: <b>{_fmt(balance)}</b> 🧬\n"
+                        f"💼 Текущая ставка: <b>{_fmt(prev['bid_total'])}</b> 🧬\n"
+                        f"📈 Максимум можно добавить: <b>{_fmt(balance - prev['bid_total'])}</b> 🧬",
+                        parse_mode="HTML",
+                    )
                 await cur.execute(
                     "UPDATE CorpSlotBids SET bid_total=%s, updated_at=%s WHERE id=%s",
                     (new_total, now, prev['id'])
                 )
                 added = amount
             else:
+                if amount > balance:
+                    return await msg.answer(
+                        f"❌ Ставка не может превышать ваш баланс!\n"
+                        f"💰 Баланс: <b>{_fmt(balance)}</b> 🧬",
+                        parse_mode="HTML",
+                    )
                 new_total = amount
                 await cur.execute(
                     "INSERT INTO CorpSlotBids (auction_id, bidder_id, corp_code, bid_total, created_at, updated_at) "
