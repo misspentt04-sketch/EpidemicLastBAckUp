@@ -334,6 +334,13 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
     earn_exp = 1 if earn_exp <= 0 else earn_exp
     earn_exp = max(1, int(earn_exp))
 
+    # === PERSONAL 5% EXP BONUS ===
+    try:
+        if infecter['id'] in (7972320837, 880209019, 8564888817):
+            earn_exp = int(earn_exp * 1.05)
+    except Exception as _e:
+        print(f"[PERSONAL EXP BONUS ERROR] {_e}")
+
 
     vic_exp = 0 if lose_exp < 0 else lose_exp
 

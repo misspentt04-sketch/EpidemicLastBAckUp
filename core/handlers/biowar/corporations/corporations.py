@@ -62,6 +62,19 @@ async def get_corporation(msg: Message, bot: Bot, db: Cursor, repo_biowar: Reque
         )
     )
     is_member = bool(await repo_biowar.get_corporation(msg.from_user.id))
+
+    # Проверка: владелец или сорук — может менять досье
+    is_owner = (int(corp['leader_id']) == int(id))
+    is_admin = False
+    if not is_owner and is_member:
+        _m = await repo_biowar.select_all(
+            'SELECT is_admin FROM CorporationMembers WHERE corporation_code=%s AND member_id=%s LIMIT 1;',
+            (corp['invitation_code'], id),
+            use_index_zero=False,
+        )
+        is_admin = bool(_m and int(_m[0].get('is_admin') or 0) == 1)
+    can_dossier = is_owner or is_admin
+
     await msg.answer(
         text,
         reply_markup=corp_navigation(
@@ -69,6 +82,7 @@ async def get_corporation(msg: Message, bot: Bot, db: Cursor, repo_biowar: Reque
             corp['invitation_code'],
             dossier_open=(corp['corporation_dossier'] == 1),
             is_member=is_member,
+            can_dossier=can_dossier,
         ),
     )
 

@@ -4,7 +4,8 @@ from core.utils.callbackdata import Corporation
 from core.data.icons import LabIco  # noqa: F401
 
 
-def corp_navigation(id: int, corp_code: str, dossier_open: bool = True, is_member: bool = True):
+def corp_navigation(id: int, corp_code: str, dossier_open: bool = True,
+                    is_member: bool = True, can_dossier: bool = False):
     kb = InlineKeyboardBuilder()
 
     kb.button(
@@ -17,10 +18,12 @@ def corp_navigation(id: int, corp_code: str, dossier_open: bool = True, is_membe
     )
 
     if is_member:
-        kb.button(
-            text=f"📖 Досье: {'🔓' if dossier_open else '🔒'}",
-            callback_data=Corporation(id=id, action='corp_toggle_dossier', corp_code=corp_code),
-        )
+        # Досье — только для владельца/соруков
+        if can_dossier:
+            kb.button(
+                text=f"📖 Досье: {'🔓' if dossier_open else '🔒'}",
+                callback_data=Corporation(id=id, action='corp_toggle_dossier', corp_code=corp_code),
+            )
         kb.button(
             text='💰 Казна',
             callback_data=Corporation(id=id, action='corp_treasury_menu', corp_code=corp_code),
@@ -29,7 +32,11 @@ def corp_navigation(id: int, corp_code: str, dossier_open: bool = True, is_membe
             text='⭐ Прокачать корпу',
             callback_data=Corporation(id=id, action='corp_upgrade_menu', corp_code=corp_code),
         )
-        kb.adjust(2, 2, 1)
+        # Пересчитаем adjust: 2 сверху, потом строка с досье+казна, потом прокачка
+        if can_dossier:
+            kb.adjust(2, 2, 1)
+        else:
+            kb.adjust(2, 1, 1)
     else:
         kb.button(
             text='✉️ Вступить',

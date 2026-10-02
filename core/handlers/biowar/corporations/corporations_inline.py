@@ -294,6 +294,20 @@ async def corp_toggle_dossier(call: CallbackQuery, bot: Bot, callback_data: Corp
     if corp['invitation_code'] != callback_data.corp_code:
         return await call.answer("Это не твоя корпа", show_alert=True)
 
+    # Проверка: владелец или сорук
+    is_owner = (int(corp['leader_id']) == int(id))
+    is_admin = False
+    if not is_owner:
+        member = await repo_biowar.select_all(
+            'SELECT is_admin FROM CorporationMembers WHERE corporation_code=%s AND member_id=%s LIMIT 1;',
+            (callback_data.corp_code, id),
+            use_index_zero=False,
+        )
+        is_admin = bool(member and int(member[0].get('is_admin') or 0) == 1)
+
+    if not (is_owner or is_admin):
+        return await call.answer("❌ Только владелец или соруководитель", show_alert=True)
+
     new_state = await repo_biowar.corp_toggle_dossier(callback_data.corp_code)
     await call.answer("Открыто" if new_state else "Закрыто")
 
@@ -499,12 +513,25 @@ async def corp_back_to_main(call: CallbackQuery, bot: Bot, callback_data: Corpor
         return await call.answer("Не найдено", show_alert=True)
     corp = corp_me[0] if isinstance(corp_me, list) else corp_me
 
+    # Проверка: владелец или сорук
+    is_owner = (int(corp['leader_id']) == int(id))
+    is_admin = False
+    if not is_owner:
+        _m = await repo_biowar.select_all(
+            'SELECT is_admin FROM CorporationMembers WHERE corporation_code=%s AND member_id=%s LIMIT 1;',
+            (callback_data.corp_code, id),
+            use_index_zero=False,
+        )
+        is_admin = bool(_m and int(_m[0].get('is_admin') or 0) == 1)
+    can_dossier = is_owner or is_admin
+
     await call.message.answer(
         "Главное меню корпы. Используй .корп для полного экрана.",
         reply_markup=corp_navigation(
             id, callback_data.corp_code,
             dossier_open=(corp['corporation_dossier'] == 1),
             is_member=True,
+            can_dossier=can_dossier,
         ),
     )
     await call.answer()
