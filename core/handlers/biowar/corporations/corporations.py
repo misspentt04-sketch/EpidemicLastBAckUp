@@ -581,7 +581,7 @@ async def corp_treasury_deposit_reply(msg: Message, bot: Bot, db: Cursor, repo_b
 
 async def corp_top_by_level(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
     """Топ корпораций по уровню."""
-    corps = await repo_biowar.get_corp_top_by_level(limit=20)
+    corps = await repo_biowar.get_corp_top_by_level(limit=10)
 
     if not corps:
         return await msg.answer(

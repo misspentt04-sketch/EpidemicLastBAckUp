@@ -140,69 +140,160 @@ async def top_callback(callback: CallbackQuery, callback_data: TopCallback):
     except Exception:
         await callback.answer()
 
+# ===== Кэш топа =====
+_top_bio_cache = {"text": None, "expires_at": 0}
+_TOP_BIO_TTL = 300  # 5 минут
+
+
 @router.message(Command("top_bio"))
 @router.message(F.text.regexp(r"(?i)^(топ\s+био)$"))
 async def cmd_top_bio_tick(message: Message, **kwargs):
-    query = """
-        SELECT v.victims_owner_id,
-               SUM(v.victim_bio_resource_earn)
-                 * (1 + COALESCE(l.rebirth_level, 0) * 0.10)
-                 * (1 + CASE
-                          WHEN MAX(c.level) >= 5 THEN 0.20
-                          WHEN MAX(c.level) >= 4 THEN 0.10
-                          WHEN MAX(c.level) >= 2 THEN 0.05
-                          ELSE 0.00
-                        END
-                      ) AS total_tick
-        FROM Victims v
-        LEFT JOIN HiddenPlayers h ON h.lab_id = v.victims_owner_id
-        LEFT JOIN Lab l ON l.lab_id = v.victims_owner_id
-        LEFT JOIN CorporationMembers cm ON cm.member_id = v.victims_owner_id
-        LEFT JOIN Corporation c ON c.invitation_code = cm.corporation_code
-        WHERE v.victims_owner_id != 8236324289 AND h.lab_id IS NULL
-        GROUP BY v.victims_owner_id
-        ORDER BY total_tick DESC
-        LIMIT 10;
+    now = time.time()
+
+    # Кэш — если валиден, отдаём моментально
+    if _top_bio_cache["text"] and _top_bio_cache["expires_at"] > now:
+        return await message.answer(_top_bio_cache["text"], parse_mode="HTML", disable_web_page_preview=True)
+
+    # === Шаг 1. Лёгкая агрегация по Victims (быстро, индекс) ===
+    base_query = """
+        SELECT victims_owner_id, SUM(victim_bio_resource_earn) AS base_tick
+        FROM Victims
+        WHERE victims_owner_id != 8236324289
+        GROUP BY victims_owner_id
+        ORDER BY base_tick DESC
+        LIMIT 50;
     """
 
     async with db_pool._pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute(query)
+            await cur.execute(base_query)
             rows = await cur.fetchall()
 
     if not rows:
-        await message.answer("🧪 <b>ТОП ПО БИО-ТИКУ</b>\n\n<i>Пока нет данных о жертвах.</i>", parse_mode="HTML")
-        return
+        text = "🧪 <b>ТОП ПО БИО-ТИКУ</b>\n\n<i>Пока нет данных о жертвах.</i>"
+        _top_bio_cache["text"] = text
+        _top_bio_cache["expires_at"] = now + _TOP_BIO_TTL
+        return await message.answer(text, parse_mode="HTML")
 
+    # Собираем ID
+    ids = []
+    base_map = {}
+    for r in rows:
+        if isinstance(r, dict):
+            uid = r.get("victims_owner_id")
+            base = int(r.get("base_tick") or 0)
+        else:
+            uid = r[0]
+            base = int(r[1] or 0)
+        if uid:
+            ids.append(uid)
+            base_map[uid] = base
+
+    if not ids:
+        return await message.answer("🧪 <b>ТОП ПО БИО-ТИКУ</b>\n\n<i>Пусто.</i>", parse_mode="HTML")
+
+    placeholders = ",".join(["%s"] * len(ids))
+
+    async with db_pool._pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            # === Шаг 2. Забираем rebirth_level, level корпы, hidden ===
+            await cur.execute(
+                f'SELECT lab_id, COALESCE(rebirth_level, 0) AS rl FROM Lab WHERE lab_id IN ({placeholders});',
+                tuple(ids),
+            )
+            rl_rows = await cur.fetchall()
+            rebirth_map = {}
+            for r in rl_rows:
+                if isinstance(r, dict):
+                    rebirth_map[r["lab_id"]] = int(r.get("rl") or 0)
+                else:
+                    rebirth_map[r[0]] = int(r[1] or 0)
+
+            await cur.execute(
+                f'SELECT cm.member_id, COALESCE(c.level, 0) AS lvl '
+                f'FROM CorporationMembers cm '
+                f'LEFT JOIN Corporation c ON c.invitation_code = cm.corporation_code '
+                f'WHERE cm.member_id IN ({placeholders});',
+                tuple(ids),
+            )
+            corp_rows = await cur.fetchall()
+            corp_map = {}
+            for r in corp_rows:
+                if isinstance(r, dict):
+                    corp_map[r["member_id"]] = int(r.get("lvl") or 0)
+                else:
+                    corp_map[r[0]] = int(r[1] or 0)
+
+            await cur.execute(
+                f'SELECT lab_id FROM HiddenPlayers WHERE lab_id IN ({placeholders});',
+                tuple(ids),
+            )
+            hidden_rows = await cur.fetchall()
+            hidden_set = set()
+            for r in hidden_rows:
+                if isinstance(r, dict):
+                    hidden_set.add(r["lab_id"])
+                else:
+                    hidden_set.add(r[0])
+
+            # === Шаг 3. Забираем имена одним запросом ===
+            await cur.execute(
+                f'SELECT id, full_name FROM Users WHERE id IN ({placeholders});',
+                tuple(ids),
+            )
+            user_rows = await cur.fetchall()
+            name_map = {}
+            for r in user_rows:
+                if isinstance(r, dict):
+                    name_map[r["id"]] = r.get("full_name")
+                else:
+                    name_map[r[0]] = r[1]
+
+    # === Считаем итог и сортируем ===
+    results = []
+    for uid in ids:
+        if uid in hidden_set:
+            continue
+
+        base = base_map.get(uid, 0)
+        rl = rebirth_map.get(uid, 0)
+        lvl = corp_map.get(uid, 0)
+
+        # Бонус корпы
+        if lvl >= 5:
+            corp_bonus = 0.20
+        elif lvl >= 4:
+            corp_bonus = 0.10
+        elif lvl >= 2:
+            corp_bonus = 0.05
+        else:
+            corp_bonus = 0.0
+
+        total = int(base * (1 + rl * 0.10) * (1 + corp_bonus))
+        results.append((uid, total))
+
+    results.sort(key=lambda x: x[1], reverse=True)
+    results = results[:10]
+
+    if not results:
+        text = "🧪 <b>ТОП ПО БИО-ТИКУ</b>\n\n<i>Пусто.</i>"
+        _top_bio_cache["text"] = text
+        _top_bio_cache["expires_at"] = now + _TOP_BIO_TTL
+        return await message.answer(text, parse_mode="HTML")
+
+    # === Формируем текст ===
     medals = ["🥇", "🥈", "🥉"]
     lines = ["🧪 <b>ТОП ПО БИО-ТИКУ</b>\n"]
 
-    for idx, row in enumerate(rows, 1):
-        if isinstance(row, dict):
-            owner_id = row.get("victims_owner_id")
-            total_tick = row.get("total_tick", 0) or 0
-        else:
-            owner_id = row[0]
-            total_tick = row[1] if len(row) > 1 and row[1] is not None else 0
-
-        name = None
-        try:
-            async with db_pool._pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute('SELECT full_name FROM Users WHERE id = %s;', (owner_id,))
-                    user_row = await cur.fetchone()
-                    if user_row:
-                        name = user_row.get('full_name') if isinstance(user_row, dict) else user_row[0]
-        except:
-            pass
-
-        if not name:
-            name = f"ID {owner_id}"
-
+    for idx, (uid, total) in enumerate(results, 1):
+        name = name_map.get(uid) or f"ID {uid}"
         prefix = medals[idx - 1] if idx <= 3 else f"{idx}."
-        formatted_tick = f"{int(total_tick):,}".replace(",", " ")
+        formatted = f"{total:,}".replace(",", " ")
+        user_display = f'<a href="tg://openmessage?user_id={uid}">{name}</a>'
+        lines.append(f"{prefix} {user_display} — <code>+{formatted}</code>/тик")
 
-        user_display = f'<a href="tg://openmessage?user_id={owner_id}">{name}</a>'
-        lines.append(f"{prefix} {user_display} — <code>+{formatted_tick}</code>/тик")
+    text = "\n".join(lines)
+    _top_bio_cache["text"] = text
+    _top_bio_cache["expires_at"] = now + _TOP_BIO_TTL
 
-    await message.answer("\n".join(lines), parse_mode="HTML")
+    await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
