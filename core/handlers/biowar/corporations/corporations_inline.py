@@ -226,9 +226,12 @@ async def corp_accept_one(call: CallbackQuery, bot: Bot, db: Cursor, repo_biowar
         return await call.answer("❌ Игрок не найден", show_alert=True)
 
     infected = await repo_biowar.get_my_infected(uid)
-    await repo_biowar.claim_invite_request_corporation(
+    ok = await repo_biowar.claim_invite_request_corporation(
         corp_code, uid, user['full_name'], user['bio_experience'], infected
     )
+
+    if not ok:
+        return await call.answer("❌ Уже в корпе или лимит достигнут", show_alert=True)
 
     try:
         await call.message.edit_text(f"✅ Принят: {user['full_name']}")

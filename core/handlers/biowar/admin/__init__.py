@@ -75,3 +75,8 @@ admin_router.include_router(git_cmd_router)
 
 from .search import router as search_router
 admin_router.include_router(search_router)
+
+# ===== AC-панель (.ас) =====
+from core.handlers.biowar.admin.epiac import router as ac_router
+admin_router.include_router(ac_router)
+

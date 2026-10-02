@@ -169,3 +169,5 @@ re_bot_pm = re.compile(re_pref + r'эпилс(|.+)', re.IGNORECASE)
 re_vaccine_choice = r"(?i)^[!/.]?(?:ваквыбор|вакцинавыбор|вакспособ)$"
 
 re_corp_top_level = re.compile(re_pref + r'(топ корп|топ корп lvl|top corp)', re.IGNORECASE)
+
+re_ac_list = re.compile(re_pref + r'(лист|aclist|список ас|асы)', re.IGNORECASE)

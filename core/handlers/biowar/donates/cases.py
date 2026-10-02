@@ -40,7 +40,6 @@ def get_cases_keyboard():
             InlineKeyboardButton(text="📜 История", callback_data="case_history")
         ],
         [InlineKeyboardButton(text="💱 Обмен валют", callback_data="exchange_menu")],
-        [InlineKeyboardButton(text="🔄 Передать", callback_data="transfer_menu")],
         [InlineKeyboardButton(text="❌ Закрыть", callback_data="close_cases_menu")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
@@ -1487,6 +1486,7 @@ class TransferStates(StatesGroup):
 
 @cases_router.callback_query(F.data == "transfer_menu")
 async def cmd_transfer_menu(call: CallbackQuery):
+    return await call.answer("❌ Отключено", show_alert=True)
     if not await check_cases_owner(call):
         return
 
@@ -1506,6 +1506,7 @@ async def cmd_transfer_menu(call: CallbackQuery):
 
 @cases_router.callback_query(F.data == "transfer_cases")
 async def transfer_cases_start(call: CallbackQuery, state: FSMContext):
+    return await call.answer("❌ Отключено", show_alert=True)
     if not await check_cases_owner(call):
         return
     await state.set_state(TransferStates.waiting_target)
@@ -1520,6 +1521,7 @@ async def transfer_cases_start(call: CallbackQuery, state: FSMContext):
 
 @cases_router.callback_query(F.data == "transfer_coins")
 async def transfer_coins_start(call: CallbackQuery, state: FSMContext):
+    return await call.answer("❌ Отключено", show_alert=True)
     if not await check_cases_owner(call):
         return
     await state.set_state(TransferStates.waiting_target)
@@ -1534,6 +1536,8 @@ async def transfer_coins_start(call: CallbackQuery, state: FSMContext):
 
 @cases_router.message(TransferStates.waiting_target)
 async def transfer_get_target(msg: Message, state: FSMContext, db, bot: Bot):
+    await state.clear()
+    return
     text = msg.text.strip()
 
     # ===== ОТМЕНА =====
@@ -1625,6 +1629,7 @@ async def transfer_get_target(msg: Message, state: FSMContext, db, bot: Bot):
 
 @cases_router.callback_query(F.data.startswith("transfer_case_type_"))
 async def transfer_case_type_selected(call: CallbackQuery, state: FSMContext):
+    return await call.answer("❌ Отключено", show_alert=True)
     if not await check_cases_owner(call):
         return
     case_type = int(call.data.split("_")[-1])
@@ -1652,6 +1657,8 @@ async def transfer_case_type_selected(call: CallbackQuery, state: FSMContext):
 
 @cases_router.message(TransferStates.waiting_amount)
 async def transfer_get_amount(msg: Message, state: FSMContext, db, bot: Bot):
+    await state.clear()
+    return
     # ===== ОТМЕНА =====
     if msg.text and msg.text.strip().lower() in ("отмена", "cancel", "стоп", "выход", "exit"):
         await state.clear()

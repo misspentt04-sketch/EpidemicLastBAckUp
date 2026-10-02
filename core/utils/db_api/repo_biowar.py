@@ -587,24 +587,53 @@ class RequestsRepoBiowar:
         params = (user_id, corp_code, name, exp, int(_time.time()))
         await self.cur.execute(query, params)
 
-    async def claim_invite_request_corporation(self, corp_code: int, user_id: int, name: str, exp: int, infected: int):
+    async def claim_invite_request_corporation(self, corp_code: int, user_id: int, name: str, exp: int, infected: int) -> bool:
+        """Принимает заявку. Возвращает True если принято, False если дубль/лимит."""
+        BASE_SLOTS = 50
+        MAX_SLOTS = 100
+
+        # === 1. Проверка: не в корпе ли уже (защита от дубля) ===
+        existing = await self.select_all(
+            'SELECT id FROM CorporationMembers WHERE member_id=%s LIMIT 1;',
+            (user_id,),
+            use_index_zero=False,
+        )
+        if existing:
+            print(f"[CORP DUP] {user_id} уже в корпе — отказ")
+            await self.cur.execute(
+                'DELETE FROM CorporationInviteList WHERE invite_user_id=%s',
+                (user_id,),
+            )
+            return False
+
+        # === 2. Проверка лимита ===
+        rows = await self.select_all(
+            'SELECT members, COALESCE(bonus_slots, 0) AS bs FROM Corporation WHERE invitation_code=%s;',
+            (corp_code,),
+            use_index_zero=False,
+        )
+        if not rows:
+            return False
+        members = int(rows[0]['members'] or 0)
+        bonus = int(rows[0]['bs'] or 0)
+        limit = min(BASE_SLOTS + bonus, MAX_SLOTS)
+        if members >= limit:
+            print(f"[CORP LIMIT] {corp_code}: members={members}, limit={limit} — отказ")
+            return False
+
+        # === 3. Принимаем ===
         query = (
             'INSERT INTO CorporationMembers'
             ' (corporation_code, member_id, name, bio_experience, infected) VALUES'
             ' (%s, %s, %s, %s, %s);'
         )
-        query1 = (
-            'DELETE FROM CorporationInviteList WHERE invite_user_id=%s'
-        )
-        query2 = (
-            'UPDATE Corporation SET members=members+1 WHERE invitation_code=%s;'
-        )
-        params = (corp_code, user_id, name, exp, infected)
-        params1 = (user_id)
-        params2 = (corp_code)
-        await self.cur.execute(query, params)
-        await self.cur.execute(query1, params1)
-        await self.cur.execute(query2, params2)
+        query1 = 'DELETE FROM CorporationInviteList WHERE invite_user_id=%s'
+        query2 = 'UPDATE Corporation SET members=members+1 WHERE invitation_code=%s;'
+        await self.cur.execute(query, (corp_code, user_id, name, exp, infected))
+        await self.cur.execute(query1, (user_id,))
+        await self.cur.execute(query2, (corp_code,))
+        return True
+
 
     async def reject_invite_request_corporation(self, corp_code: int, user_id: int):
         query = (
@@ -643,8 +672,11 @@ class RequestsRepoBiowar:
                 exp = r['bio_experience']
                 # infected берём через отдельный запрос (в таблице нет infected)
                 infected = await self.get_my_infected(user_id)
-                await self.claim_invite_request_corporation(corp_code, user_id, name, exp, infected)
-                accepted.append(user_id)
+                ok = await self.claim_invite_request_corporation(corp_code, user_id, name, exp, infected)
+                if ok:
+                    accepted.append(user_id)
+                else:
+                    print(f"[ACCEPT ALL SKIP] {user_id} — дубль/лимит")
             except Exception as e:
                 print(f"[ACCEPT ALL ERROR] {r.get('invite_user_id')}: {e}")
         return accepted

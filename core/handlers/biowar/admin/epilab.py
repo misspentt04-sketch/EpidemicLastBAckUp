@@ -215,9 +215,7 @@ async def cmd_epi_lab(message: Message, state: FSMContext, repo_biowar: Requests
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔬 Просмотр лаборатории", callback_data=f"epilab:view:{target_id}")],
-        [InlineKeyboardButton(text="⛔ АС (Мут команд)", callback_data=f"epilab:ac:{target_id}")],
         [InlineKeyboardButton(text="🔒 Запрет смены имени/патогена", callback_data=f"epilab:blockname:{target_id}")],
-        [InlineKeyboardButton(text="🔓 Снять ограничения", callback_data=f"epilab:unblock:{target_id}")],
         [InlineKeyboardButton(text="🔄 Перенос лаборатории", callback_data=f"epilab:transfer:{target_id}")],
         [InlineKeyboardButton(text="💣 Обнул", callback_data=f"epilab:reset:{target_id}")],
         [InlineKeyboardButton(text="❌ Закрыть", callback_data="epilab:close")]
@@ -583,20 +581,12 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
     elif action == 'main':
         back_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔬 Просмотр лаборатории", callback_data=f"epilab:view:{target_id}")],
-            [InlineKeyboardButton(text="⛔ АС (Мут команд)", callback_data=f"epilab:ac:{target_id}")],
-            [InlineKeyboardButton(text="🔒 Запрет смены имени/патогена", callback_data=f"epilab:blockname:{target_id}")],
-            [InlineKeyboardButton(text="🔓 Снять ограничения", callback_data=f"epilab:unblock:{target_id}")],
-            [InlineKeyboardButton(text="🔄 Перенос лаборатории", callback_data=f"epilab:transfer:{target_id}")],
+                [InlineKeyboardButton(text="🔒 Запрет смены имени/патогена", callback_data=f"epilab:blockname:{target_id}")],
+                [InlineKeyboardButton(text="🔄 Перенос лаборатории", callback_data=f"epilab:transfer:{target_id}")],
             [InlineKeyboardButton(text="💣 Обнул", callback_data=f"epilab:reset:{target_id}")],
             [InlineKeyboardButton(text="❌ Закрыть", callback_data="epilab:close")]
         ])
         await callback.message.edit_text(f"🎛 <b>Управление лабораторией:</b> <code>{target_id}</code>", reply_markup=back_kb)
-        await callback.answer()
-
-    elif action == 'ac':
-        await state.update_data(target_id=target_id)
-        await state.set_state(EpiLabAdminStates.waiting_for_ac_reason)
-        await callback.message.answer("✍️ Введите причину для АС (выдается НАВСЕГДА):")
         await callback.answer()
 
     elif action == 'blockname':
@@ -604,21 +594,6 @@ async def epilab_callback(callback: CallbackQuery, state: FSMContext, repo_biowa
         await state.set_state(EpiLabAdminStates.waiting_for_block_reason)
         await callback.message.answer("✍️ Введите причину для запрета смены имени/патогена (выдается на 31 день):")
         await callback.answer()
-
-    elif action == 'unblock':
-        if hasattr(repo_biowar, 'game_mute_cancel'):
-            await repo_biowar.game_mute_cancel(target_id)
-        if hasattr(repo_biowar, 'bio_mute_cancel'):
-            await repo_biowar.bio_mute_cancel(target_id)
-        banned_users.pop(int(target_id), None)
-        user_timestamps.pop(int(target_id), None)
-        for prefix in ["epidemic_gamemute:", "gamemute:", "biomute:", "epidemic_biomute:"]:
-            try:
-                await redis.delete(f"{prefix}{target_id}")
-            except Exception:
-                pass
-        await notify_owner_action(callback.from_user, "🔓 Снятие всех ограничений / АС", target_id, bot=callback.bot)
-        await callback.answer(f"✅ Все ограничения и АС для {target_id} сняты!", show_alert=True)
 
     elif action == 'transfer':
         await state.update_data(target_id=target_id)
