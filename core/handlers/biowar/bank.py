@@ -196,9 +196,44 @@ async def cmd_bank(msg: Message, pool: Pool):
 
 # ===== ДЕПОЗИТ =====
 @router.callback_query(F.data == "bank_deposit")
-async def bank_deposit_start(call: CallbackQuery, state: FSMContext):
+async def bank_deposit_start(call: CallbackQuery, state: FSMContext, pool: Pool):
+    user_id = call.from_user.id
+
+    balance = await get_balance(pool, user_id)
+    tick_income = await get_tick_income(pool, user_id)
+    max_deposit = tick_income * 5
+
+    bank = await get_bank(pool, user_id)
+    if isinstance(bank, dict):
+        current_deposit = bank.get('deposit_amount', 0) or 0
+    else:
+        current_deposit = bank[2] if bank and len(bank) > 2 else 0
+
+    if current_deposit > 0:
+        await call.answer(
+            f"❌ У вас уже есть депозит: {format_money(current_deposit)} 🧬",
+            show_alert=True
+        )
+        return
+
+    if max_deposit <= 0:
+        await call.answer(
+            "❌ Нет дохода с жертв — депозит недоступен.",
+            show_alert=True
+        )
+        return
+
+    can_deposit = min(balance, max_deposit)
+
     await state.set_state(BankStates.waiting_deposit_amount)
-    await call.message.reply("💰 <b>Введите сумму для депозита:</b>", parse_mode="HTML")
+    await call.message.reply(
+        f"💰 <b>Введите сумму для депозита:</b>\n\n"
+        f"💎 Ваш баланс: <b>{format_money(balance)}</b> 🧬\n"
+        f"📊 Доход с жертв: <b>{format_money(tick_income)}</b> 🧬\n"
+        f"📈 Максимум: <b>{format_money(max_deposit)}</b> 🧬 (×5 от дохода)\n"
+        f"✅ Можно положить: <b>{format_money(can_deposit)}</b> 🧬",
+        parse_mode="HTML"
+    )
     await call.answer()
 
 @router.message(BankStates.waiting_deposit_amount)
@@ -273,12 +308,36 @@ async def bank_credit_start(call: CallbackQuery, state: FSMContext, pool: Pool):
     tick_income = await get_tick_income(pool, user_id)
     max_credit = tick_income * 10
 
+    if max_credit <= 0:
+        await call.answer("❌ Нет дохода с жертв — кредит недоступен.", show_alert=True)
+        return
+
+    # Учитываем текущий кредит
+    bank = await get_bank(pool, user_id)
+    if isinstance(bank, dict):
+        current_credit = bank.get('credit_amount', 0) or 0
+        credit_returned = bank.get('credit_returned', 1)
+    else:
+        current_credit = bank[5] if bank and len(bank) > 5 else 0
+        credit_returned = bank[9] if bank and len(bank) > 9 else 1
+
+    if current_credit > 0 and not credit_returned:
+        await call.answer(
+            f"❌ У вас уже есть активный кредит: {format_money(current_credit)} 🧬",
+            show_alert=True
+        )
+        return
+
+    debt_estimate = int(max_credit * (1 + CREDIT_BASE / 100))
+
     await state.set_state(BankStates.waiting_credit_amount)
     await call.message.reply(
         f"💳 <b>Введите сумму кредита:</b>\n\n"
-        f"📊 Ваш доход: {format_money(tick_income)} 🧬\n"
-        f"💰 Максимум: {format_money(max_credit)} 🧬 (×10)\n\n"
-        f"📊 Базовый: +{CREDIT_BASE}%\n"
+        f"💎 Ваш баланс: <b>{format_money(balance)}</b> 🧬\n"
+        f"📊 Доход с жертв: <b>{format_money(tick_income)}</b> 🧬\n"
+        f"💰 Максимум: <b>{format_money(max_credit)}</b> 🧬 (×10 от дохода)\n"
+        f"📈 К возврату максимум: <b>{format_money(debt_estimate)}</b> 🧬\n\n"
+        f"📊 Базовый процент: +{CREDIT_BASE}%\n"
         f"📈 Рост: +{CREDIT_HOURLY:.2f}%/час\n"
         f"⏳ Срок: 7 дней",
         parse_mode="HTML"
