@@ -61,16 +61,7 @@ async def get_corporation(msg: Message, bot: Bot, db: Cursor, repo_biowar: Reque
             ("открыто" if corp["corporation_dossier"] == 1 else "засекречено")
         )
     )
-    is_member = bool(await repo_biowar.get_corporation(msg.from_user.id))
-    await msg.answer(
-        text,
-        reply_markup=corp_navigation(
-            id,
-            corp['invitation_code'],
-            dossier_open=(corp['corporation_dossier'] == 1),
-            is_member=is_member,
-        ),
-    )
+    await msg.answer(text, reply_markup=corp_navigation(id, corp['invitation_code']))
 
 async def create_corporation(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
     
@@ -545,94 +536,3 @@ async def get_corporations_biotop(msg: Message, bot: Bot, db: Cursor, repo_biowa
     )
     
     await msg.answer(text)
-
-async def corp_treasury_deposit_reply(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
-    """Игрок ответил числом на сообщение с экраном казны — вкладывает в казну."""
-    if not msg.reply_to_message or not msg.text:
-        return
-    text_clean = msg.text.strip()
-    if not text_clean.isdigit():
-        return
-    amount = int(text_clean)
-    if amount <= 0:
-        return
-
-    parent = msg.reply_to_message
-    if not parent.from_user or not parent.from_user.is_bot:
-        return
-    parent_text = parent.text or parent.caption or ""
-    # Разрешаем: либо классический заголовок казны, либо наш скрытый маркер ID
-    if 'Казна корпы' not in parent_text and not parent_text.endswith("</i>"):
-        print(f"[TREASURY REPLY SKIP] parent_text={parent_text[:100]!r}")
-        return
-
-    id = msg.from_user.id
-    corp_me = await repo_biowar.get_corporation(id)
-    if not corp_me:
-        return await msg.reply("Ты не в корпе")
-    corp = corp_me[0] if isinstance(corp_me, list) else corp_me
-
-    ok = await repo_biowar.corp_deposit_from_user(corp['invitation_code'], id, amount)
-    if not ok:
-        return await msg.reply("Недостаточно ресурсов")
-
-    await msg.reply(f"✅ Вложено {amount:,} в казну корпы «{corp['name']}»")
-
-
-async def corp_top_by_level(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBiowar):
-    """Топ корпораций по уровню."""
-    corps = await repo_biowar.get_corp_top_by_level(limit=20)
-
-    if not corps:
-        return await msg.answer(
-            "🏆 <b>ТОП КОРПОРАЦИЙ</b>\n\n<i>Пока ни одной корпорации.</i>",
-            parse_mode="HTML",
-        )
-
-    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-    lines = [
-        "🏆 <b>ТОП КОРПОРАЦИЙ ПО УРОВНЮ</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
-        "",
-    ]
-
-    for num, c in enumerate(corps, 1):
-        prefix = medals.get(num, f"<b>{num}.</b>")
-
-        level = int(c.get("level") or 0)
-        treasury = int(c.get("treasury") or 0)
-        members = int(c.get("members") or 0)
-
-        if level >= 5:
-            level_str = "⭐ <b>MAX</b>"
-            bonus = " · 📦 +20%"
-        elif level == 4:
-            level_str = "⭐ <b>4/5</b>"
-            bonus = " · 📦 +10%"
-        elif level == 3:
-            level_str = "⭐ <b>3/5</b>"
-            bonus = " · 📦 +5%"
-        elif level == 2:
-            level_str = "⭐ <b>2/5</b>"
-            bonus = " · 📦 +5%"
-        elif level == 1:
-            level_str = "⭐ <b>1/5</b>"
-            bonus = ""
-        else:
-            level_str = "☆ <b>0/5</b>"
-            bonus = ""
-
-        name_link = f'<a href="tg://openmessage?user_id={c["leader_id"]}">{c["name"]}</a>'
-
-        lines.append(
-            f'{prefix} {name_link}\n'
-            f'   {level_str}{bonus} · 💰 {intcomma(treasury)} · 👥 {members}'
-        )
-
-    lines += [
-        "",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"📊 Всего корпораций: <b>{len(corps)}</b>",
-    ]
-
-    await msg.answer("\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)

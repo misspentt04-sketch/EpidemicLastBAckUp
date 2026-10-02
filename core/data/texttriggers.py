@@ -167,3 +167,5 @@ set_nickname = re.compile(re_pref + r'(ник|мой ник)\s{1,3}[!._A-Za-zА-
 re_bot_pm = re.compile(re_pref + r'эпилс(|.+)', re.IGNORECASE)
 
 re_vaccine_choice = r"(?i)^[!/.]?(?:ваквыбор|вакцинавыбор|вакспособ)$"
+
+re_corp_top_level = re.compile(re_pref + r'(топ корп|топ корп lvl|top corp)', re.IGNORECASE)

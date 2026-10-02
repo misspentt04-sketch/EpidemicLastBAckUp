@@ -310,22 +310,7 @@ class RequestsRepoBiowar:
         return await self.select_all(query, params)
 
     async def get_victims_food(self, user_id: int):
-        query = (
-            'SELECT COALESCE(SUM(v.victim_bio_resource_earn), 0)'
-            ' * (1 + COALESCE(l.rebirth_level, 0) * 0.10)'
-            ' * (1 + CASE'
-            '     WHEN MAX(c.level) >= 5 THEN 0.20'
-            '     WHEN MAX(c.level) >= 4 THEN 0.10'
-            '     WHEN MAX(c.level) >= 2 THEN 0.05'
-            '     ELSE 0.00'
-            '   END)'
-            ' FROM Victims v'
-            ' LEFT JOIN Lab l ON l.lab_id = v.victims_owner_id'
-            ' LEFT JOIN CorporationMembers cm ON cm.member_id = v.victims_owner_id'
-            ' LEFT JOIN Corporation c ON c.invitation_code = cm.corporation_code'
-            ' WHERE v.victims_owner_id = %s'
-            ' GROUP BY l.rebirth_level;'
-        )
+        query = 'SELECT COALESCE(SUM(v.victim_bio_resource_earn), 0) * (1 + COALESCE(l.rebirth_level, 0) * 0.10) FROM Victims v LEFT JOIN Lab l ON l.lab_id = v.victims_owner_id WHERE v.victims_owner_id = %s GROUP BY l.rebirth_level;'
         res = await self.select_one(query, user_id)
         return int(res) if res else 0
 
@@ -474,17 +459,6 @@ class RequestsRepoBiowar:
     async def get_biotop_corps(self):
         query = 'SELECT * FROM Corporation   ORDER BY bio_experience DESC;'
         return await self.select_all(query, use_index_zero=False)
-
-    async def get_corp_top_by_level(self, limit: int = 20):
-        """Топ корпораций по уровню, потом по казне, потом по опыту."""
-        query = (
-            'SELECT invitation_code, name, leader_id, level, treasury, '
-            '       infected, bio_experience, members '
-            'FROM Corporation '
-            'ORDER BY level DESC, treasury DESC, bio_experience DESC '
-            'LIMIT %s;'
-        )
-        return await self.select_all(query, (limit,), use_index_zero=False)
 
     async def get_corporation_members(self, corp_code: str):
         query = 'SELECT * FROM CorporationMembers WHERE corporation_code=%s   ORDER BY bio_experience DESC;'
@@ -665,106 +639,6 @@ class RequestsRepoBiowar:
         return ids
 
 
-
-    # ==================== CORPORATION: LEVEL / TREASURY / DOSSIER ====================
-
-    async def corp_toggle_dossier(self, corp_code: str) -> bool:
-        await self.cur.execute(
-            'UPDATE Corporation SET corporation_dossier = 1 - corporation_dossier '
-            'WHERE invitation_code=%s;',
-            (corp_code,),
-        )
-        row = await self.select_one(
-            'SELECT corporation_dossier FROM Corporation WHERE invitation_code=%s;',
-            (corp_code,),
-        )
-        return bool(row and int(row) == 1)
-
-    async def corp_get_level_treasury(self, corp_code: str) -> dict:
-        query = (
-            'SELECT level, treasury, infected, bio_experience '
-            'FROM Corporation WHERE invitation_code=%s;'
-        )
-        rows = await self.select_all(query, (corp_code,), use_index_zero=False)
-        if not rows:
-            return {'level': 0, 'treasury': 0, 'infected': 0, 'bio_experience': 0}
-        return rows[0]
-
-    async def corp_get_top_depositors(self, corp_code: str, limit: int = 10):
-        query = (
-            'SELECT user_id, SUM(amount) AS total FROM CorpTreasuryLog '
-            'WHERE corp_code=%s AND kind=%s '
-            'GROUP BY user_id ORDER BY total DESC LIMIT %s;'
-        )
-        return await self.select_all(query, (corp_code, 'deposit', limit), use_index_zero=False)
-
-    async def corp_add_treasury(self, corp_code: str, user_id: int, amount: int):
-        import time as _time
-        query = (
-            'UPDATE Corporation SET treasury = treasury + %s WHERE invitation_code=%s;'
-            'INSERT INTO CorpTreasuryLog (corp_code, user_id, amount, kind, created_at) '
-            'VALUES (%s, %s, %s, %s, %s);'
-        )
-        params = (amount, corp_code, corp_code, user_id, amount, 'deposit', int(_time.time()))
-        await self.cur.execute(query, params)
-
-    async def corp_deposit_from_user(self, corp_code: str, user_id: int, amount: int) -> bool:
-        rows = await self.select_all(
-            'SELECT bio_resource FROM Lab WHERE lab_id=%s;',
-            (user_id,),
-            use_index_zero=False,
-        )
-        if not rows:
-            return False
-        current = int(rows[0]['bio_resource'] or 0)
-        if current < amount:
-            return False
-        await self.cur.execute(
-            'UPDATE Lab SET bio_resource = bio_resource - %s WHERE lab_id=%s;',
-            (amount, user_id),
-        )
-        await self.corp_add_treasury(corp_code, user_id, amount)
-        return True
-
-    async def corp_upgrade_level(self, corp_code: str, new_level: int, upgraded_by: int,
-                                 cost_inf: int, cost_res: int):
-        import time as _time
-        query = (
-            'UPDATE Corporation SET level=%s, treasury = treasury - %s '
-            'WHERE invitation_code=%s;'
-            'INSERT INTO CorpUpgrades '
-            '(corp_code, level, upgraded_by, cost_infected, cost_resources, created_at) '
-            'VALUES (%s, %s, %s, %s, %s, %s);'
-        )
-        params = (
-            new_level, cost_res, corp_code,
-            corp_code, new_level, upgraded_by, cost_inf, cost_res, int(_time.time()),
-        )
-        await self.cur.execute(query, params)
-
-    async def corp_get_member_ids(self, corp_code: str) -> list:
-        query = 'SELECT member_id FROM CorporationMembers WHERE corporation_code=%s;'
-        rows = await self.select_all(query, (corp_code,), use_index_zero=False)
-        return [r['member_id'] for r in rows] if rows else []
-
-    async def corp_reward_resources(self, user_id: int, amount: int):
-        await self.cur.execute(
-            'UPDATE Lab SET bio_resource = bio_resource + %s WHERE lab_id=%s;',
-            (amount, user_id),
-        )
-
-    async def corp_reward_bio_experience(self, user_id: int, amount: int):
-        """Начисляет bio_experience игроку (бонус корпы, только в Lab)."""
-        await self.cur.execute(
-            'UPDATE Lab SET bio_experience = bio_experience + %s WHERE lab_id=%s;',
-            (amount, user_id),
-        )
-
-    async def corp_reward_epicoins(self, user_id: int, amount: int):
-        await self.cur.execute(
-            'UPDATE Lab SET epicoins = epicoins + %s WHERE lab_id=%s;',
-            (amount, user_id),
-        )
 
     # Event
 

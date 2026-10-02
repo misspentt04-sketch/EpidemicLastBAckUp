@@ -144,10 +144,21 @@ async def top_callback(callback: CallbackQuery, callback_data: TopCallback):
 @router.message(F.text.regexp(r"(?i)^(топ\s+био)$"))
 async def cmd_top_bio_tick(message: Message, **kwargs):
     query = """
-        SELECT v.victims_owner_id, SUM(v.victim_bio_resource_earn) * (1 + COALESCE(l.rebirth_level, 0) * 0.10) AS total_tick
+        SELECT v.victims_owner_id,
+               SUM(v.victim_bio_resource_earn)
+                 * (1 + COALESCE(l.rebirth_level, 0) * 0.10)
+                 * (1 + CASE
+                          WHEN MAX(c.level) >= 5 THEN 0.20
+                          WHEN MAX(c.level) >= 4 THEN 0.10
+                          WHEN MAX(c.level) >= 2 THEN 0.05
+                          ELSE 0.00
+                        END
+                      ) AS total_tick
         FROM Victims v
         LEFT JOIN HiddenPlayers h ON h.lab_id = v.victims_owner_id
         LEFT JOIN Lab l ON l.lab_id = v.victims_owner_id
+        LEFT JOIN CorporationMembers cm ON cm.member_id = v.victims_owner_id
+        LEFT JOIN Corporation c ON c.invitation_code = cm.corporation_code
         WHERE v.victims_owner_id != 8236324289 AND h.lab_id IS NULL
         GROUP BY v.victims_owner_id
         ORDER BY total_tick DESC

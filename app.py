@@ -91,6 +91,11 @@ async def run_tasks(pool, redis, bot, scheduler):
     print("✅ [RUN_TASKS] scheduler_tasks запущена!")
     print("✅ [RUN_TASKS] student_income_loop запущена!")
 
+    # Аукцион слотов корпорации
+    from core.handlers.biowar.corp_auction import corp_slot_auction_loop
+    asyncio.create_task(corp_slot_auction_loop(bot))
+    print("✅ [RUN_TASKS] corp_slot_auction_loop запущена!")
+
 async def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s - [%(levelname)s] - %(name)s - "

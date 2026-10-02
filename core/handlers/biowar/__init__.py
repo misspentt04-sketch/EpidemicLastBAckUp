@@ -17,6 +17,7 @@ from .boss import router as boss_router
 from .student_lab import router as student_lab_router
 from .bio_stats import router as bio_stats_router
 from .calculator import router as calculator_router
+from .corp_auction import router as corp_auction_router
 
 biowar_router = Router()
 biowar_router2 = Router()
@@ -37,7 +38,8 @@ biowar_router.include_routers(
     exchange_router,
     promos_router,
     bio_stats_router,
-    calculator_router
+    calculator_router,
+    corp_auction_router
 )
 
 biowar_router2.include_routers(infect2_router)

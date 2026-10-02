@@ -333,8 +333,6 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
 
     earn_exp = 1 if earn_exp <= 0 else earn_exp
     earn_exp = max(1, int(earn_exp))
-
-
     vic_exp = 0 if lose_exp < 0 else lose_exp
 
     vic_expire = int((datetime.utcnow() + timedelta(days=infecter["lethality"])).timestamp())
@@ -386,22 +384,6 @@ async def infect(msg: Message, bot: Bot, db: Cursor, repo_biowar: RequestsRepoBi
         infect_date, pathogen_name, ss_detect,
         science_time, infecter['science_time'], pet_boost_exp
     )
-
-    # === Бонус опыта от уровня корпы (отдельно, только в Lab.bio_experience) ===
-    try:
-        from core.data.corp_levels import exp_bonus_for_level
-        _corp_me = await repo_biowar.get_corporation(infecter['id'])
-        if _corp_me:
-            _corp = _corp_me[0] if isinstance(_corp_me, list) else _corp_me
-            _lvl = int(_corp.get('level') or 0)
-            _bonus = exp_bonus_for_level(_lvl)
-            if _bonus:
-                _bonus_exp = int(earn_exp * _bonus / 100)
-                if _bonus_exp > 0:
-                    await repo_biowar.corp_reward_bio_experience(infecter['id'], _bonus_exp)
-    except Exception as _e:
-        print(f"[CORP EXP BONUS ERROR] {_e}")
-
 
     # Формируем текст
     default_success_msg = tricks_biowar['infect']['infect'].format(
