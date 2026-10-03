@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 MSK = timezone(timedelta(hours=3))
 LOG_CHAT_ID = -1004335676077
 AUCTION_DURATION = 10 * 60          # 10 минут
-START_INTERVAL = 3 * 3600           # каждые 3 часа
+START_INTERVAL = 12 * 3600          # 2 раза в сутки: 00:10 и 12:10
 START_MINUTE = 10                   # в HH:10
 BASE_SLOTS = 50                     # стартовый лимит
 MAX_SLOTS = 100                     # максимум
@@ -30,16 +30,23 @@ class SlotStates(StatesGroup):
 # ===== ВРЕМЯ =====
 
 def _next_start_ts() -> int:
-    """Ближайший HH:10 по МСК, кратный 3 часам (00:10, 03:10, 06:10 ...)."""
+    """Ближайший старт по МСК: 00:10 или 12:10."""
     now_msk = datetime.now(MSK)
-    # Ближайший час с шагом 3
-    h = now_msk.hour
-    target_hour = (h // 3) * 3
-    candidate = now_msk.replace(minute=START_MINUTE, second=0, microsecond=0, hour=target_hour)
-    if candidate <= now_msk:
-        # взять следующий
-        candidate = candidate + timedelta(hours=3)
-    return int(candidate.timestamp())
+
+    today_00 = now_msk.replace(hour=0, minute=START_MINUTE, second=0, microsecond=0)
+    today_12 = now_msk.replace(hour=12, minute=START_MINUTE, second=0, microsecond=0)
+
+    candidates = [today_00, today_12]
+    # добавь следующий день, если уже поздно
+    candidates.append(today_00 + timedelta(days=1))
+    candidates.append(today_12 + timedelta(days=1))
+
+    for c in candidates:
+        if c > now_msk:
+            return int(c.timestamp())
+
+    # fallback — на всякий
+    return int((today_12 + timedelta(days=1)).timestamp())
 
 
 # ===== БД =====
@@ -182,7 +189,7 @@ async def close_auction(auction_id: int, bot: Bot | None = None):
 
     text = (
         f"🏆 <b>Аукцион на слот завершён!</b>\n\n"
-        f"👤 Победитель: <a href='tg://user?id={bidder_id}'>{winner_name}</a>\n"
+        f"👤 Победитель: <b>{winner_name}</b>\n"
         f"🏛 Корпорация: <b>«{corp_name}»</b>\n"
         f"💰 Сумма ставки: <b>{bid_total:,}</b> 🧬\n"
         f"{status_line}"
@@ -253,7 +260,7 @@ def _fmt(n: int) -> str:
 async def cmd_slot(msg: types.Message):
     auction = await _get_active_auction()
     if not auction:
-        return await msg.answer("❌ Сейчас нет активного аукциона. Следующий — по расписанию (HH:10 каждые 3 часа).")
+        return await msg.answer("❌ Сейчас нет активного аукциона. Следующий — по расписанию (00:10 и 12:10 МСК).")
 
     now = int(time.time())
     left = max(0, auction['end_at'] - now)
@@ -268,9 +275,9 @@ async def cmd_slot(msg: types.Message):
     if top:
         lines.append("🏆 <b>Топ-5:</b>")
         for i, t in enumerate(top, 1):
-            name = t.get('full_name') or t.get('username') or str(t['bidder_id'])
+            name = t.get('full_name') or t.get('username') or f"ID {t['bidder_id']}"
             corp = t.get('corp_name') or t.get('corp_code')
-            lines.append(f"{i}. <a href='tg://user?id={t['bidder_id']}'>{name}</a> — <b>{_fmt(t['bid_total'])}</b> 🧬 (корпа «{corp}»)")
+            lines.append(f"{i}. <b>{name}</b> — <b>{_fmt(t['bid_total'])}</b> 🧬 (корпа «{corp}»)")
     else:
         lines.append("📭 Пока нет ставок.")
 
@@ -295,7 +302,7 @@ async def cmd_slot_top(msg: types.Message):
 async def cmd_slot_info(msg: types.Message):
     await msg.answer(
         "📖 <b>Правила аукциона на слот корпорации</b>\n\n"
-        f"• Старт: <b>HH:10 МСК</b> каждые 3 часа\n"
+        f"• Старт: <b>00:10 и 12:10 МСК</b> (2 раза в сутки)\n"
         f"• Длительность: <b>10 минут</b>\n"
         f"• Разыгрывается <b>1 слот</b>\n"
         f"• Ставка: <b>био-ресурсы 🧬</b>\n"

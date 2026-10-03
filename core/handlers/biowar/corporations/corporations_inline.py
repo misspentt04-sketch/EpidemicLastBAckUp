@@ -329,12 +329,16 @@ async def corp_treasury_menu(call: CallbackQuery, bot: Bot, callback_data: Corpo
     treasury = int(info.get('treasury') or 0)
     infected = int(info.get('infected') or 0)
 
+    # Персональный вклад игрока
+    my_deposited = await repo_biowar.corp_get_user_deposited(callback_data.corp_code, id)
+
     next_level = level + 1 if level < MAX_CORP_LEVEL else None
 
     parts = [
         f"💰 Казна корпы «{corp['name']}»",
         "",
         f"💵 В казне: <b>{intcomma(treasury)}</b>",
+        f"👤 Ты вложил: <b>{intcomma(my_deposited)}</b>",
         f"⭐ Уровень: <b>{level} / {MAX_CORP_LEVEL}</b>",
         f"☠️ Заражений корпы: <b>{intcomma(infected)}</b>",
     ]

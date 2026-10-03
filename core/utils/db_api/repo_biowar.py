@@ -722,6 +722,18 @@ class RequestsRepoBiowar:
             return {'level': 0, 'treasury': 0, 'infected': 0, 'bio_experience': 0}
         return rows[0]
 
+    async def corp_get_user_deposited(self, corp_code: str, user_id: int) -> int:
+        """Сумма вкладов конкретного игрока в казну корпы."""
+        rows = await self.select_all(
+            'SELECT COALESCE(SUM(amount), 0) AS total FROM CorpTreasuryLog '
+            'WHERE corp_code=%s AND user_id=%s AND kind=%s;',
+            (corp_code, user_id, 'deposit'),
+            use_index_zero=False,
+        )
+        if not rows:
+            return 0
+        return int(rows[0].get('total') or 0)
+
     async def corp_get_top_depositors(self, corp_code: str, limit: int = 10):
         query = (
             'SELECT user_id, SUM(amount) AS total FROM CorpTreasuryLog '
